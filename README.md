@@ -27,6 +27,8 @@ python run.py        # 或 python3 run.py
 会自动在本机启动并打开浏览器。仓库已内置打包好的 `dist/`，因此**无需安装 Node** 即可运行；
 若删除了 `dist/` 且本机装有 Node，`run.py` 会自动重新构建。
 
+**Windows 最省事**：双击 `start.bat` 即可。
+
 **开发模式（需要 Node）**
 
 ```bash
@@ -34,6 +36,15 @@ npm install
 npm run dev        # 打开 http://localhost:5180
 npm run build      # 类型检查 + 生产构建（更新 dist/）
 ```
+
+### 常见问题
+
+- **启动后终端不动 / 像“卡死”**：这是正常的——服务正在运行。浏览器会自动打开
+  `http://127.0.0.1:5180/`；想停止按 `Ctrl+C`。
+- **在 VS Code 里报 `FileNotFoundError: ...App Debug Helper`**：这是用了 VS Code 的
+  调试按钮（▶/F5）且焦点不在 `run.py` 上导致的，与本应用无关。请改为在**终端**里运行
+  `python run.py`，或直接双击 `start.bat`。
+- **`python` 命令不存在**：用 `py run.py`，或填 Python 安装的完整路径。
 
 首次进入会要求**创建主密码**；金库会以内置的**默认数据库**（真实历史数据）初始化。
 之后每次打开用主密码解锁。数据加密保存在本机（localStorage），不联网、不上传。
