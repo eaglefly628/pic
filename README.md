@@ -18,10 +18,21 @@
 
 ## 快速开始
 
+**最简单（推荐，只需 Python）**
+
+```bash
+python run.py        # 或 python3 run.py
+```
+
+会自动在本机启动并打开浏览器。仓库已内置打包好的 `dist/`，因此**无需安装 Node** 即可运行；
+若删除了 `dist/` 且本机装有 Node，`run.py` 会自动重新构建。
+
+**开发模式（需要 Node）**
+
 ```bash
 npm install
 npm run dev        # 打开 http://localhost:5180
-npm run build      # 类型检查 + 生产构建
+npm run build      # 类型检查 + 生产构建（更新 dist/）
 ```
 
 首次进入会要求**创建主密码**；金库会以内置的**默认数据库**（真实历史数据）初始化。
