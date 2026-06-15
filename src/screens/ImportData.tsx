@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { parseWorkbook, type ParseResult } from "../lib/parseExcel";
+import { exportDatasetToExcel } from "../lib/exportExcel";
 import { Btn, Field, TextField, card } from "../ui";
-import { IconImport, IconCheck } from "../icons";
+import { IconImport, IconCheck, IconDownload } from "../icons";
 
 export default function ImportData() {
-  const { update } = useVault();
+  const { data, update } = useVault();
   const fileRef = useRef<HTMLInputElement>(null);
   const [sheet, setSheet] = useState("Sheet2");
   const [result, setResult] = useState<ParseResult | null>(null);
@@ -29,8 +30,20 @@ export default function ImportData() {
     setDone(true);
   };
 
+  const accCount = data?.dataset.accounts.length ?? 0;
+  const snapCount = data?.dataset.snapshots.length ?? 0;
+
   return (
     <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease", maxWidth: 760 }}>
+      {/* 导出 */}
+      <div style={{ ...card, padding: "20px 26px", marginBottom: 18, display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>导出 Excel（仅主账户）</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>当前 {accCount} 个账户 · {snapCount} 条快照。导出为「净资产历史 + 账户」两张表，可再次导入。</div>
+        </div>
+        <Btn onClick={() => data && exportDatasetToExcel(data.dataset)}><IconDownload />导出 Excel</Btn>
+      </div>
+
       <div style={{ ...card, padding: "24px 26px" }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>从 Excel 导入历史数据</div>
         <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 18 }}>

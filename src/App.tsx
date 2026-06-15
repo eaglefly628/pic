@@ -77,7 +77,7 @@ function Shell({ data }: { data: VaultData }) {
 
   const TITLES: Record<Screen, string> = {
     dashboard: "仪表盘", accounts: "资金账户", detail: view.detail.name, passwords: "密码保险箱",
-    info: "个人信息", import: "导入数据", settings: "设置", interest: "利息预测", income: "收入情况", budget: "预算与预测",
+    info: "个人信息", import: "导入 / 导出", settings: "设置", interest: "利息预测", income: "收入情况", budget: "预算与预测",
   };
   const pageTitle = TITLES[screen];
 
@@ -107,7 +107,7 @@ function Shell({ data }: { data: VaultData }) {
             <div style={groupLabel}>资金</div>
             <NavBtn active={screen === "accounts" || screen === "detail"} onClick={() => setScreen("accounts")} icon={<IconCard />} label="资金账户" badge={String(view.meta.accountCount)} />
             <NavBtn active={screen === "interest"} onClick={() => setScreen("interest")} icon={<IconPercent />} label="利息预测" />
-            <NavBtn active={screen === "import"} onClick={() => setScreen("import")} icon={<IconImport />} label="导入数据" />
+            <NavBtn active={screen === "import"} onClick={() => setScreen("import")} icon={<IconImport />} label="导入 / 导出" />
             <div style={groupLabel}>收支</div>
             <NavBtn active={screen === "income"} onClick={() => setScreen("income")} icon={<IconWallet />} label="收入情况" />
             <NavBtn active={screen === "budget"} onClick={() => setScreen("budget")} icon={<IconChartUp />} label="预算与预测" />

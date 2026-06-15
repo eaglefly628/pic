@@ -106,3 +106,20 @@ scripts/import-excel.mjs   Excel(Sheet2) -> history.json
 ## 技术栈
 
 Vite + React 18 + TypeScript。图表为纯 SVG；加密用浏览器内置 Web Crypto，零密码学第三方依赖。
+
+## 打包成 Mac 应用（Tauri）
+
+已内置 Tauri 配置（`src-tauri/`）。在 **macOS** 上：
+
+```bash
+npm install
+npm run dist:mac     # 产出 .dmg（在 src-tauri/target/release/bundle/dmg/）
+# 或 npm run tauri:dev 本地调试桌面外壳
+```
+
+前置：Mac 需安装 Xcode Command Line Tools 与 Rust（`https://rustup.rs`）。
+图标已生成在 `src-tauri/icons/`；要换 logo：`npm run tauri icon 你的图.png` 后重新打包。
+
+## 导出 Excel
+
+「导入 / 导出」页可一键**导出主账户**为 Excel：含「净资产历史」（每行一个日期 + 各账户余额 + 总资产）与「账户」两张表，可被本应用再次导入。

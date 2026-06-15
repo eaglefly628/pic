@@ -21,3 +21,7 @@ yarn-error.log*
 
 # tsc 增量构建缓存
 *.tsbuildinfo
+
+# Tauri / Rust 构建产物
+src-tauri/target/
+src-tauri/gen/
