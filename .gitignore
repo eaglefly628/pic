@@ -1,0 +1,28 @@
+# 依赖与构建产物
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# 编辑器
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+
+# 日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ⚠️ 真实家庭财务数据：绝不提交到仓库（GitHub 也是服务器）
+# 由 `npm run import:excel` 在本机生成，仅存在于本地。
+src/data/history.json
+/private/
+*.vault
+# 源 Excel 也不要进仓库
+*.xlsx
+*.xls
+
+# tsc 增量构建缓存
+*.tsbuildinfo
