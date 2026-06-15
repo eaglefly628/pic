@@ -1,5 +1,5 @@
-// 「私房钱」独立加密库：与主金库完全分离，拥有自己的主密码、密钥与存储。
-// 即使知道主密码也无法解开私房钱（需要私房钱自己的密码）。
+// 「独立管理」独立加密库：与主金库完全分离，拥有自己的主密码、密钥与存储。
+// 即使知道主密码也无法解开独立管理（需要独立管理自己的密码）。
 import { createVault, sealVault, unlockVault, type UnlockedKeys } from "../lib/crypto";
 import type { Dataset } from "../data/types";
 import { emptyDataset } from "./ops";
@@ -11,7 +11,7 @@ export function hasSecret(): boolean {
 }
 
 export async function createSecret(pw: string, userName: string): Promise<{ data: Dataset; keys: UnlockedKeys }> {
-  const ds = emptyDataset("私房钱", userName);
+  const ds = emptyDataset("独立管理", userName);
   const { blob, keys } = await createVault(pw, ds);
   localStorage.setItem(SKEY, JSON.stringify(blob));
   return { data: ds, keys };

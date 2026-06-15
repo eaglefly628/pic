@@ -66,7 +66,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
       <div style={{ height: 52, flex: "none", display: "flex", alignItems: "center", gap: 12, padding: "0 18px", background: "var(--bg-toolbar)", backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)", borderBottom: "0.5px solid var(--separator)" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--text-primary)", fontWeight: 600, fontSize: 14 }}>
           <span style={{ width: 22, height: 22, borderRadius: 6, background: "linear-gradient(160deg,#8E8E93,#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={13} stroke="#fff" /></span>
-          私房钱
+          独立管理
         </span>
         {status === "unlocked" && view && (
           sub === "detail" ? (
@@ -119,10 +119,10 @@ export default function Secret({ onExit }: { onExit: () => void }) {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, width: 300 }}>
             <div style={{ width: 56, height: 56, borderRadius: 15, background: "linear-gradient(160deg,#8E8E93,#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={26} stroke="#fff" /></div>
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>{onboard ? "为私房钱设置独立密码" : "私房钱已锁定"}</div>
-              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>{onboard ? "与主密码不同，独立加密保存" : "输入私房钱的独立密码"}</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>{onboard ? "设置独立管理密码" : "独立管理已锁定"}</div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>{onboard ? "与主密码不同，独立加密保存" : "输入独立管理密码"}</div>
             </div>
-            <TextField type="password" autoFocus value={pw} placeholder={onboard ? "设置私房钱密码" : "私房钱密码"} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !onboard) submitPw(); }} />
+            <TextField type="password" autoFocus value={pw} placeholder={onboard ? "设置独立管理密码" : "独立管理密码"} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !onboard) submitPw(); }} />
             {onboard && (
               <>
                 <TextField type="password" value={pw2} placeholder="再次输入" onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitPw(); }} />
@@ -138,7 +138,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
             )}
             {err && <div style={{ fontSize: 12, color: "var(--red)" }}>{err}</div>}
             <Btn onClick={submitPw} disabled={busy} style={{ height: 40, width: "100%" }}>{busy ? "处理中…" : onboard ? "创建并进入" : "解锁"}{!busy && <IconArrowRight size={15} stroke="#fff" />}</Btn>
-            <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.6 }}>⚠️ 私房钱密码同样无法找回；与主密码相互独立。</div>
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.6 }}>⚠️ 独立管理密码同样无法找回；与主密码相互独立。</div>
           </div>
         </div>
       )}

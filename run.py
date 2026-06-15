@@ -17,7 +17,6 @@ junbai家专用理财软件 · 一键启动器
 import functools
 import http.server
 import shutil
-import socket
 import socketserver
 import subprocess
 import sys
@@ -49,14 +48,6 @@ def ensure_dist() -> bool:
     return (DIST / "index.html").exists()
 
 
-def pick_port(preferred: int) -> int:
-    for port in [preferred] + list(range(preferred + 1, preferred + 30)):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("127.0.0.1", port)) != 0:
-                return port
-    return preferred
-
-
 class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args):  # 安静日志
         pass
@@ -75,10 +66,19 @@ class Server(socketserver.ThreadingTCPServer):
 def main() -> int:
     if not ensure_dist():
         return 1
-    port = pick_port(PREFERRED_PORT)
-    handler = functools.partial(Handler, directory=str(DIST))
+    # 固定端口，保证数据始终保存在同一地址（localStorage 按来源隔离，换端口会"看不到"旧数据）
+    port = PREFERRED_PORT
     url = f"http://127.0.0.1:{port}/"
-    with Server(("127.0.0.1", port), handler) as httpd:
+    handler = functools.partial(Handler, directory=str(DIST))
+    try:
+        httpd = Server(("127.0.0.1", port), handler)
+    except OSError:
+        # 端口被占用：大概率本应用已在运行，直接打开已运行实例（同一地址=同一份数据）
+        print(f"检测到 {port} 已被占用，应用可能已在运行，直接打开：{url}")
+        print("（如需重启，请先关闭原来的运行窗口，再运行本脚本）")
+        webbrowser.open(url)
+        return 0
+    with httpd:
         print("┌─────────────────────────────────────────────┐")
         print("│  junbai家专用理财软件 · Family Vault              │")
         print("├─────────────────────────────────────────────┤")
