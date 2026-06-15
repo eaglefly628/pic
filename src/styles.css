@@ -65,3 +65,13 @@ body { background: #b8c6db; }
 .fv-scroll::-webkit-scrollbar-track { background: transparent; }
 @keyframes fvFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fvRise { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+
+/* 让原生控件（下拉、日期选择、复选框等）跟随明暗模式 */
+.fv-root[data-theme="light"] { color-scheme: light; }
+.fv-root[data-theme="dark"] { color-scheme: dark; }
+/* 下拉选项在深色下显式上色，避免浅底浅字看不清 */
+.fv-root select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+.fv-root select, .fv-root input, .fv-root textarea { color-scheme: inherit; }
