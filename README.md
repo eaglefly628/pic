@@ -1,91 +1,86 @@
 # 李俊白家专用理财 · Family Vault
 
-一款**本地优先的家庭理财与机密信息管理桌面应用**。按 [`需求文档.md`](./需求文档.md) 的定位实现，
-界面 100% 还原设计稿（macOS 风格窗口、明暗主题、净资产趋势 / 资产构成 / 账户明细 / 余额快照）。
+一款**本地优先、全程加密的家庭理财与机密信息管理桌面应用**。按 [`需求文档.md`](./需求文档.md)
+实现，界面还原设计稿（macOS 风格窗口、明暗主题）。
 
-> **桌面 · 纯本地 · 单一主密码 · 强加密**
+> **桌面 · 纯本地 · 单一主密码 · AES-256 加密**
 
----
+## 功能（第一版）
+
+- 🔐 **主密码 + 本地加密**：首次启动创建主密码，全部数据用 **AES-256-GCM** 加密、**PBKDF2** 派生密钥（信封加密），主密码不落盘；闲置自动锁定、复制密码后自动清空剪贴板。
+- 📊 **仪表盘**：总资产 / 总负债 / 净资产、净资产趋势（近3月/近1年/全部）、资产构成环形图、最近更新。
+- 💳 **资金账户**：按流动资金 / 投资理财 / 不动产 / 负债分组；**新增 / 编辑 / 删除账户**。
+- 📈 **账户详情**：余额历史折线图 + 余额快照表；**新增快照**（按日期记账，自动结转保持净值一致）。
+- 🔑 **密码保险箱**：增删改、密码生成器、强度提示、显示/隐藏、一键复制（自动清剪贴板）、收藏。
+- 🪪 **个人信息**：身份证 / 银行卡 / WiFi 等机密信息，自定义字段；家庭成员自动汇总。
+- 📥 **导入数据**：应用内选择 Excel，读取指定工作表导入（替换资金数据）。
+- ⚙️ **设置**：修改主密码、自动锁定时长、剪贴板清空、主题、**加密备份导出 / 恢复**、重置。
 
 ## 快速开始
 
 ```bash
 npm install
-npm run dev          # 浏览器打开 http://localhost:5180
-npm run build        # 类型检查 + 生产构建
+npm run dev        # 打开 http://localhost:5180
+npm run build      # 类型检查 + 生产构建
 ```
 
-未导入真实数据时，应用使用脱敏**示例数据**（设计稿里的演示账户），可直接预览全部界面。
+首次进入会要求**创建主密码**；金库会以内置的**默认数据库**（真实历史数据）初始化。
+之后每次打开用主密码解锁。数据加密保存在本机（localStorage），不联网、不上传。
 
-## 导入你的历史数据（Excel）
+> ⚠️ 主密码无法找回，请牢记；建议在「设置 → 备份」中导出 `.vault` 加密备份。
 
-把家庭理财表格的 **Sheet2**（按月快照）导入为应用数据：
+## 默认数据库
 
-```bash
-npm run import:excel -- /path/to/你的表格.xlsx Sheet2
-```
+应用内置 `src/data/history.json` 作为默认数据库（已按要求随仓库提交）。
+更新数据有两种方式：
 
-会生成 `src/data/history.json`，刷新页面即用真实数据。表格结构：
+1. **应用内**：左侧「导入数据」→ 选择 Excel → 指定工作表（默认 `Sheet2`）→ 确认导入。
+2. **命令行**（重建默认库）：
+   ```bash
+   npm run import:excel -- /path/to/表格.xlsx Sheet2
+   ```
 
-- 第 1 行：表头（A 列为日期列，B…列为各账户名，直到 `total asset` 列结束）
-- 第 2 行：各账户年化利率（可选）
-- 之后每行：A 列为日期（Excel 序列号或 `YYYY/M/D`），各账户列为当期余额；
-  非日期行（如「房款」「利息可能」「houseKey」）会自动跳过
+表格结构：第 1 行表头（A 列日期、B… 为各账户名，至 `total asset` 列结束），第 2 行可选利率，
+其后每行一个日期 + 各账户余额；非日期行（如「房款」「利息可能」）自动跳过。净值由各账户余额逐期求和。
 
-净值由各账户余额逐期求和得出（因此与表格里那个含 `#REF!` 公式错误的 `total asset`
-单元格可能略有出入，但仪表盘 / 构成 / 账户三处口径一致、可对账）。
+## 需要校正的假设
 
-## 🔒 隐私（重要）
-
-本应用的核心是「数据只在本机、不上传服务器」。**GitHub 也是服务器**，因此：
-
-- ✅ 提交进仓库：应用代码 + 导入脚本 + 脱敏示例数据
-- ⛔ **不进仓库**：你的真实财务数据（`src/data/history.json`）、源 Excel、`*.vault` 备份
-  —— 已在 `.gitignore` 中排除，只存在于你的本机。
-
-如果你确实希望把真实数据也提交，请自行修改 `.gitignore`（不建议）。
-
-## 需要你校正的假设
-
-账户的**分组 / 类型 / 归属 / 颜色 / 资产构成分类**是根据账户名（如 `cc招行`、`桔子gg`、
-`华通bb`）做的**推测**，集中在 [`scripts/import-excel.mjs`](./scripts/import-excel.mjs)
-的 `ACCOUNT_META` 表。请按真实情况修改后重新 `npm run import:excel`。需要确认的点：
-
-- 哪些账户算「负债」（目前仅 `信用卡`，以及任何余额为负的账户按负债显示）
-- `买房` / `装修` 两列在历史中出现过大额互换，是否需要合并/重命名
-- 资产构成分组（现金及银行 / 股票 / 理财·固收 / 基金 / 黄金 / 房产）的归类
+账户的**分组 / 类型 / 归属 / 颜色 / 构成分类**是根据账户名（`cc招行`、`桔子gg`、`华通bb`…）的
+**推测**，集中在 [`scripts/import-excel.mjs`](./scripts/import-excel.mjs) 与
+[`src/lib/parseExcel.ts`](./src/lib/parseExcel.ts) 的 `ACCOUNT_META`。可在应用内逐个编辑账户，
+或改这两处后重新导入。
 
 ## 项目结构
 
 ```
 src/
-  App.tsx            主界面（侧边栏 / 仪表盘 / 账户 / 详情 / 个人信息 / 锁定）
-  icons.tsx          图标集
-  styles.css         明暗主题变量
+  App.tsx              门控 + 窗口外壳 + 导航 + 路由
+  icons.tsx  ui.tsx    图标 / 通用 UI 组件
+  styles.css           明暗主题变量
   lib/
-    format.ts        金额格式化
-    compute.ts       数据 -> 视图模型（趋势 / 构成 / 分组 / 快照）
+    crypto.ts          AES-256-GCM + PBKDF2 信封加密
+    storage.ts         加密金库的本地持久化
+    compute.ts         数据 -> 视图模型（趋势/构成/分组/快照）
+    parseExcel.ts      浏览器端 Excel 解析
+    format.ts theme.tsx
+  vault/
+    VaultContext.tsx   解锁状态机、内存密钥、自动锁定、保存即加密
+    types.ts  ops.ts   金库数据结构 / 增删改操作
   data/
-    types.ts         统一数据模型
-    sample.ts        脱敏示例数据
-    history.json     ← 真实数据（本机生成，不进仓库）
-scripts/
-  import-excel.mjs   Excel(Sheet2) -> history.json 导入器
-需求文档.md          产品需求文档（PRD）
+    types.ts  sample.ts  defaultData.ts
+    history.json       默认数据库（真实历史数据）
+  screens/             Unlock / Dashboard / Accounts / Detail /
+                       Passwords / Info / ImportData / Settings / editors
+scripts/import-excel.mjs   Excel(Sheet2) -> history.json
+需求文档.md                 产品需求文档（PRD）
 ```
 
-## 路线图（后续）
+## 路线图（下一版）
 
-当前版本完成了**界面 + 真实历史数据**。按需求文档，下一步：
-
-1. **本地加密落地**：主密码（Argon2id 派生密钥）+ AES-256-GCM 信封加密，
-   数据加密存盘（SQLCipher 或加密文件），替换明文 `history.json`。
-2. **桌面打包**：用 Tauri（推荐，轻量安全）或 Electron 打包为 Windows/macOS 本地应用。
-3. **解锁/创建主密码、自动锁定** 的真实逻辑（当前锁定遮罩为演示）。
-4. **密码保险箱 / 个人信息** 模块的数据与录入。
-5. **应用内 Excel 导入向导**（字段映射 UI）、新增账户/快照、设置、备份与恢复。
-6. **全局搜索**。
+- 用 **Tauri**（推荐）或 Electron 打包为 Windows/macOS 本地应用，数据落地为本地加密文件（SQLCipher）。
+- KDF 升级为 **Argon2id**；可选 **Touch ID / Windows Hello** 快捷解锁。
+- 全局搜索、收支流水、提醒、TOTP、附件、多币种。
 
 ## 技术栈
 
-Vite + React 18 + TypeScript。图表为纯 SVG（无第三方图表库），便于离线与打包。
+Vite + React 18 + TypeScript。图表为纯 SVG；加密用浏览器内置 Web Crypto，零密码学第三方依赖。
