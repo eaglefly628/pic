@@ -61,10 +61,16 @@ export function Select({ options, ...props }: React.SelectHTMLAttributes<HTMLSel
 export function Modal({ open, title, onClose, children, footer, width = 460 }: {
   open: boolean; title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; width?: number;
 }) {
+  // 仅当「按下」和「松开」都发生在遮罩空白处才关闭，避免弹窗内拖拽/选字到外面误关。
+  const downOnBackdrop = React.useRef(false);
   if (!open) return null;
   return (
-    <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.32)", backdropFilter: "blur(2px)", animation: "fvFade .15s ease" }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width, maxWidth: "90%", maxHeight: "86%", overflow: "auto", animation: "fvRise .18s ease" }} className="fv-scroll">
+    <div
+      onMouseDown={(e) => { downOnBackdrop.current = e.target === e.currentTarget; }}
+      onMouseUp={(e) => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose(); downOnBackdrop.current = false; }}
+      style={{ position: "absolute", inset: 0, zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.32)", backdropFilter: "blur(2px)", animation: "fvFade .15s ease" }}
+    >
+      <div style={{ ...card, width, maxWidth: "90%", maxHeight: "86%", overflow: "auto", animation: "fvRise .18s ease" }} className="fv-scroll">
         <div style={{ padding: "16px 22px", borderBottom: "0.5px solid var(--separator)", fontSize: 15, fontWeight: 600, color: "var(--text-primary)", position: "sticky", top: 0, background: "var(--bg-card)" }}>{title}</div>
         <div style={{ padding: "18px 22px" }}>{children}</div>
         {footer && <div style={{ padding: "12px 22px 18px", display: "flex", gap: 10, justifyContent: "flex-end" }}>{footer}</div>}
