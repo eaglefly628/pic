@@ -61,11 +61,11 @@ export function estimateAnnualInterest(ds: Dataset): number {
   return ds.accounts.reduce((s, a) => s + lb[a.id] * (a.rate ?? 0), 0);
 }
 
-/** 距今多少周（用于显示账户更新的新鲜度） */
-function weeksAgo(dateISO: string): { label: string; weeks: number } {
+/** 距今多少周/天（用于显示账户更新的新鲜度） */
+function weeksAgo(dateISO: string): { label: string; weeks: number; days: number } {
   const days = Math.floor((Date.now() - new Date(dateISO + "T00:00:00").getTime()) / 86_400_000);
   const weeks = Math.floor(days / 7);
-  return { label: weeks <= 0 ? "本周更新" : `${weeks} 周前`, weeks };
+  return { label: weeks <= 0 ? "本周更新" : `${weeks} 周前`, weeks, days };
 }
 
 /** 某账户的历史序列（去掉无记录的点） */
@@ -261,6 +261,7 @@ export function buildView(ds: Dataset, ui: UIState) {
       updated: upd ?? "—",
       ago: wa ? wa.label : "无记录",
       stale: wa ? wa.weeks >= 8 : true,
+      overdue: wa ? wa.days > 30 : true, // 超过 1 个月未更新
     };
   };
   const byAbs = (a: AccountMeta, b: AccountMeta) => Math.abs(latest[b.id]) - Math.abs(latest[a.id]);

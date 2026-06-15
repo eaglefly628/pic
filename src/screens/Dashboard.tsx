@@ -147,7 +147,7 @@ function TrendChart({ view }: { view: View }) {
 
   return (
     <div ref={ref} style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-      <svg viewBox="0 0 600 220" style={{ width: "100%", height: 208, display: "block", overflow: "visible" }}>
+      <svg viewBox="0 0 600 220" preserveAspectRatio="none" style={{ width: "100%", height: 208, display: "block", overflow: "visible" }}>
         <defs>
           <linearGradient id="fvArea" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.26" />

@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import type { PasswordItem } from "../vault/types";
+import { hasPwBox, unlockPwBox, savePwBox, pwSession } from "../vault/pwStore";
 import { passwordStrength } from "../lib/crypto";
 import { Btn, Field, Modal, Select, TextField, TextArea, EmptyState, card, uid } from "../ui";
-import { IconCopy, IconEye, IconEyeOff, IconTrash, IconEdit, IconKey, IconPlus, IconRefresh, IconStar, IconCheck } from "../icons";
+import { IconCopy, IconEye, IconEyeOff, IconTrash, IconEdit, IconKey, IconPlus, IconRefresh, IconStar, IconCheck, IconArrowRight } from "../icons";
 
 const CATS = ["网站账号", "银行/支付", "邮箱", "社交", "工作", "WiFi", "设备", "其他"];
+const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
 function genPassword(len = 16, symbols = true): string {
   const lower = "abcdefghijkmnpqrstuvwxyz", upper = "ABCDEFGHJKLMNPQRSTUVWXYZ", digits = "23456789", sym = "!@#$%^&*-_=+?";
@@ -19,9 +21,58 @@ function genPassword(len = 16, symbols = true): string {
 
 export default function Passwords() {
   const { data, update } = useVault();
-  const items = data?.passwords ?? [];
   const clearSec = data?.settings.clipboardClearSec ?? 30;
+  if (hasPwBox()) return <PwGate clearSec={clearSec} />;
+  return (
+    <PwVault
+      items={data?.passwords ?? []}
+      clearSec={clearSec}
+      onMutate={(fn) => update((d) => { d.passwords = d.passwords ?? []; fn(d.passwords); })}
+    />
+  );
+}
 
+function PwGate({ clearSec }: { clearSec: number }) {
+  const [sess, setSess] = useState(pwSession.get());
+  if (!sess) return <PwUnlock onUnlocked={(s) => { pwSession.set(s); setSess(s); }} />;
+  return (
+    <PwVault
+      items={sess.items}
+      clearSec={clearSec}
+      onMutate={(fn) => {
+        const next = clone(sess.items); fn(next);
+        void savePwBox(sess.keys, next);
+        const ns = { keys: sess.keys, items: next };
+        pwSession.set(ns); setSess(ns);
+      }}
+    />
+  );
+}
+
+function PwUnlock({ onUnlocked }: { onUnlocked: (s: NonNullable<ReturnType<typeof pwSession.get>>) => void }) {
+  const [pw, setPw] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true); const r = await unlockPwBox(pw); setBusy(false);
+    if (!r) { setErr("密码错误"); setPw(""); return; }
+    onUnlocked(r);
+  };
+  return (
+    <div style={{ padding: "60px 32px", display: "flex", justifyContent: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, width: 300 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 15, background: "linear-gradient(160deg,var(--accent),#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={26} stroke="#fff" /></div>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>密码保险箱已锁定</div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>已开启二次验证，请输入独立密码</div>
+        </div>
+        <TextField type="password" autoFocus value={pw} placeholder="二次验证密码" onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+        {err && <div style={{ fontSize: 12, color: "var(--red)" }}>{err}</div>}
+        <Btn onClick={submit} disabled={busy} style={{ height: 40, width: "100%" }}>{busy ? "处理中…" : "解锁"}{!busy && <IconArrowRight size={15} stroke="#fff" />}</Btn>
+      </div>
+    </div>
+  );
+}
+
+function PwVault({ items, clearSec, onMutate }: { items: PasswordItem[]; clearSec: number; onMutate: (fn: (items: PasswordItem[]) => void) => void }) {
   const [editing, setEditing] = useState<PasswordItem | null>(null);
   const [open, setOpen] = useState(false);
   const [reveal, setReveal] = useState<Record<string, boolean>>({});
@@ -33,13 +84,12 @@ export default function Passwords() {
       setCopied(tag);
       setTimeout(() => setCopied(""), 1200);
       if (clearSec > 0) setTimeout(() => navigator.clipboard.writeText("").catch(() => {}), clearSec * 1000);
-    } catch { /* 剪贴板不可用时忽略 */ }
+    } catch { /* ignore */ }
   };
 
   const startNew = () => { setEditing(null); setOpen(true); };
-  const startEdit = (it: PasswordItem) => { setEditing(it); setOpen(true); };
-  const remove = (id: string) => update((d) => { d.passwords = d.passwords.filter((p) => p.id !== id); });
-  const toggleFav = (id: string) => update((d) => { const p = d.passwords.find((x) => x.id === id); if (p) p.favorite = !p.favorite; });
+  const remove = (id: string) => onMutate((arr) => { const i = arr.findIndex((p) => p.id === id); if (i >= 0) arr.splice(i, 1); });
+  const toggleFav = (id: string) => onMutate((arr) => { const p = arr.find((x) => x.id === id); if (p) p.favorite = !p.favorite; });
 
   const sorted = [...items].sort((a, b) => Number(b.favorite) - Number(a.favorite) || b.updatedAt - a.updatedAt);
 
@@ -72,7 +122,7 @@ export default function Passwords() {
                 <RowBtn title={reveal[it.id] ? "隐藏" : "显示"} onClick={() => setReveal((r) => ({ ...r, [it.id]: !r[it.id] }))}>{reveal[it.id] ? <IconEyeOff /> : <IconEye />}</RowBtn>
                 <RowBtn title="复制密码" onClick={() => copy(it.password, "pw" + it.id)}>{copied === "pw" + it.id ? <IconCheck stroke="var(--green)" /> : <IconCopy />}</RowBtn>
                 <RowBtn title={it.favorite ? "取消收藏" : "收藏"} onClick={() => toggleFav(it.id)}><IconStar stroke={it.favorite ? "var(--orange)" : "var(--text-tertiary)"} /></RowBtn>
-                <RowBtn title="编辑" onClick={() => startEdit(it)}><IconEdit /></RowBtn>
+                <RowBtn title="编辑" onClick={() => { setEditing(it); setOpen(true); }}><IconEdit /></RowBtn>
                 <RowBtn title="删除" onClick={() => remove(it.id)}><IconTrash stroke="var(--red)" /></RowBtn>
               </div>
             );
@@ -83,14 +133,9 @@ export default function Passwords() {
       <PasswordEditor
         open={open} initial={editing} onClose={() => setOpen(false)}
         onSave={(vals) => {
-          update((d) => {
-            if (editing) {
-              const p = d.passwords.find((x) => x.id === editing.id);
-              if (p) Object.assign(p, vals, { updatedAt: Date.now() });
-            } else {
-              const now = Date.now();
-              d.passwords.push({ id: uid("pw"), ...vals, createdAt: now, updatedAt: now });
-            }
+          onMutate((arr) => {
+            if (editing) { const p = arr.find((x) => x.id === editing.id); if (p) Object.assign(p, vals, { updatedAt: Date.now() }); }
+            else { const now = Date.now(); arr.push({ id: uid("pw"), ...vals, createdAt: now, updatedAt: now }); }
           });
           setOpen(false);
         }}

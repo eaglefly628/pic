@@ -3,6 +3,7 @@ import type { VaultData } from "./types";
 import { createVault, rewrapVault, sealVault, unlockVault, type UnlockedKeys, type VaultBlob } from "../lib/crypto";
 import { hasVault, loadBlob, saveBlob } from "../lib/storage";
 import { initialVaultData } from "../data/defaultData";
+import { pwSession } from "./pwStore";
 
 type Status = "loading" | "onboard" | "locked" | "unlocked";
 
@@ -72,6 +73,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
 
   const lock = useCallback(() => {
     keysRef.current = null;
+    pwSession.set(null); // 同时锁上密码保险箱的二次验证会话
     setData(null);
     setStatus("locked");
   }, []);
@@ -79,6 +81,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const reload = useCallback(() => {
     setStatus(hasVault() ? "locked" : "onboard");
     keysRef.current = null;
+    pwSession.set(null);
     setData(null);
   }, []);
 

@@ -64,25 +64,28 @@ function AccountRow({ acc, onOpen, showCat }: { acc: AccVM; onOpen: (id: string)
       <span style={{ width: 38, height: 38, borderRadius: 10, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${acc.color} 15%, transparent)`, color: acc.color }}>
         <span style={{ fontSize: 13, fontWeight: 700 }}>{acc.initial}</span>
       </span>
-      <div style={{ minWidth: 0, width: 168 }}>
+      <div style={{ minWidth: 0, width: 150 }}>
         <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{acc.name}</div>
         <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{acc.sub}</div>
       </div>
       <span style={{ fontSize: 11, color: "var(--text-secondary)", background: "var(--fill-quaternary)", padding: "3px 9px", borderRadius: 6, whiteSpace: "nowrap" }}>{showCat ? acc.catTitle : acc.type}</span>
-      <div style={{ flex: 1, minWidth: 24, maxWidth: 90 }}>
+      <div style={{ flex: 1, minWidth: 20, maxWidth: 64 }}>
         <div style={{ height: 5, borderRadius: 3, background: "var(--track)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: acc.pctWidth, background: acc.color, borderRadius: 3 }} />
         </div>
       </div>
-      <div style={{ textAlign: "right", width: 92 }} title={`更新于 ${acc.updated}`}>
+      <div style={{ textAlign: "right", width: 88 }} title={`更新于 ${acc.updated}`}>
         <div style={{ fontSize: 11.5, fontWeight: 500, color: acc.stale ? "var(--orange)" : "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{acc.ago}</div>
         <div style={{ fontSize: 10.5, color: acc.stale ? "var(--orange)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{acc.updated}</div>
       </div>
-      <div style={{ textAlign: "right", width: 118 }}>
+      <div style={{ textAlign: "right", width: 112 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: acc.amountColor, fontVariantNumeric: "tabular-nums" }}>{acc.balance}</div>
         <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{acc.pct} · 占比</div>
       </div>
       <span style={{ flex: "none" }}><IconChevron size={16} /></span>
+      <span style={{ width: 62, flex: "none", display: "flex", justifyContent: "flex-end" }}>
+        {acc.overdue && <span style={{ fontSize: 10, fontWeight: 600, color: "var(--red)", background: "color-mix(in srgb, var(--red) 15%, transparent)", padding: "2px 6px", borderRadius: 5, whiteSpace: "nowrap" }}>超时更新</span>}
+      </span>
     </div>
   );
 }

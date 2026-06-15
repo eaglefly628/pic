@@ -3,6 +3,7 @@ import { useVault } from "../vault/VaultContext";
 import { useTheme } from "../lib/theme";
 import { passwordStrength } from "../lib/crypto";
 import { clearVault, exportBlobString, importBlobString, listBackups, addBackup, restoreBackup, deleteBackup } from "../lib/storage";
+import { hasPwBox, createPwBox, unlockPwBox, changePwBoxPassword, clearPwBox, pwSession } from "../vault/pwStore";
 import { Btn, Field, Select, TextField, card } from "../ui";
 import { IconDownload, IconUpload, IconCheck } from "../icons";
 
@@ -19,6 +20,34 @@ export default function Settings() {
   const [bkLabel, setBkLabel] = useState("");
   const autoLock = data?.settings.autoLockMin ?? 5;
   const clip = data?.settings.clipboardClearSec ?? 30;
+
+  const [pwOn, setPwOn] = useState(hasPwBox());
+  const [npw, setNpw] = useState(""); const [cpw, setCpw] = useState(""); const [pwBoxMsg, setPwBoxMsg] = useState("");
+
+  const enablePwBox = async () => {
+    setPwBoxMsg("");
+    if (npw.length < 4) return setPwBoxMsg("密码至少 4 位");
+    await createPwBox(npw, data?.passwords ?? []);
+    update((d) => { d.passwords = []; }); // 已迁移到独立加密库
+    pwSession.set(null); setPwOn(true); setNpw(""); setPwBoxMsg("ok");
+    setTimeout(() => setPwBoxMsg(""), 2500);
+  };
+  const changePwBox = async () => {
+    setPwBoxMsg("");
+    if (npw.length < 4) return setPwBoxMsg("新密码至少 4 位");
+    const r = await unlockPwBox(cpw);
+    if (!r) return setPwBoxMsg("当前密码错误");
+    await changePwBoxPassword(r.keys, npw);
+    pwSession.set(null); setCpw(""); setNpw(""); setPwBoxMsg("ok");
+    setTimeout(() => setPwBoxMsg(""), 2500);
+  };
+  const disablePwBox = async () => {
+    setPwBoxMsg("");
+    const r = await unlockPwBox(cpw);
+    if (!r) return setPwBoxMsg("当前密码错误");
+    update((d) => { d.passwords = r.items; }); // 迁回主金库
+    clearPwBox(); pwSession.set(null); setPwOn(false); setCpw(""); setNpw("");
+  };
 
   const refreshBk = () => setBackups(listBackups());
   const createBackup = () => { addBackup(bkLabel.trim() || `备份 ${new Date().toLocaleString("zh-CN")}`); setBkLabel(""); refreshBk(); };
@@ -118,6 +147,32 @@ export default function Settings() {
           {pwMsg === "ok" ? <span style={{ fontSize: 12.5, color: "var(--green)", display: "flex", alignItems: "center", gap: 4 }}><IconCheck stroke="var(--green)" />已更新</span>
             : pwMsg && <span style={{ fontSize: 12.5, color: "var(--red)" }}>{pwMsg}</span>}
         </div>
+      </Section>
+
+      {/* 密码保险箱二次验证 */}
+      <Section title="密码保险箱 · 二次验证">
+        {!pwOn ? (
+          <>
+            <div style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 12 }}>为密码保险箱单独设一道密码（与主密码独立）。启用后进入密码保险箱需再验证；已有密码会自动迁入独立加密库。</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <TextField type="password" value={npw} onChange={(e) => setNpw(e.target.value)} placeholder="设置二次验证密码（≥4 位）" />
+              <Btn onClick={enablePwBox} style={{ whiteSpace: "nowrap" }}>启用</Btn>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 12.5, color: "var(--green)", marginBottom: 12 }}>已启用：密码保险箱由独立密码加密保护。</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 4 }}>
+              <Field label="当前二次验证密码"><TextField type="password" value={cpw} onChange={(e) => setCpw(e.target.value)} /></Field>
+              <Field label="新密码（用于修改）"><TextField type="password" value={npw} onChange={(e) => setNpw(e.target.value)} /></Field>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <Btn onClick={changePwBox}>修改密码</Btn>
+              <Btn variant="danger" onClick={disablePwBox}>关闭二次验证</Btn>
+            </div>
+          </>
+        )}
+        {pwBoxMsg === "ok" ? <div style={{ fontSize: 12.5, color: "var(--green)", marginTop: 10, display: "flex", alignItems: "center", gap: 4 }}><IconCheck stroke="var(--green)" />已完成</div> : pwBoxMsg && <div style={{ fontSize: 12.5, color: "var(--red)", marginTop: 10 }}>{pwBoxMsg}</div>}
       </Section>
 
       {/* 外观 */}

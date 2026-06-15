@@ -143,7 +143,7 @@ function ForecastChart({ chart, series, xLabels }: { chart: ChartGeom; series: {
   const tipTop = hover ? (hover.py > 56 ? hover.py - 50 : hover.py + 14) : 0;
   return (
     <div ref={ref} style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-      <svg viewBox="0 0 600 200" style={{ width: "100%", height: 200, display: "block", overflow: "visible" }}>
+      <svg viewBox="0 0 600 200" preserveAspectRatio="none" style={{ width: "100%", height: 200, display: "block", overflow: "visible" }}>
         <defs>
           <linearGradient id="fvBudget" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
