@@ -46,7 +46,7 @@ function buildSnapshots(): Snapshot[] {
 }
 
 export const sampleDataset: Dataset = {
-  vaultName: "李俊白家专用理财",
+  vaultName: "君白家专用理财",
   userName: "eaglefly",
   real: false,
   accounts: ACCS.map((a) => ({

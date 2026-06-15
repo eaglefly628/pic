@@ -12,8 +12,20 @@ export default function Settings() {
   const importRef = useRef<HTMLInputElement>(null);
 
   const [pw, setPw] = useState(""); const [pw2, setPw2] = useState(""); const [pwMsg, setPwMsg] = useState("");
+  const [vname, setVname] = useState(data?.dataset.vaultName ?? "");
+  const [uname, setUname] = useState(data?.dataset.userName ?? "");
+  const [savedName, setSavedName] = useState(false);
   const autoLock = data?.settings.autoLockMin ?? 5;
   const clip = data?.settings.clipboardClearSec ?? 30;
+
+  const saveNames = () => {
+    update((d) => {
+      d.dataset.vaultName = vname.trim() || d.dataset.vaultName;
+      d.dataset.userName = uname.trim() || d.dataset.userName;
+    });
+    setSavedName(true);
+    setTimeout(() => setSavedName(false), 2000);
+  };
 
   const doChangePw = async () => {
     setPwMsg("");
@@ -55,6 +67,18 @@ export default function Settings() {
 
   return (
     <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease", maxWidth: 720, display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* 金库 */}
+      <Section title="金库">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="金库名称"><TextField value={vname} onChange={(e) => setVname(e.target.value)} /></Field>
+          <Field label="户主名称"><TextField value={uname} onChange={(e) => setUname(e.target.value)} /></Field>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Btn onClick={saveNames}>保存名称</Btn>
+          {savedName && <span style={{ fontSize: 12.5, color: "var(--green)", display: "flex", alignItems: "center", gap: 4 }}><IconCheck stroke="var(--green)" />已保存</span>}
+        </div>
+      </Section>
+
       {/* 安全 */}
       <Section title="安全">
         <Row label="自动锁定" hint="闲置超时后锁定并从内存清除数据">

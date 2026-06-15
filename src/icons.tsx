@@ -114,3 +114,12 @@ export const IconStar = ({ size = 15, stroke = "currentColor", width = 1.7 }: P)
 export const IconCheck = ({ size = 15, stroke = "currentColor", width = 2.2 }: P) => (
   <svg {...base(size, stroke, width)}><path d="m5 12 5 5L20 7" /></svg>
 );
+export const IconPercent = ({ size = 17, stroke = "currentColor", width = 1.8 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M19 5 5 19" /><circle cx="7.5" cy="7.5" r="2.5" /><circle cx="16.5" cy="16.5" r="2.5" /></svg>
+);
+export const IconWallet = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v0" /><rect x="3" y="7" width="18" height="12" rx="2.5" /><path d="M16 12.5h2.5" /></svg>
+);
+export const IconChartUp = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M4 4v16h16" /><path d="m7 14 3.5-3.5 3 3L20 7" /><path d="M20 11V7h-4" /></svg>
+);

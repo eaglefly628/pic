@@ -6,13 +6,14 @@ import { fmt, fmtSigned, fmtWan, fmtPct } from "./format";
 
 export type RangeKey = "3m" | "1y" | "all";
 
-const CAT_TITLE: Record<Category, string> = {
+export const CAT_TITLE: Record<Category, string> = {
   liquid: "流动资金",
   invest: "投资理财",
-  estate: "不动产",
+  estate: "家庭房产",
+  fixed: "家庭其他固定资产",
   debt: "负债",
 };
-const CAT_ORDER: Category[] = ["liquid", "invest", "estate", "debt"];
+export const CAT_ORDER: Category[] = ["liquid", "invest", "estate", "fixed", "debt"];
 
 // 资产构成分组的展示颜色（与设计稿色板一致）
 const COMP_COLOR: Record<string, string> = {
@@ -22,6 +23,9 @@ const COMP_COLOR: Record<string, string> = {
   基金: "#5E5CE6",
   现金及银行: "#FF2D55",
   黄金: "#FFD60A",
+  养老金: "#5AC8FA",
+  公积金: "#AF52DE",
+  其他固定资产: "#A2845E",
   其他: "#8E8E93",
 };
 
@@ -31,6 +35,42 @@ function lastBalance(snaps: Snapshot[], id: string): number {
     if (v != null) return v;
   }
   return 0;
+}
+
+function lastDate(snaps: Snapshot[], id: string): string | null {
+  for (let i = snaps.length - 1; i >= 0; i--) if (snaps[i].balances[id] != null) return snaps[i].date;
+  return null;
+}
+
+/** 各账户的最新余额 */
+export function latestBalances(ds: Dataset): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const a of ds.accounts) out[a.id] = lastBalance(ds.snapshots, a.id);
+  return out;
+}
+
+/** 当前净资产（所有账户最新余额之和，含负债） */
+export function currentNetWorth(ds: Dataset): number {
+  const lb = latestBalances(ds);
+  return ds.accounts.reduce((s, a) => s + lb[a.id], 0);
+}
+
+/** 预计年利息合计（账户自身利率优先，否则用分类默认利率，单位百分数） */
+export function estimateAnnualInterest(ds: Dataset, catRates: Record<string, number>): number {
+  const lb = latestBalances(ds);
+  let sum = 0;
+  for (const a of ds.accounts) {
+    const ratePct = a.rate != null ? a.rate * 100 : catRates[a.cat] ?? 0;
+    sum += (lb[a.id] * ratePct) / 100;
+  }
+  return sum;
+}
+
+/** 距今多少周（用于显示账户更新的新鲜度） */
+function weeksAgo(dateISO: string): { label: string; weeks: number } {
+  const days = Math.floor((Date.now() - new Date(dateISO + "T00:00:00").getTime()) / 86_400_000);
+  const weeks = Math.floor(days / 7);
+  return { label: weeks <= 0 ? "本周更新" : `${weeks} 周前`, weeks };
 }
 
 /** 某账户的历史序列（去掉无记录的点） */
@@ -139,6 +179,7 @@ export function buildView(ds: Dataset, ui: UIState) {
   const series = filterRange(fullNet, ui.range);
   const tc = buildChart(series.map((p) => p.v), 600, 200, 44, 8, 16, 30);
   const trendXLabels = pickXLabels(series.map((p) => ymLabel(p.date)), tc.pts);
+  const trendPoints = series.map((p, i) => ({ x: tc.pts[i].x, y: tc.pts[i].y, date: p.date, value: p.v }));
   const rangeCaption =
     ui.range === "3m" ? "最近 3 个月 · 按月快照"
       : ui.range === "1y" ? "最近 12 个月 · 按月快照"
@@ -190,6 +231,32 @@ export function buildView(ds: Dataset, ui: UIState) {
     changeColor: change >= 0 ? "var(--green)" : "var(--red)",
   }));
 
+  // ---- 账户视图映射（分组与全部排序共用）----
+  const mkAcc = (a: AccountMeta, i: number) => {
+    const bal = latest[a.id];
+    const pct = totalAssets ? (Math.abs(bal) / totalAssets) * 100 : 0;
+    const upd = lastDate(ds.snapshots, a.id);
+    const wa = upd ? weeksAgo(upd) : null;
+    return {
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      color: a.color,
+      initial: a.name.slice(0, 1),
+      catTitle: CAT_TITLE[a.cat],
+      sub: a.institution && a.institution !== "—" ? `${a.institution} · ${a.owner ?? ""}` : a.owner ?? "",
+      balance: fmt(bal),
+      amountColor: bal < 0 ? "var(--red)" : "var(--text-primary)",
+      pct: pct.toFixed(1) + "%",
+      pctWidth: Math.min(100, pct).toFixed(1) + "%",
+      border: i === 0 ? "none" : "0.5px solid var(--separator)",
+      updated: upd ?? "—",
+      ago: wa ? wa.label : "无记录",
+      stale: wa ? wa.weeks >= 8 : true,
+    };
+  };
+  const byAbs = (a: AccountMeta, b: AccountMeta) => Math.abs(latest[b.id]) - Math.abs(latest[a.id]);
+
   // ---- 账户分组 ----
   const groups = CAT_ORDER.map((cat) => {
     const list = accs.filter((a) => a.cat === cat);
@@ -199,32 +266,17 @@ export function buildView(ds: Dataset, ui: UIState) {
       title: CAT_TITLE[cat],
       subtotal: fmt(sub),
       subtotalColor: sub < 0 ? "var(--red)" : "var(--text-primary)",
-      accounts: list
-        .slice()
-        .sort((a, b) => Math.abs(latest[b.id]) - Math.abs(latest[a.id]))
-        .map((a, i) => {
-          const bal = latest[a.id];
-          const pct = totalAssets ? (Math.abs(bal) / totalAssets) * 100 : 0;
-          return {
-            id: a.id,
-            name: a.name,
-            type: a.type,
-            color: a.color,
-            initial: a.name.slice(0, 1),
-            sub: a.institution && a.institution !== "—" ? `${a.institution} · ${a.owner ?? ""}` : a.owner ?? "",
-            balance: fmt(bal),
-            amountColor: bal < 0 ? "var(--red)" : "var(--text-primary)",
-            pct: pct.toFixed(1) + "%",
-            pctWidth: Math.min(100, pct).toFixed(1) + "%",
-            border: i === 0 ? "none" : "0.5px solid var(--separator)",
-          };
-        }),
+      accounts: list.slice().sort(byAbs).map(mkAcc),
     };
   }).filter((g) => g.accounts.length > 0);
 
+  // ---- 全部账户（按金额排序，不分组）----
+  const flatAccounts = accs.slice().sort(byAbs).map(mkAcc);
+
   // ---- 账户详情 ----
-  const da = accs.find((a) => a.id === ui.selectedId) || accs[0];
-  const ds2 = accountSeries(ds, da.id);
+  const da = accs.find((a) => a.id === ui.selectedId) || accs[0] ||
+    ({ id: "", name: "—", cat: "liquid", type: "", color: "#8E8E93" } as AccountMeta);
+  const ds2 = da.id ? accountSeries(ds, da.id) : [];
   const detailShown = ds2.slice(-6);
   const dc = buildChart(detailShown.map((p) => p.v), 600, 180, 52, 8, 14, 28);
   const detailDots = detailShown.map((p, i) => ({
@@ -235,6 +287,11 @@ export function buildView(ds: Dataset, ui: UIState) {
   const dFirst = detailShown[0]?.v ?? 0;
   const dLast = detailShown[detailShown.length - 1]?.v ?? 0;
   const dDelta = dLast - dFirst;
+  // 每期（每月）变化量，用于柱状预览
+  const detailChanges = detailShown
+    .map((p, i) => (i === 0 ? null : { label: monthLabel(p.date), delta: p.v - detailShown[i - 1].v }))
+    .filter((x): x is { label: string; delta: number } => x != null);
+  const changeMax = detailChanges.reduce((m, c) => Math.max(m, Math.abs(c.delta)), 0) || 1;
   const snapshots = ds2
     .slice()
     .reverse()
@@ -268,10 +325,12 @@ export function buildView(ds: Dataset, ui: UIState) {
       xLabels: trendXLabels,
       lastX: tc.pts.length ? tc.pts[tc.pts.length - 1].x.toFixed(1) : "0",
       lastY: tc.pts.length ? tc.pts[tc.pts.length - 1].y.toFixed(1) : "0",
+      points: trendPoints,
     },
     donut,
     recent,
     groups,
+    flatAccounts,
     detail: {
       id: da.id,
       name: da.name,
@@ -287,6 +346,12 @@ export function buildView(ds: Dataset, ui: UIState) {
       trendLabel: fmtSigned(dDelta),
       trendColor: dDelta >= 0 ? "var(--green)" : "var(--red)",
       snapshots,
+      changes: detailChanges.map((c) => ({
+        label: c.label,
+        text: fmtSigned(c.delta),
+        up: c.delta >= 0,
+        ratio: Math.abs(c.delta) / changeMax, // 0..1，用于柱高
+      })),
     },
   };
 }

@@ -1,7 +1,7 @@
 // 统一数据模型 —— 真实数据（由 Excel 导入）与示例数据都遵循此结构。
 // 应用的所有视图（总资产 / 趋势 / 构成 / 账户 / 快照）都从这里计算得出。
 
-export type Category = "liquid" | "invest" | "estate" | "debt";
+export type Category = "liquid" | "invest" | "estate" | "fixed" | "debt";
 
 export interface AccountMeta {
   id: string;

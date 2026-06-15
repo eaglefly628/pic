@@ -150,7 +150,7 @@ function main() {
   const cleanAccounts = accounts.map(({ _col, comp, ...rest }) => ({ ...rest, comp }));
 
   const dataset = {
-    vaultName: "李俊白家专用理财",
+    vaultName: "君白家专用理财",
     userName: "eaglefly",
     real: true,
     accounts: cleanAccounts,

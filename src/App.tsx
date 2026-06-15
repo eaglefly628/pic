@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useVault } from "./vault/VaultContext";
 import { useTheme } from "./lib/theme";
 import { buildView, type RangeKey } from "./lib/compute";
@@ -6,6 +6,7 @@ import type { VaultData } from "./vault/types";
 import { addAccount, addSnapshot, deleteAccount, updateAccount } from "./vault/ops";
 import {
   IconShield, IconDashboard, IconCard, IconLock, IconUser, IconImport, IconGear, IconChevron, IconSearch, IconKey,
+  IconPercent, IconWallet, IconChartUp,
 } from "./icons";
 import Unlock from "./screens/Unlock";
 import Dashboard from "./screens/Dashboard";
@@ -15,9 +16,13 @@ import Passwords from "./screens/Passwords";
 import Info from "./screens/Info";
 import ImportData from "./screens/ImportData";
 import Settings from "./screens/Settings";
+import Interest from "./screens/Interest";
+import Income from "./screens/Income";
+import Budget from "./screens/Budget";
+import Secret from "./screens/Secret";
 import { AccountEditor, SnapshotEditor } from "./screens/editors";
 
-type Screen = "dashboard" | "accounts" | "detail" | "passwords" | "info" | "import" | "settings";
+type Screen = "dashboard" | "accounts" | "detail" | "passwords" | "info" | "import" | "settings" | "interest" | "income" | "budget";
 
 const glass: React.CSSProperties = {
   backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)",
@@ -54,6 +59,15 @@ function Shell({ data }: { data: VaultData }) {
 
   const [accEditor, setAccEditor] = useState<{ open: boolean; editing: boolean }>({ open: false, editing: false });
   const [snapEditor, setSnapEditor] = useState(false);
+  const [secretOpen, setSecretOpen] = useState(false);
+  const clicksRef = useRef(0);
+  const lastClickRef = useRef(0);
+  const onSecretTap = () => {
+    const now = Date.now();
+    clicksRef.current = now - lastClickRef.current < 1500 ? clicksRef.current + 1 : 1;
+    lastClickRef.current = now;
+    if (clicksRef.current >= 5) { clicksRef.current = 0; setSecretOpen(true); }
+  };
 
   const view = useMemo(() => buildView(data.dataset, { range, selectedId }), [data.dataset, range, selectedId]);
   const userInitial = (view.meta.userName.slice(0, 1) || "U").toUpperCase();
@@ -61,9 +75,11 @@ function Shell({ data }: { data: VaultData }) {
 
   const open = (id: string) => { setSelectedId(id); setScreen("detail"); };
 
-  const pageTitle =
-    screen === "dashboard" ? "仪表盘" : screen === "accounts" ? "资金账户" : screen === "passwords" ? "密码保险箱"
-      : screen === "info" ? "个人信息" : screen === "import" ? "导入数据" : screen === "settings" ? "设置" : view.detail.name;
+  const TITLES: Record<Screen, string> = {
+    dashboard: "仪表盘", accounts: "资金账户", detail: view.detail.name, passwords: "密码保险箱",
+    info: "个人信息", import: "导入数据", settings: "设置", interest: "利息预测", income: "收入情况", budget: "预算与预测",
+  };
+  const pageTitle = TITLES[screen];
 
   return (
     <div style={{ minHeight: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--wallpaper)", padding: 32 }}>
@@ -90,7 +106,11 @@ function Shell({ data }: { data: VaultData }) {
             <NavBtn active={screen === "dashboard"} onClick={() => setScreen("dashboard")} icon={<IconDashboard />} label="仪表盘" />
             <div style={groupLabel}>资金</div>
             <NavBtn active={screen === "accounts" || screen === "detail"} onClick={() => setScreen("accounts")} icon={<IconCard />} label="资金账户" badge={String(view.meta.accountCount)} />
+            <NavBtn active={screen === "interest"} onClick={() => setScreen("interest")} icon={<IconPercent />} label="利息预测" />
             <NavBtn active={screen === "import"} onClick={() => setScreen("import")} icon={<IconImport />} label="导入数据" />
+            <div style={groupLabel}>收支</div>
+            <NavBtn active={screen === "income"} onClick={() => setScreen("income")} icon={<IconWallet />} label="收入情况" />
+            <NavBtn active={screen === "budget"} onClick={() => setScreen("budget")} icon={<IconChartUp />} label="预算与预测" />
             <div style={groupLabel}>安全</div>
             <NavBtn active={screen === "passwords"} onClick={() => setScreen("passwords")} icon={<IconKey />} label="密码保险箱" badge={String(data.passwords.length)} />
             <NavBtn active={screen === "info"} onClick={() => setScreen("info")} icon={<IconUser />} label="个人信息" />
@@ -143,7 +163,7 @@ function Shell({ data }: { data: VaultData }) {
                 onEditAccount={() => setAccEditor({ open: true, editing: true })}
                 onDeleteAccount={() => {
                   if (currentAcc && confirm(`删除账户「${currentAcc.name}」及其全部快照？`)) {
-                    update((d) => deleteAccount(d, currentAcc.id));
+                    update((d) => deleteAccount(d.dataset, currentAcc.id));
                     setScreen("accounts");
                   }
                 }}
@@ -153,6 +173,9 @@ function Shell({ data }: { data: VaultData }) {
             {screen === "info" && <Info />}
             {screen === "import" && <ImportData />}
             {screen === "settings" && <Settings />}
+            {screen === "interest" && <Interest />}
+            {screen === "income" && <Income />}
+            {screen === "budget" && <Budget />}
           </div>
         </main>
 
@@ -162,16 +185,20 @@ function Shell({ data }: { data: VaultData }) {
           initial={accEditor.editing ? currentAcc : undefined}
           onClose={() => setAccEditor({ open: false, editing: false })}
           onSubmit={(meta, balance) => {
-            if (accEditor.editing && currentAcc) update((d) => updateAccount(d, currentAcc.id, meta));
-            else update((d) => addAccount(d, meta, balance));
+            if (accEditor.editing && currentAcc) update((d) => updateAccount(d.dataset, currentAcc.id, meta));
+            else update((d) => addAccount(d.dataset, meta, balance));
           }}
         />
         <SnapshotEditor
           open={snapEditor}
           accountName={currentAcc?.name ?? ""}
           onClose={() => setSnapEditor(false)}
-          onSubmit={(date, amount) => { if (currentAcc) update((d) => addSnapshot(d, currentAcc.id, date, amount)); }}
+          onSubmit={(date, amount) => { if (currentAcc) update((d) => addSnapshot(d.dataset, currentAcc.id, date, amount)); }}
         />
+
+        {/* 隐藏入口：右下角无反馈小字，连点 5 下进入「私房钱」 */}
+        <span onClick={onSecretTap} style={{ position: "absolute", bottom: 5, right: 12, fontSize: 10, color: "var(--text-tertiary)", opacity: 0.4, userSelect: "none", zIndex: 30 }}>v0.1.0</span>
+        {secretOpen && <Secret onExit={() => setSecretOpen(false)} />}
       </div>
     </div>
   );

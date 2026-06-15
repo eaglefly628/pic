@@ -6,11 +6,18 @@ import { Btn, Field, Modal, Select, TextField } from "../ui";
 const CATS: { value: Category; label: string }[] = [
   { value: "liquid", label: "流动资金" },
   { value: "invest", label: "投资理财" },
-  { value: "estate", label: "不动产" },
+  { value: "estate", label: "家庭房产" },
+  { value: "fixed", label: "家庭其他固定资产" },
   { value: "debt", label: "负债" },
 ];
-const COMPS = ["现金及银行", "股票", "理财/固收", "基金", "黄金", "房产", "负债", "其他"].map((v) => ({ value: v, label: v }));
+const COMPS = ["现金及银行", "股票", "理财/固收", "基金", "黄金", "房产", "养老金", "公积金", "其他固定资产", "负债", "其他"].map((v) => ({ value: v, label: v }));
 const PALETTE = ["#FF2D55", "#FF6482", "#FF9500", "#FFD60A", "#34C759", "#30D158", "#30B0C7", "#64D2FF", "#007AFF", "#5E5CE6", "#BF5AF2", "#8E8E93"];
+
+// 宽松解析金额：整数、小数、负数均可（自动去掉 ¥、逗号、空格等）
+function parseNum(s: string): number {
+  const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
 
 export function AccountEditor({ open, initial, onClose, onSubmit }: {
   open: boolean; initial?: AccountMeta & { comp?: string }; onClose: () => void;
@@ -37,7 +44,7 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
     if (!name.trim()) return;
     onSubmit(
       { name: name.trim(), cat, type: type.trim() || "其他", comp, institution: institution.trim() || "—", owner: owner.trim() || "全家", color },
-      Number(balance.replace(/,/g, "")) || 0
+      parseNum(balance)
     );
     onClose();
   };
@@ -56,7 +63,7 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
       </div>
       <Field label="机构（可选）"><TextField value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="如 招商银行" /></Field>
       {!editing && (
-        <Field label="当前余额（负债填负数）"><TextField value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0" inputMode="decimal" /></Field>
+        <Field label="当前余额（整数或小数，负债填负数）"><TextField value={balance} onChange={(e) => setBalance(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="如 50000" inputMode="decimal" /></Field>
       )}
       <Field label="颜色">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -80,7 +87,7 @@ export function SnapshotEditor({ open, accountName, onClose, onSubmit }: {
 
   const submit = () => {
     if (!amount.trim()) return;
-    onSubmit(date, Number(amount.replace(/,/g, "")) || 0);
+    onSubmit(date, parseNum(amount));
     onClose();
   };
 
@@ -88,7 +95,7 @@ export function SnapshotEditor({ open, accountName, onClose, onSubmit }: {
     <Modal open={open} title={`新增快照 · ${accountName}`} onClose={onClose} width={400}
       footer={<><Btn variant="ghost" onClick={onClose}>取消</Btn><Btn onClick={submit}>添加</Btn></>}>
       <Field label="日期"><TextField type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-      <Field label="余额"><TextField value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" inputMode="decimal" autoFocus /></Field>
+      <Field label="余额（整数或小数均可）"><TextField value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="如 50000" inputMode="decimal" autoFocus /></Field>
     </Modal>
   );
 }

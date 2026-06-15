@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import type { View } from "../lib/compute";
 import type { RangeKey } from "../lib/compute";
 import { card } from "../ui";
+import { fmt } from "../lib/format";
 
 function greetingWord() {
   const h = new Date().getHours();
@@ -59,26 +60,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
               <button onClick={() => setRange("all")} style={segStyle(range === "all")}>全部</button>
             </div>
           </div>
-          <svg viewBox="0 0 600 220" style={{ width: "100%", height: 208, display: "block", overflow: "visible" }}>
-            <defs>
-              <linearGradient id="fvArea" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.26" />
-                <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            {view.trend.grid.map((g, i) => (
-              <g key={i}>
-                <line x1="44" x2="600" y1={g.y} y2={g.y} stroke="var(--separator)" strokeWidth="1" />
-                <text x="38" y={g.ty} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
-              </g>
-            ))}
-            <path d={view.trend.area} fill="url(#fvArea)" />
-            <path d={view.trend.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx={view.trend.lastX} cy={view.trend.lastY} r="4.5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />
-            {view.trend.xLabels.map((x, i) => (
-              <text key={i} x={x.x} y="216" textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{x.label}</text>
-            ))}
-          </svg>
+          <TrendChart view={view} />
         </div>
 
         <div style={{ ...card, padding: "20px 22px" }}>
@@ -122,6 +104,60 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function TrendChart({ view }: { view: View }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<{ i: number; px: number; py: number } | null>(null);
+  const pts = view.trend.points;
+
+  const onMove = (e: React.MouseEvent) => {
+    const el = ref.current;
+    if (!el || pts.length === 0) return;
+    const rect = el.getBoundingClientRect();
+    const xView = ((e.clientX - rect.left) * 600) / rect.width;
+    let best = 0, bd = Infinity;
+    pts.forEach((p, i) => { const d = Math.abs(p.x - xView); if (d < bd) { bd = d; best = i; } });
+    const p = pts[best];
+    setHover({ i: best, px: (p.x * rect.width) / 600, py: (p.y * rect.height) / 220 });
+  };
+
+  const hp = hover ? pts[hover.i] : null;
+  const tipLeft = hover ? Math.min(Math.max(hover.px, 52), (ref.current?.clientWidth ?? 600) - 52) : 0;
+  const tipTop = hover ? (hover.py > 56 ? hover.py - 50 : hover.py + 14) : 0;
+
+  return (
+    <div ref={ref} style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <svg viewBox="0 0 600 220" style={{ width: "100%", height: 208, display: "block", overflow: "visible" }}>
+        <defs>
+          <linearGradient id="fvArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.26" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {view.trend.grid.map((g, i) => (
+          <g key={i}>
+            <line x1="44" x2="600" y1={g.y} y2={g.y} stroke="var(--separator)" strokeWidth="1" />
+            <text x="38" y={g.ty} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
+          </g>
+        ))}
+        <path d={view.trend.area} fill="url(#fvArea)" />
+        <path d={view.trend.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        {hp && <line x1={hp.x} x2={hp.x} y1={16} y2={190} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />}
+        <circle cx={view.trend.lastX} cy={view.trend.lastY} r="4.5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />
+        {hp && <circle cx={hp.x} cy={hp.y} r="5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />}
+        {view.trend.xLabels.map((x, i) => (
+          <text key={i} x={x.x} y="216" textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{x.label}</text>
+        ))}
+      </svg>
+      {hp && (
+        <div style={{ position: "absolute", left: tipLeft, top: tipTop, transform: "translateX(-50%)", pointerEvents: "none", background: "var(--bg-card)", border: "0.5px solid var(--separator-strong)", boxShadow: "var(--card-shadow)", borderRadius: 8, padding: "6px 10px", whiteSpace: "nowrap", zIndex: 2 }}>
+          <div style={{ fontSize: 10.5, color: "var(--text-tertiary)" }}>{hp.date}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{fmt(hp.value)}</div>
+        </div>
+      )}
     </div>
   );
 }

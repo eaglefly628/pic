@@ -62,6 +62,21 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
         </svg>
       </div>
 
+      {d.changes.length > 0 && (
+        <div style={{ ...card, padding: "18px 22px", marginBottom: 18 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>每月变化量</div>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 96 }}>
+            {d.changes.map((c, i) => (
+              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: c.up ? "var(--green)" : "var(--red)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{c.text}</div>
+                <div style={{ width: "60%", maxWidth: 38, height: Math.max(4, c.ratio * 56), borderRadius: 5, background: c.up ? "var(--green)" : "var(--red)" }} />
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{c.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ ...card, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "15px 22px 13px" }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>余额快照</div>
