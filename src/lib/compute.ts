@@ -180,6 +180,19 @@ export function buildView(ds: Dataset, ui: UIState) {
   const tc = buildChart(series.map((p) => p.v), 600, 200, 44, 8, 16, 30);
   const trendXLabels = pickXLabels(series.map((p) => ymLabel(p.date)), tc.pts);
   const trendPoints = series.map((p, i) => ({ x: tc.pts[i].x, y: tc.pts[i].y, date: p.date, value: p.v }));
+
+  // 净资产每月变化量（近 12 期，独立于时间范围）
+  const recentNet = fullNet.slice(-13);
+  const mcMax = recentNet.reduce((m, p, i) => (i === 0 ? m : Math.max(m, Math.abs(p.v - recentNet[i - 1].v))), 0) || 1;
+  const monthlyChanges = recentNet
+    .map((p, i) => (i === 0 ? null : { label: ymLabel(p.date), delta: p.v - recentNet[i - 1].v }))
+    .filter((x): x is { label: string; delta: number } => x != null)
+    .map((c) => ({
+      label: c.label,
+      text: c.delta >= 0 ? "+" + fmtWan(c.delta) : fmtWan(c.delta),
+      up: c.delta >= 0,
+      ratio: Math.abs(c.delta) / mcMax,
+    }));
   const rangeCaption =
     ui.range === "3m" ? "最近 3 个月 · 按月快照"
       : ui.range === "1y" ? "最近 12 个月 · 按月快照"
@@ -331,6 +344,7 @@ export function buildView(ds: Dataset, ui: UIState) {
     recent,
     groups,
     flatAccounts,
+    monthlyChanges,
     detail: {
       id: da.id,
       name: da.name,

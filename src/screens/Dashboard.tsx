@@ -85,6 +85,23 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
         </div>
       </div>
 
+      {view.monthlyChanges.length > 0 && (
+        <div style={{ ...card, padding: "18px 22px", marginBottom: 18 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>
+            每月变化量<span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 8 }}>近 12 期净资产变化</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 104 }}>
+            {view.monthlyChanges.map((c, i) => (
+              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 0 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: c.up ? "var(--green)" : "var(--red)", whiteSpace: "nowrap" }}>{c.text}</div>
+                <div style={{ width: "58%", maxWidth: 30, height: Math.max(4, c.ratio * 56), borderRadius: 4, background: c.up ? "var(--green)" : "var(--red)" }} />
+                <div style={{ fontSize: 10, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{c.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ ...card, overflow: "hidden" }}>
         <div style={{ padding: "16px 22px 12px", fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>最近更新</div>
         {view.recent.length === 0 && <div style={{ padding: "0 22px 18px", fontSize: 12.5, color: "var(--text-tertiary)" }}>暂无变动记录</div>}
