@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { buildView, type RangeKey } from "../lib/compute";
 import { addAccount, addSnapshot, deleteAccount, updateAccount } from "../vault/ops";
-import { hasSecret, createSecret, unlockSecret, saveSecret } from "../vault/secretStore";
+import { hasSecret, createSecret, unlockSecret, saveSecret, changeSecretPassword, clearSecret } from "../vault/secretStore";
 import { passwordStrength, type UnlockedKeys } from "../lib/crypto";
 import type { Dataset } from "../data/types";
 import Dashboard from "./Dashboard";
@@ -10,7 +10,7 @@ import Accounts from "./Accounts";
 import Detail from "./Detail";
 import { InterestView } from "./Interest";
 import { AccountEditor, SnapshotEditor } from "./editors";
-import { Btn, TextField } from "../ui";
+import { Btn, Field, Modal, TextField } from "../ui";
 import { IconKey, IconChevron, IconArrowRight } from "../icons";
 
 type Sub = "dashboard" | "accounts" | "detail" | "interest";
@@ -31,8 +31,24 @@ export default function Secret({ onExit }: { onExit: () => void }) {
   const [range, setRange] = useState<RangeKey>("1y");
   const [accEditor, setAccEditor] = useState<{ open: boolean; editing: boolean }>({ open: false, editing: false });
   const [snapEditor, setSnapEditor] = useState(false);
+  const [cpwOpen, setCpwOpen] = useState(false);
+  const [cnpw, setCnpw] = useState(""); const [cnpw2, setCnpw2] = useState(""); const [cmsg, setCmsg] = useState("");
 
   useEffect(() => { setStatus(hasSecret() ? "locked" : "onboard"); }, []);
+
+  const doChangePw = async () => {
+    setCmsg("");
+    if (cnpw.length < 4) return setCmsg("新密码至少 4 位");
+    if (cnpw !== cnpw2) return setCmsg("两次输入不一致");
+    if (!keysRef.current) return;
+    keysRef.current = await changeSecretPassword(keysRef.current, cnpw);
+    setCpwOpen(false); setCnpw(""); setCnpw2(""); setCmsg("");
+  };
+  const resetSecret = () => {
+    if (confirm("忘记密码？将清空「独立管理」的全部数据并重新设置（不可恢复）。是否继续？")) {
+      clearSecret(); setPw(""); setErr(""); setStatus("onboard");
+    }
+  };
 
   const onboard = status === "onboard";
   const submitPw = async () => {
@@ -83,6 +99,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
         )}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>独立密码 · 独立加密</span>
+        {status === "unlocked" && <Btn variant="ghost" onClick={() => setCpwOpen(true)} style={{ height: 30 }}>改密码</Btn>}
         <Btn variant="ghost" onClick={onExit} style={{ height: 30 }}>退出</Btn>
       </div>
 
@@ -112,6 +129,12 @@ export default function Secret({ onExit }: { onExit: () => void }) {
           />
           <SnapshotEditor open={snapEditor} accountName={currentAcc?.name ?? ""} onClose={() => setSnapEditor(false)}
             onSubmit={(date, amount) => { if (currentAcc) mutate((d) => addSnapshot(d, currentAcc.id, date, amount)); }} />
+          <Modal open={cpwOpen} title="修改独立管理密码" onClose={() => setCpwOpen(false)} width={400}
+            footer={<><Btn variant="ghost" onClick={() => setCpwOpen(false)}>取消</Btn><Btn onClick={doChangePw}>保存</Btn></>}>
+            <Field label="新密码"><TextField type="password" value={cnpw} onChange={(e) => setCnpw(e.target.value)} autoFocus /></Field>
+            <Field label="确认新密码"><TextField type="password" value={cnpw2} onChange={(e) => setCnpw2(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") doChangePw(); }} /></Field>
+            {cmsg && <div style={{ fontSize: 12, color: "var(--red)" }}>{cmsg}</div>}
+          </Modal>
         </>
       ) : status === "loading" ? null : (
         // 私房钱独立密码：创建 / 解锁
@@ -138,6 +161,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
             )}
             {err && <div style={{ fontSize: 12, color: "var(--red)" }}>{err}</div>}
             <Btn onClick={submitPw} disabled={busy} style={{ height: 40, width: "100%" }}>{busy ? "处理中…" : onboard ? "创建并进入" : "解锁"}{!busy && <IconArrowRight size={15} stroke="#fff" />}</Btn>
+            {!onboard && <button onClick={resetSecret} style={{ background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 11.5, cursor: "pointer", textDecoration: "underline" }}>忘记密码？重置独立管理（清空后重设）</button>}
             <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.6 }}>⚠️ 独立管理密码同样无法找回；与主密码相互独立。</div>
           </div>
         </div>

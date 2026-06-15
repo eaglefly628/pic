@@ -1,6 +1,6 @@
 // 「独立管理」独立加密库：与主金库完全分离，拥有自己的主密码、密钥与存储。
 // 即使知道主密码也无法解开独立管理（需要独立管理自己的密码）。
-import { createVault, sealVault, unlockVault, type UnlockedKeys } from "../lib/crypto";
+import { createVault, rewrapVault, sealVault, unlockVault, type UnlockedKeys, type VaultBlob } from "../lib/crypto";
 import type { Dataset } from "../data/types";
 import { emptyDataset } from "./ops";
 
@@ -32,4 +32,17 @@ export async function unlockSecret(pw: string): Promise<{ data: Dataset; keys: U
 export async function saveSecret(keys: UnlockedKeys, ds: Dataset): Promise<void> {
   const blob = await sealVault(keys, ds);
   localStorage.setItem(SKEY, JSON.stringify(blob));
+}
+
+/** 修改独立管理密码：用新密码重新包裹同一数据密钥（需当前已解锁的 keys），返回新 keys */
+export async function changeSecretPassword(keys: UnlockedKeys, newPw: string): Promise<UnlockedKeys> {
+  const cur = JSON.parse(localStorage.getItem(SKEY) as string) as VaultBlob;
+  const { blob, keys: nk } = await rewrapVault(keys, cur, newPw);
+  localStorage.setItem(SKEY, JSON.stringify(blob));
+  return nk;
+}
+
+/** 忘记密码时：清空独立管理（数据不可恢复），可重新创建 */
+export function clearSecret(): void {
+  localStorage.removeItem(SKEY);
 }
