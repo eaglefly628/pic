@@ -7,7 +7,7 @@ import { Btn, Field, Modal, Select, TextField, TextArea, EmptyState, card, uid }
 import { IconPlus, IconEdit, IconTrash } from "../icons";
 
 const CATS = ["生活", "教育", "医疗", "房贷/房租", "车辆", "旅行", "保险", "大额采购", "其他"];
-const HORIZON = 36;
+const YEAR_OPTS = [1, 2, 3, 5, 10, 15, 20, 30, 40];
 
 function expMonthly(e: ExpenseItem): number {
   return e.period === "month" ? e.amount : e.period === "year" ? e.amount / 12 : 0;
@@ -20,12 +20,14 @@ export default function Budget() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ExpenseItem | null>(null);
   const [withInterest, setWithInterest] = useState(true);
+  const [years, setYears] = useState(3);
 
   const incomes = data?.incomes ?? [];
   const expenses = data?.expenses ?? [];
 
   const calc = useMemo(() => {
     if (!data) return null;
+    const H = years * 12;
     const net0 = currentNetWorth(data.dataset);
     const monthlyIncome = incomes.reduce((s, it) => s + (it.period === "month" ? it.amount : it.amount / 12), 0);
     const recurringMonthly = expenses.reduce((s, e) => s + expMonthly(e), 0);
@@ -37,7 +39,7 @@ export default function Budget() {
     const now = new Date();
     const series: { label: string; v: number }[] = [{ label: ym(now), v: net0 }];
     let v = net0;
-    for (let m = 1; m <= HORIZON; m++) {
+    for (let m = 1; m <= H; m++) {
       const d = addMonths(now, m);
       v += monthlyNet;
       for (const e of once) {
@@ -47,11 +49,13 @@ export default function Budget() {
       series.push({ label: ym(d), v });
     }
     return { net0, monthlyIncome, recurringMonthly, monthlyInterest, monthlyNet, series, annualInterest };
-  }, [data, incomes, expenses, withInterest]);
+  }, [data, incomes, expenses, withInterest, years]);
 
   if (!data || !calc) return null;
   const chart = buildChart(calc.series.map((p) => p.v), 600, 200, 56, 8, 16, 30);
-  const xLabels = [0, 6, 12, 18, 24, 30, 36].filter((i) => i < calc.series.length).map((i) => ({ x: chart.pts[i].x.toFixed(1), label: calc.series[i].label }));
+  const n = calc.series.length;
+  const idxs = Array.from(new Set([0, 1, 2, 3, 4, 5, 6].map((k) => Math.round((k * (n - 1)) / 6))));
+  const xLabels = idxs.map((i) => ({ x: chart.pts[i].x.toFixed(1), label: calc.series[i].label }));
   const at = (m: number) => calc.series[Math.min(m, calc.series.length - 1)].v;
 
   const remove = (id: string) => update((d) => { d.expenses = (d.expenses ?? []).filter((x) => x.id !== id); });
@@ -62,20 +66,23 @@ export default function Budget() {
         <Metric label="当前净资产" value={fmt(calc.net0)} />
         <Metric label="每月净现金流" value={fmt(calc.monthlyNet)} accent={calc.monthlyNet >= 0 ? "var(--green)" : "var(--red)"} />
         <Metric label="预计 1 年后" value={fmt(at(12))} />
-        <Metric label="预计 3 年后" value={fmt(at(36))} />
+        <Metric label={`预计 ${years} 年后`} value={fmt(at(years * 12))} />
       </div>
 
       {/* 预测图 */}
       <div style={{ ...card, padding: "18px 22px 12px", marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>资产预测（未来 36 个月）</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>资产预测（未来 {years} 年）</div>
             <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 2 }}>净资产 + 收入 − 开销{withInterest ? " + 利息" : ""}</div>
           </div>
-          <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--text-secondary)", cursor: "pointer" }}>
-            <input type="checkbox" checked={withInterest} onChange={(e) => setWithInterest(e.target.checked)} />
-            叠加利息收入（约 {fmt(calc.annualInterest / 12)}/月）
-          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--text-secondary)", cursor: "pointer" }}>
+              <input type="checkbox" checked={withInterest} onChange={(e) => setWithInterest(e.target.checked)} />
+              叠加利息（约 {fmt(calc.annualInterest / 12)}/月）
+            </label>
+            <Select value={String(years)} style={{ width: 92, height: 32 }} options={YEAR_OPTS.map((y) => ({ value: String(y), label: `${y} 年` }))} onChange={(e) => setYears(Number(e.target.value))} />
+          </div>
         </div>
         <svg viewBox="0 0 600 200" style={{ width: "100%", height: 200, display: "block", overflow: "visible" }}>
           <defs>

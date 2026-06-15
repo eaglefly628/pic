@@ -248,7 +248,7 @@ export function buildView(ds: Dataset, ui: UIState) {
     return {
       id: a.id,
       name: a.name,
-      type: a.type,
+      type: (a as AccountMeta & { comp?: string }).comp ?? a.type, // 资产类型（统一到资产构成）
       color: a.color,
       initial: a.name.slice(0, 1),
       catTitle: CAT_TITLE[a.cat],
@@ -284,6 +284,7 @@ export function buildView(ds: Dataset, ui: UIState) {
   // ---- 账户详情 ----
   const da = accs.find((a) => a.id === ui.selectedId) || accs[0] ||
     ({ id: "", name: "—", cat: "liquid", type: "", color: "#8E8E93" } as AccountMeta);
+  const daComp = (da as AccountMeta & { comp?: string }).comp ?? da.type;
   const ds2 = da.id ? accountSeries(ds, da.id) : [];
   const detailShown = ds2.slice(-6);
   const dc = buildChart(detailShown.map((p) => p.v), 600, 180, 52, 8, 14, 28);
@@ -343,10 +344,10 @@ export function buildView(ds: Dataset, ui: UIState) {
     detail: {
       id: da.id,
       name: da.name,
-      type: da.type,
+      type: daComp,
       color: da.color,
       initial: da.name.slice(0, 1),
-      sub: (da.institution && da.institution !== "—" ? da.institution + " · " : "") + "归属 " + (da.owner ?? "全家") + " · " + da.type,
+      sub: (da.institution && da.institution !== "—" ? da.institution + " · " : "") + "归属 " + (da.owner ?? "全家") + " · " + daComp,
       balance: fmt(dLast),
       line: dc.line,
       area: dc.area,

@@ -27,7 +27,6 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
   const editing = !!initial;
   const [name, setName] = useState(initial?.name ?? "");
   const [cat, setCat] = useState<Category>(initial?.cat ?? "liquid");
-  const [type, setType] = useState(initial?.type ?? "储蓄/活期");
   const [comp, setComp] = useState(initial?.comp ?? "现金及银行");
   const [institution, setInstitution] = useState(initial?.institution ?? "");
   const [owner, setOwner] = useState(initial?.owner ?? "本人");
@@ -37,8 +36,8 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
 
   React.useEffect(() => {
     if (!open) return;
-    setName(initial?.name ?? ""); setCat(initial?.cat ?? "liquid"); setType(initial?.type ?? "储蓄/活期");
-    setComp(initial?.comp ?? "现金及银行"); setInstitution(initial?.institution ?? ""); setOwner(initial?.owner ?? "本人");
+    setName(initial?.name ?? ""); setCat(initial?.cat ?? "liquid");
+    setComp(initial?.comp ?? initial?.type ?? "现金及银行"); setInstitution(initial?.institution ?? ""); setOwner(initial?.owner ?? "本人");
     setColor(initial?.color ?? PALETTE[0]); setBalance("");
     setRatePct(initial?.rate != null ? String(+(initial.rate * 100).toFixed(4)) : "");
   }, [open, initial]);
@@ -46,7 +45,7 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
   const submit = () => {
     if (!name.trim()) return;
     onSubmit(
-      { name: name.trim(), cat, type: type.trim() || "其他", comp, institution: institution.trim() || "—", owner: owner.trim() || "全家", color, rate: (parseFloat(ratePct) || 0) / 100 },
+      { name: name.trim(), cat, type: comp, comp, institution: institution.trim() || "—", owner: owner.trim() || "全家", color, rate: (parseFloat(ratePct) || 0) / 100 },
       parseNum(balance)
     );
     onClose();
@@ -58,22 +57,19 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
       <Field label="账户名称"><TextField value={name} onChange={(e) => setName(e.target.value)} placeholder="如 招商银行储蓄卡" autoFocus /></Field>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="分组"><Select value={cat} options={CATS} onChange={(e) => setCat(e.target.value as Category)} /></Field>
-        <Field label="资产构成"><Select value={comp} options={COMPS} onChange={(e) => setComp(e.target.value)} /></Field>
+        <Field label="资产类型"><Select value={comp} options={COMPS} onChange={(e) => setComp(e.target.value)} /></Field>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="类型"><TextField value={type} onChange={(e) => setType(e.target.value)} placeholder="储蓄/股票/房产…" /></Field>
         <Field label="归属">
           <Select value={owner} onChange={(e) => setOwner(e.target.value)}
             options={(OWNERS.includes(owner) ? OWNERS : [owner, ...OWNERS]).map((o) => ({ value: o, label: o }))} />
         </Field>
+        <Field label="机构（可选）"><TextField value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="如 招商银行" /></Field>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="机构（可选）"><TextField value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="如 招商银行" /></Field>
         <Field label="年利率（%，默认 0）"><TextField value={ratePct} onChange={(e) => setRatePct(e.target.value)} inputMode="decimal" placeholder="0" /></Field>
+        {!editing && <Field label="当前余额（可负）"><TextField value={balance} onChange={(e) => setBalance(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="如 50000" inputMode="decimal" /></Field>}
       </div>
-      {!editing && (
-        <Field label="当前余额（整数或小数，负债填负数）"><TextField value={balance} onChange={(e) => setBalance(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="如 50000" inputMode="decimal" /></Field>
-      )}
       <Field label="颜色">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {PALETTE.map((c) => (
