@@ -55,15 +55,10 @@ export function currentNetWorth(ds: Dataset): number {
   return ds.accounts.reduce((s, a) => s + lb[a.id], 0);
 }
 
-/** 预计年利息合计（账户自身利率优先，否则用分类默认利率，单位百分数） */
-export function estimateAnnualInterest(ds: Dataset, catRates: Record<string, number>): number {
+/** 预计年利息合计（按各账户自身年化利率，默认 0；rate 为小数） */
+export function estimateAnnualInterest(ds: Dataset): number {
   const lb = latestBalances(ds);
-  let sum = 0;
-  for (const a of ds.accounts) {
-    const ratePct = a.rate != null ? a.rate * 100 : catRates[a.cat] ?? 0;
-    sum += (lb[a.id] * ratePct) / 100;
-  }
-  return sum;
+  return ds.accounts.reduce((s, a) => s + lb[a.id] * (a.rate ?? 0), 0);
 }
 
 /** 距今多少周（用于显示账户更新的新鲜度） */

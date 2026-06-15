@@ -32,18 +32,20 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
   const [owner, setOwner] = useState(initial?.owner ?? "本人");
   const [color, setColor] = useState(initial?.color ?? PALETTE[0]);
   const [balance, setBalance] = useState("");
+  const [ratePct, setRatePct] = useState("");
 
   React.useEffect(() => {
     if (!open) return;
     setName(initial?.name ?? ""); setCat(initial?.cat ?? "liquid"); setType(initial?.type ?? "储蓄/活期");
     setComp(initial?.comp ?? "现金及银行"); setInstitution(initial?.institution ?? ""); setOwner(initial?.owner ?? "本人");
     setColor(initial?.color ?? PALETTE[0]); setBalance("");
+    setRatePct(initial?.rate != null ? String(+(initial.rate * 100).toFixed(4)) : "");
   }, [open, initial]);
 
   const submit = () => {
     if (!name.trim()) return;
     onSubmit(
-      { name: name.trim(), cat, type: type.trim() || "其他", comp, institution: institution.trim() || "—", owner: owner.trim() || "全家", color },
+      { name: name.trim(), cat, type: type.trim() || "其他", comp, institution: institution.trim() || "—", owner: owner.trim() || "全家", color, rate: (parseFloat(ratePct) || 0) / 100 },
       parseNum(balance)
     );
     onClose();
@@ -61,7 +63,10 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
         <Field label="类型"><TextField value={type} onChange={(e) => setType(e.target.value)} placeholder="储蓄/股票/房产…" /></Field>
         <Field label="归属"><TextField value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="本人/配偶/全家" /></Field>
       </div>
-      <Field label="机构（可选）"><TextField value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="如 招商银行" /></Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="机构（可选）"><TextField value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="如 招商银行" /></Field>
+        <Field label="年利率（%，默认 0）"><TextField value={ratePct} onChange={(e) => setRatePct(e.target.value)} inputMode="decimal" placeholder="0" /></Field>
+      </div>
       {!editing && (
         <Field label="当前余额（整数或小数，负债填负数）"><TextField value={balance} onChange={(e) => setBalance(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="如 50000" inputMode="decimal" /></Field>
       )}

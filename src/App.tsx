@@ -197,7 +197,7 @@ function Shell({ data }: { data: VaultData }) {
         />
 
         {/* 隐藏入口：右下角无反馈小字，连点 5 下进入「私房钱」 */}
-        <span onClick={onSecretTap} style={{ position: "absolute", bottom: 5, right: 12, fontSize: 10, color: "var(--text-tertiary)", opacity: 0.4, userSelect: "none", zIndex: 30 }}>v0.1.0</span>
+        <span onClick={onSecretTap} title="" style={{ position: "absolute", bottom: 4, right: 10, fontSize: 10.5, color: "var(--text-tertiary)", opacity: 0.6, userSelect: "none", zIndex: 30, padding: "4px 6px" }}>v0.1.0</span>
         {secretOpen && <Secret onExit={() => setSecretOpen(false)} />}
       </div>
     </div>

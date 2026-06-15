@@ -56,8 +56,6 @@ export interface ExpenseItem {
 export interface Settings {
   autoLockMin: number; // 自动锁定（分钟），0 表示不自动锁定
   clipboardClearSec: number; // 复制后清空剪贴板（秒）
-  /** 各分类的默认年化利率（百分数，如 3 表示 3%），默认 0 */
-  categoryRates?: Record<string, number>;
 }
 
 /** 解锁后内存中的完整金库数据 */
@@ -77,5 +75,4 @@ export interface VaultData {
 export const DEFAULT_SETTINGS: Settings = {
   autoLockMin: 5,
   clipboardClearSec: 30,
-  categoryRates: { liquid: 0, invest: 0, estate: 0, fixed: 0, debt: 0 },
 };

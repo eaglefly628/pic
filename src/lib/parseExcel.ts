@@ -110,7 +110,7 @@ export async function parseWorkbook(buf: ArrayBuffer, sheetName = "Sheet2"): Pro
   const cleanAccounts = accounts.map(({ _col, ...rest }) => { void _col; return rest; });
 
   const dataset: Dataset = {
-    vaultName: "君白家专用理财",
+    vaultName: "junbai家专用理财软件",
     userName: "eaglefly",
     real: true,
     accounts: cleanAccounts,

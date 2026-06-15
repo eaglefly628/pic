@@ -29,7 +29,7 @@ export default function Budget() {
     const net0 = currentNetWorth(data.dataset);
     const monthlyIncome = incomes.reduce((s, it) => s + (it.period === "month" ? it.amount : it.amount / 12), 0);
     const recurringMonthly = expenses.reduce((s, e) => s + expMonthly(e), 0);
-    const annualInterest = estimateAnnualInterest(data.dataset, data.settings.categoryRates ?? {});
+    const annualInterest = estimateAnnualInterest(data.dataset);
     const monthlyInterest = withInterest ? annualInterest / 12 : 0;
     const once = expenses.filter((e) => e.period === "once" && e.date);
     const monthlyNet = monthlyIncome - recurringMonthly + monthlyInterest;
