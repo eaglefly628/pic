@@ -11,6 +11,7 @@ const CATS: { value: Category; label: string }[] = [
   { value: "debt", label: "负债" },
 ];
 const COMPS = ["现金及银行", "股票", "理财/固收", "基金", "黄金", "房产", "养老金", "公积金", "其他固定资产", "负债", "其他"].map((v) => ({ value: v, label: v }));
+const OWNERS = ["本人", "配偶", "全家", "父亲", "母亲", "孩子"];
 const PALETTE = ["#FF2D55", "#FF6482", "#FF9500", "#FFD60A", "#34C759", "#30D158", "#30B0C7", "#64D2FF", "#007AFF", "#5E5CE6", "#BF5AF2", "#8E8E93"];
 
 // 宽松解析金额：整数、小数、负数均可（自动去掉 ¥、逗号、空格等）
@@ -61,7 +62,10 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="类型"><TextField value={type} onChange={(e) => setType(e.target.value)} placeholder="储蓄/股票/房产…" /></Field>
-        <Field label="归属"><TextField value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="本人/配偶/全家" /></Field>
+        <Field label="归属">
+          <Select value={owner} onChange={(e) => setOwner(e.target.value)}
+            options={(OWNERS.includes(owner) ? OWNERS : [owner, ...OWNERS]).map((o) => ({ value: o, label: o }))} />
+        </Field>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="机构（可选）"><TextField value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="如 招商银行" /></Field>

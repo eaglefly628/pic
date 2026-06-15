@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { useTheme } from "../lib/theme";
 import { passwordStrength } from "../lib/crypto";
-import { clearVault, exportBlobString, importBlobString } from "../lib/storage";
+import { clearVault, exportBlobString, importBlobString, listBackups, addBackup, restoreBackup, deleteBackup } from "../lib/storage";
 import { Btn, Field, Select, TextField, card } from "../ui";
 import { IconDownload, IconUpload, IconCheck } from "../icons";
 
@@ -15,8 +15,15 @@ export default function Settings() {
   const [vname, setVname] = useState(data?.dataset.vaultName ?? "");
   const [uname, setUname] = useState(data?.dataset.userName ?? "");
   const [savedName, setSavedName] = useState(false);
+  const [backups, setBackups] = useState(() => listBackups());
+  const [bkLabel, setBkLabel] = useState("");
   const autoLock = data?.settings.autoLockMin ?? 5;
   const clip = data?.settings.clipboardClearSec ?? 30;
+
+  const refreshBk = () => setBackups(listBackups());
+  const createBackup = () => { addBackup(bkLabel.trim() || `备份 ${new Date().toLocaleString("zh-CN")}`); setBkLabel(""); refreshBk(); };
+  const restoreBk = (id: string) => { if (confirm("恢复到该备份？当前数据会被替换（建议先创建一个当前备份）。恢复后需用该备份对应的主密码解锁。")) { restoreBackup(id); reload(); } };
+  const deleteBk = (id: string) => { if (confirm("删除该备份？")) { deleteBackup(id); refreshBk(); } };
 
   const saveNames = () => {
     update((d) => {
@@ -118,8 +125,32 @@ export default function Settings() {
         <Row label="主题" hint="浅色 / 深色"><Btn variant="ghost" onClick={toggle}>{theme === "light" ? "🌙 切换深色" : "☀️ 切换浅色"}</Btn></Row>
       </Section>
 
+      {/* 程序内备份 */}
+      <Section title="程序内备份（命名还原点）">
+        <div style={{ display: "flex", gap: 10, marginBottom: backups.length ? 12 : 4 }}>
+          <TextField value={bkLabel} onChange={(e) => setBkLabel(e.target.value)} placeholder="备份名称（如 月末盘点）" onKeyDown={(e) => { if (e.key === "Enter") createBackup(); }} />
+          <Btn onClick={createBackup} style={{ whiteSpace: "nowrap" }}><IconDownload />创建备份</Btn>
+        </div>
+        {backups.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: "var(--text-tertiary)" }}>还没有备份。创建后可随时一键恢复到该时间点（数据保存在本机）。</div>
+        ) : (
+          backups.map((b) => (
+            <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "0.5px solid var(--separator)" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>{b.label}</div>
+                <div style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>{new Date(b.createdAt).toLocaleString("zh-CN")}</div>
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                <Btn variant="soft" onClick={() => restoreBk(b.id)}>恢复</Btn>
+                <Btn variant="ghost" onClick={() => deleteBk(b.id)}>删除</Btn>
+              </div>
+            </div>
+          ))
+        )}
+      </Section>
+
       {/* 备份 */}
-      <Section title="备份与恢复">
+      <Section title="导出 / 导入备份文件">
         <Row label="导出加密备份" hint="导出 .vault 文件（仍为加密，需主密码解锁）"><Btn variant="ghost" onClick={exportBackup}><IconDownload />导出</Btn></Row>
         <Row label="从备份恢复" hint="导入 .vault 文件后用对应主密码解锁">
           <Btn variant="ghost" onClick={() => importRef.current?.click()}><IconUpload />导入</Btn>
