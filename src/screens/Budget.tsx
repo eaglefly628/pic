@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import type { ExpenseItem } from "../vault/types";
-import { buildChart, currentNetWorth, estimateAnnualInterest } from "../lib/compute";
+import { buildChart, currentNetWorth, estimateAnnualInterest, type ChartGeom } from "../lib/compute";
 import { fmt } from "../lib/format";
 import { Btn, Field, Modal, Select, TextField, TextArea, EmptyState, card, uid } from "../ui";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
@@ -84,25 +84,7 @@ export default function Budget() {
             <Select value={String(years)} style={{ width: 92, height: 32 }} options={YEAR_OPTS.map((y) => ({ value: String(y), label: `${y} 年` }))} onChange={(e) => setYears(Number(e.target.value))} />
           </div>
         </div>
-        <svg viewBox="0 0 600 200" style={{ width: "100%", height: 200, display: "block", overflow: "visible" }}>
-          <defs>
-            <linearGradient id="fvBudget" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {chart.grid.map((g, i) => (
-            <g key={i}>
-              <line x1="56" x2="600" y1={g.y} y2={g.y} stroke="var(--separator)" strokeWidth="1" />
-              <text x="50" y={g.ty} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
-            </g>
-          ))}
-          <path d={chart.area} fill="url(#fvBudget)" />
-          <path d={chart.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-          {xLabels.map((x, i) => (
-            <text key={i} x={x.x} y="198" textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{x.label}</text>
-          ))}
-        </svg>
+        <ForecastChart chart={chart} series={calc.series} xLabels={xLabels} />
       </div>
 
       {/* 开销列表 */}
@@ -139,6 +121,55 @@ export default function Budget() {
         });
         setOpen(false);
       }} />
+    </div>
+  );
+}
+
+function ForecastChart({ chart, series, xLabels }: { chart: ChartGeom; series: { label: string; v: number }[]; xLabels: { x: string; label: string }[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<{ i: number; px: number; py: number } | null>(null);
+  const pts = chart.pts;
+  const onMove = (e: React.MouseEvent) => {
+    const el = ref.current;
+    if (!el || pts.length === 0) return;
+    const rect = el.getBoundingClientRect();
+    const xv = ((e.clientX - rect.left) * 600) / rect.width;
+    let best = 0, bd = Infinity;
+    pts.forEach((p, i) => { const d = Math.abs(p.x - xv); if (d < bd) { bd = d; best = i; } });
+    setHover({ i: best, px: (pts[best].x * rect.width) / 600, py: (pts[best].y * rect.height) / 200 });
+  };
+  const hp = hover ? pts[hover.i] : null;
+  const tipLeft = hover ? Math.min(Math.max(hover.px, 56), (ref.current?.clientWidth ?? 600) - 56) : 0;
+  const tipTop = hover ? (hover.py > 56 ? hover.py - 50 : hover.py + 14) : 0;
+  return (
+    <div ref={ref} style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <svg viewBox="0 0 600 200" style={{ width: "100%", height: 200, display: "block", overflow: "visible" }}>
+        <defs>
+          <linearGradient id="fvBudget" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {chart.grid.map((g, i) => (
+          <g key={i}>
+            <line x1="56" x2="600" y1={g.y} y2={g.y} stroke="var(--separator)" strokeWidth="1" />
+            <text x="50" y={g.ty} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
+          </g>
+        ))}
+        <path d={chart.area} fill="url(#fvBudget)" />
+        <path d={chart.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        {hp && <line x1={hp.x} x2={hp.x} y1={16} y2={170} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />}
+        {hp && <circle cx={hp.x} cy={hp.y} r="4.5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />}
+        {xLabels.map((x, i) => (
+          <text key={i} x={x.x} y="198" textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{x.label}</text>
+        ))}
+      </svg>
+      {hover && hp && (
+        <div style={{ position: "absolute", left: tipLeft, top: tipTop, transform: "translateX(-50%)", pointerEvents: "none", background: "var(--bg-card)", border: "0.5px solid var(--separator-strong)", boxShadow: "var(--card-shadow)", borderRadius: 8, padding: "6px 10px", whiteSpace: "nowrap", zIndex: 2 }}>
+          <div style={{ fontSize: 10.5, color: "var(--text-tertiary)" }}>{series[hover.i].label}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{fmt(series[hover.i].v)}</div>
+        </div>
+      )}
     </div>
   );
 }
