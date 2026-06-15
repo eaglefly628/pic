@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import type { ExpenseItem } from "../vault/types";
-import { buildChart, currentNetWorth, estimateAnnualInterest, type ChartGeom } from "../lib/compute";
+import { buildChart, currentNetWorth, estimateAnnualInterest, netSeries, type ChartGeom } from "../lib/compute";
 import { fmt } from "../lib/format";
 import { Btn, Field, Modal, Select, TextField, TextArea, EmptyState, card, uid } from "../ui";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
@@ -13,7 +13,9 @@ function expMonthly(e: ExpenseItem): number {
   return e.period === "month" ? e.amount : e.period === "year" ? e.amount / 12 : 0;
 }
 const ym = (d: Date) => `${String(d.getFullYear()).slice(2)}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+const ymISO = (iso: string) => iso.slice(2, 7).replace("-", "/");
 function addMonths(d: Date, n: number) { const x = new Date(d); x.setDate(1); x.setMonth(x.getMonth() + n); return x; }
+const REAL_TAIL = 12; // 图上展示最近 12 个月真实净值
 
 export default function Budget() {
   const { data, update } = useVault();
@@ -37,7 +39,8 @@ export default function Budget() {
     const monthlyNet = monthlyIncome - recurringMonthly + monthlyInterest;
 
     const now = new Date();
-    const series: { label: string; v: number }[] = [{ label: ym(now), v: net0 }];
+    // 预测段（从今天起 H 个月）
+    const proj: { label: string; v: number }[] = [{ label: ym(now), v: net0 }];
     let v = net0;
     for (let m = 1; m <= H; m++) {
       const d = addMonths(now, m);
@@ -46,9 +49,13 @@ export default function Budget() {
         const [y, mo] = e.date!.split("-");
         if (Number(y) === d.getFullYear() && Number(mo) === d.getMonth() + 1) v -= e.amount;
       }
-      series.push({ label: ym(d), v });
+      proj.push({ label: ym(d), v });
     }
-    return { net0, monthlyIncome, recurringMonthly, monthlyInterest, monthlyNet, series, annualInterest };
+    // 真实段（最近若干个月的实际净值）
+    const real = netSeries(data.dataset).slice(-REAL_TAIL).map((p) => ({ label: ymISO(p.date), v: p.v }));
+    const series = [...real, ...proj.slice(1)];
+    const boundary = Math.max(0, real.length - 1); // 真实/预测分界（今天）
+    return { net0, monthlyIncome, recurringMonthly, monthlyInterest, monthlyNet, series, boundary, annualInterest };
   }, [data, incomes, expenses, withInterest, years]);
 
   if (!data || !calc) return null;
@@ -56,7 +63,7 @@ export default function Budget() {
   const n = calc.series.length;
   const idxs = Array.from(new Set([0, 1, 2, 3, 4, 5, 6].map((k) => Math.round((k * (n - 1)) / 6))));
   const xLabels = idxs.map((i) => ({ x: chart.pts[i].x.toFixed(1), label: calc.series[i].label }));
-  const at = (m: number) => calc.series[Math.min(m, calc.series.length - 1)].v;
+  const at = (m: number) => calc.series[Math.min(calc.boundary + m, calc.series.length - 1)].v;
 
   const remove = (id: string) => update((d) => { d.expenses = (d.expenses ?? []).filter((x) => x.id !== id); });
 
@@ -84,7 +91,11 @@ export default function Budget() {
             <Select value={String(years)} style={{ width: 92, height: 32 }} options={YEAR_OPTS.map((y) => ({ value: String(y), label: `${y} 年` }))} onChange={(e) => setYears(Number(e.target.value))} />
           </div>
         </div>
-        <ForecastChart chart={chart} series={calc.series} xLabels={xLabels} />
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 4 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--text-secondary)" }}><span style={{ width: 14, height: 3, borderRadius: 2, background: "var(--green)" }} />真实净值</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--text-secondary)" }}><span style={{ width: 14, height: 0, borderTop: "2px dashed var(--accent)" }} />预测</span>
+        </div>
+        <ForecastChart chart={chart} series={calc.series} xLabels={xLabels} boundary={calc.boundary} />
       </div>
 
       {/* 开销列表 */}
@@ -125,7 +136,7 @@ export default function Budget() {
   );
 }
 
-function ForecastChart({ chart, series, xLabels }: { chart: ChartGeom; series: { label: string; v: number }[]; xLabels: { x: string; label: string }[] }) {
+function ForecastChart({ chart, series, xLabels, boundary }: { chart: ChartGeom; series: { label: string; v: number }[]; xLabels: { x: string; label: string }[]; boundary: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ i: number; px: number; py: number } | null>(null);
   const pts = chart.pts;
@@ -141,12 +152,19 @@ function ForecastChart({ chart, series, xLabels }: { chart: ChartGeom; series: {
   const hp = hover ? pts[hover.i] : null;
   const tipLeft = hover ? Math.min(Math.max(hover.px, 56), (ref.current?.clientWidth ?? 600) - 56) : 0;
   const tipTop = hover ? (hover.py > 56 ? hover.py - 50 : hover.py + 14) : 0;
+
+  const pathOf = (arr: { x: number; y: number }[]) => arr.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
+  const realPts = pts.slice(0, boundary + 1);
+  const predPts = pts.slice(boundary); // 含分界点以连接
+  const bx = pts[boundary]?.x ?? 0;
+  const isReal = hover ? hover.i <= boundary : false;
+
   return (
     <div ref={ref} style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
       <svg viewBox="0 0 600 200" preserveAspectRatio="none" style={{ width: "100%", height: 200, display: "block", overflow: "visible" }}>
         <defs>
           <linearGradient id="fvBudget" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.18" />
             <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
           </linearGradient>
         </defs>
@@ -157,16 +175,21 @@ function ForecastChart({ chart, series, xLabels }: { chart: ChartGeom; series: {
           </g>
         ))}
         <path d={chart.area} fill="url(#fvBudget)" />
-        <path d={chart.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        {/* 今天分界线 */}
+        {boundary > 0 && <line x1={bx} x2={bx} y1={16} y2={170} stroke="var(--separator-strong)" strokeWidth="1" />}
+        {boundary > 0 && <text x={bx} y={13} textAnchor="middle" fontSize="10" fill="var(--text-tertiary)">今天</text>}
+        {/* 真实段（实线绿）+ 预测段（虚线蓝） */}
+        {realPts.length > 1 && <path d={pathOf(realPts)} fill="none" stroke="var(--green)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />}
+        {predPts.length > 1 && <path d={pathOf(predPts)} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeDasharray="5 4" strokeLinecap="round" strokeLinejoin="round" />}
         {hp && <line x1={hp.x} x2={hp.x} y1={16} y2={170} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />}
-        {hp && <circle cx={hp.x} cy={hp.y} r="4.5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />}
+        {hp && <circle cx={hp.x} cy={hp.y} r="4.5" fill={isReal ? "var(--green)" : "var(--accent)"} stroke="var(--bg-card)" strokeWidth="2.5" />}
         {xLabels.map((x, i) => (
           <text key={i} x={x.x} y="198" textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{x.label}</text>
         ))}
       </svg>
       {hover && hp && (
         <div style={{ position: "absolute", left: tipLeft, top: tipTop, transform: "translateX(-50%)", pointerEvents: "none", background: "var(--bg-card)", border: "0.5px solid var(--separator-strong)", boxShadow: "var(--card-shadow)", borderRadius: 8, padding: "6px 10px", whiteSpace: "nowrap", zIndex: 2 }}>
-          <div style={{ fontSize: 10.5, color: "var(--text-tertiary)" }}>{series[hover.i].label}</div>
+          <div style={{ fontSize: 10.5, color: isReal ? "var(--green)" : "var(--accent)", fontWeight: 600 }}>{series[hover.i].label} · {isReal ? "真实" : "预测"}</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{fmt(series[hover.i].v)}</div>
         </div>
       )}

@@ -12,7 +12,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "dist:mac": "tauri build --bundles dmg"
+    "dist:mac": "tauri build --bundles dmg",
+    "dist:win": "tauri build --bundles nsis"
   },
   "dependencies": {
     "react": "^18.3.1",
