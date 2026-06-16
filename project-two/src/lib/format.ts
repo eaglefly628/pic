@@ -39,3 +39,23 @@ export function groupByMonth(items: MediaItem[]): Group[] {
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
     .map(([key, list]) => ({ key, label: monthLabel(key), items: list }));
 }
+
+/** 按年分组（降序） */
+export function groupByYear(items: MediaItem[]): Group[] {
+  const map = new Map<string, MediaItem[]>();
+  for (const it of items) {
+    const k = String(new Date(it.takenAt).getFullYear());
+    (map.get(k) ?? map.set(k, []).get(k)!).push(it);
+  }
+  return [...map.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([key, list]) => ({ key, label: `${key} 年`, items: list.sort((x, y) => y.takenAt - x.takenAt) }));
+}
+
+/** 往年今日：历史同月同日（不含今年） */
+export function onThisDay(items: MediaItem[], ref = Date.now()): MediaItem[] {
+  const d = new Date(ref), mm = d.getMonth(), dd = d.getDate(), yy = d.getFullYear();
+  return items
+    .filter((it) => { const t = new Date(it.takenAt); return t.getMonth() === mm && t.getDate() === dd && t.getFullYear() < yy; })
+    .sort((a, b) => b.takenAt - a.takenAt);
+}
