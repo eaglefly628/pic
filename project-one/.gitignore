@@ -1,0 +1,30 @@
+# 依赖与构建产物
+node_modules/
+*.local
+
+# 编辑器
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+
+# 日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 真实数据 history.json 作为默认数据库提交进仓库（按用户要求）
+# 本地加密备份与源 Excel 仍不入库
+*.vault
+*.xlsx
+*.xls
+
+# tsc 增量构建缓存
+*.tsbuildinfo
+
+# Tauri / Rust 构建产物
+src-tauri/target/
+src-tauri/gen/
+
+# 真实数据仅本机，不进仓库/不进分发包
+src/data/history.json

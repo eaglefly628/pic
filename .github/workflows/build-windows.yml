@@ -1,20 +1,23 @@
-name: Build Windows
+name: Build Windows (Project One)
 
-# 在 GitHub 的 Windows 云主机上构建 Tauri 安装包（.exe），产物可在 Actions 运行页下载。
+# 在 GitHub 的 Windows 云主机上构建 project-one 的 Tauri 安装包（.exe）。
 on:
   workflow_dispatch: {}
   push:
     branches: ["claude/intelligent-galileo-flhyf2"]
     paths:
-      - "src/**"
-      - "src-tauri/**"
-      - "package.json"
-      - "package-lock.json"
+      - "project-one/src/**"
+      - "project-one/src-tauri/**"
+      - "project-one/package.json"
+      - "project-one/package-lock.json"
       - ".github/workflows/build-windows.yml"
 
 jobs:
   build-windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: project-one
     steps:
       - uses: actions/checkout@v4
 
@@ -31,8 +34,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.toml') }}
+            project-one/src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('project-one/src-tauri/Cargo.toml') }}
 
       - name: Install deps
         run: npm install
@@ -45,5 +48,5 @@ jobs:
         with:
           name: junbai-windows-installer
           path: |
-            src-tauri/target/release/bundle/nsis/*.exe
+            project-one/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
