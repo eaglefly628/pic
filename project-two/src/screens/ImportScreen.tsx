@@ -4,7 +4,13 @@ import { Btn, Select, card } from "../ui";
 import { IconUpload, IconImage } from "../icons";
 
 export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
-  const { addFile, albums } = useLibrary();
+  const { addFile, albums, baseDir, pickBaseDir, syncBaseDir, disconnectBaseDir } = useLibrary();
+  const [bprog, setBprog] = useState<{ done: number; total: number } | null>(null);
+  const runBase = async (fn: (cb: (d: number, t: number) => void) => Promise<void>) => {
+    setBprog({ done: 0, total: 0 });
+    await fn((d, t) => setBprog({ done: d, total: t }));
+    setBprog(null);
+  };
   const fileRef = useRef<HTMLInputElement>(null);
   const dirRef = useRef<HTMLInputElement | null>(null);
   const setDir = (el: HTMLInputElement | null) => {
@@ -41,6 +47,35 @@ export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
 
   return (
     <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease", maxWidth: 760 }}>
+      {/* 媒体库文件夹（Base 目录，不拷贝） */}
+      <div style={{ ...card, padding: "20px 26px", marginBottom: 18 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>媒体库文件夹（推荐 · 不拷贝）</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 14 }}>
+          指定一个文件夹当媒体库：把全家照片都拷进这个文件夹，App 只建立索引与缩略图，<strong>原文件留在磁盘、不复制</strong>。之后点「同步」即可更新新增/删除。需 Chrome / Edge 浏览器。
+        </div>
+        {!baseDir.supported ? (
+          <div style={{ fontSize: 12.5, color: "var(--orange)" }}>当前浏览器不支持文件夹库，请用 Chrome / Edge（或之后的桌面版）。可先用下方「导入」拷贝模式。</div>
+        ) : baseDir.name ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, color: "var(--text-primary)" }}>📁 当前媒体库：<b>{baseDir.name}</b></span>
+            <div style={{ flex: 1 }} />
+            <Btn onClick={() => runBase(syncBaseDir)} disabled={!!bprog}>{bprog ? "同步中…" : "同步"}</Btn>
+            <Btn variant="ghost" onClick={() => { if (confirm("断开媒体库文件夹？仅移除这些磁盘文件的索引，原文件不会被删除。")) disconnectBaseDir(); }} disabled={!!bprog}>断开</Btn>
+          </div>
+        ) : (
+          <Btn onClick={() => runBase(pickBaseDir)} disabled={!!bprog}>{bprog ? "扫描中…" : "选择媒体库文件夹"}</Btn>
+        )}
+        {bprog && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>扫描/索引中… {bprog.done}{bprog.total ? `/${bprog.total}` : ""}</div>
+            <div style={{ height: 8, background: "var(--track)", borderRadius: 5, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${bprog.total ? (bprog.done / bprog.total) * 100 : 10}%`, background: "var(--accent)", borderRadius: 5, transition: "width .2s" }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "0 2px 10px" }}>或：把文件<strong>拷贝进应用</strong>（适合少量、或不方便保留文件夹时）</div>
       <div
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}

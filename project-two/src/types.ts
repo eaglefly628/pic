@@ -29,6 +29,8 @@ export interface MediaItem {
   phash?: string;
   /** 清晰度（拉普拉斯方差，越小越糊） */
   blur?: number;
+  /** Base 目录模式：相对基准目录的路径（存在则原文件在磁盘，不在 IndexedDB） */
+  path?: string;
   addedAt: number;
 }
 

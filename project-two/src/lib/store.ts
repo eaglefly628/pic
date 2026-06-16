@@ -2,11 +2,12 @@
 import type { Album, MediaItem } from "../types";
 
 const DB = "familygallery";
-const VER = 1;
+const VER = 2;
 const S_META = "meta";
 const S_THUMB = "thumbs";
 const S_ORIG = "orig";
 const S_ALBUM = "albums";
+const S_CONFIG = "config";
 
 let dbp: Promise<IDBDatabase> | null = null;
 
@@ -20,6 +21,7 @@ function open(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(S_THUMB)) db.createObjectStore(S_THUMB);
       if (!db.objectStoreNames.contains(S_ORIG)) db.createObjectStore(S_ORIG);
       if (!db.objectStoreNames.contains(S_ALBUM)) db.createObjectStore(S_ALBUM, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(S_CONFIG)) db.createObjectStore(S_CONFIG);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -53,6 +55,24 @@ export async function addItem(meta: MediaItem, thumb: Blob, orig: Blob): Promise
 
 export async function putMeta(meta: MediaItem): Promise<void> {
   await tx([S_META], "readwrite", (t) => { t.objectStore(S_META).put(meta); });
+}
+
+/** 仅写入元数据与缩略图（不存原图，用于 Base 目录磁盘文件） */
+export async function addIndexed(meta: MediaItem, thumb: Blob): Promise<void> {
+  await tx([S_META, S_THUMB], "readwrite", (t) => {
+    t.objectStore(S_META).put(meta);
+    t.objectStore(S_THUMB).put(thumb, meta.id);
+  });
+}
+
+export async function getConfig<T = unknown>(key: string): Promise<T | undefined> {
+  return tx([S_CONFIG], "readonly", (t) => reqP(t.objectStore(S_CONFIG).get(key) as IDBRequest<T | undefined>));
+}
+export async function setConfig(key: string, val: unknown): Promise<void> {
+  await tx([S_CONFIG], "readwrite", (t) => { t.objectStore(S_CONFIG).put(val, key); });
+}
+export async function delConfig(key: string): Promise<void> {
+  await tx([S_CONFIG], "readwrite", (t) => { t.objectStore(S_CONFIG).delete(key); });
 }
 
 export async function getAllMeta(): Promise<MediaItem[]> {
