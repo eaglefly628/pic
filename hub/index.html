@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>君百家 · 家庭中心</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --accent: #007AFF; --text: #1d1d1f; --text2: #6e6e73; --text3: #a1a1a6;
+    --card: rgba(255,255,255,0.78); --sep: rgba(0,0,0,0.08);
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; color: var(--text);
+    background: linear-gradient(150deg, #e7d8ef 0%, #d3e0f6 46%, #d9efe7 100%);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  /* 顶部菜单 */
+  #bar {
+    height: 50px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px;
+    background: rgba(255,255,255,0.6); backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%); border-bottom: 0.5px solid var(--sep); z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; margin-right: 14px; }
+  .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(160deg, var(--accent), #5E5CE6); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 800; }
+  .tab { border: none; background: transparent; cursor: pointer; font-size: 13.5px; font-weight: 500; color: var(--text2); padding: 7px 14px; border-radius: 9px; }
+  .tab:hover { background: rgba(0,0,0,0.05); }
+  .tab.active { background: var(--accent); color: #fff; }
+  .spacer { flex: 1; }
+  .hint { font-size: 11.5px; color: var(--text3); }
+  /* 主区 */
+  #stage { flex: 1; position: relative; min-height: 0; }
+  iframe { width: 100%; height: 100%; border: none; display: none; background: #fff; }
+  iframe.show { display: block; }
+  /* 首页 */
+  #home { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; gap: 28px; overflow: auto; }
+  #home.hide { display: none; }
+  .welcome { text-align: center; }
+  .welcome h1 { font-size: 26px; letter-spacing: -0.01em; }
+  .welcome p { color: var(--text2); font-size: 14px; margin-top: 8px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 280px)); gap: 18px; }
+  .card {
+    background: var(--card); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 0.5px solid var(--sep); border-radius: 18px; padding: 22px; cursor: pointer; text-align: left;
+    box-shadow: 0 8px 28px -12px rgba(20,20,40,0.28); transition: transform .15s, box-shadow .15s;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 16px 40px -14px rgba(20,20,40,0.4); }
+  .card.disabled { cursor: default; opacity: 0.55; }
+  .card .ico { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #fff; margin-bottom: 14px; }
+  .card h3 { font-size: 17px; }
+  .card .desc { font-size: 12.5px; color: var(--text2); margin-top: 6px; line-height: 1.6; }
+  .foot { font-size: 12px; color: var(--text3); }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <div class="brand"><span class="logo">君</span>君百家 · 家庭中心</div>
+    <button class="tab active" data-app="home">首页</button>
+    <button class="tab" data-app="finance">家庭理财</button>
+    <button class="tab" data-app="gallery">家庭影像</button>
+    <span class="spacer"></span>
+    <span class="hint">本地 · 私密 · 不上传</span>
+  </div>
+
+  <div id="stage">
+    <div id="home">
+      <div class="welcome">
+        <h1>欢迎回到君百家</h1>
+        <p>我们家的应用都在这里 · 选择一个进入</p>
+      </div>
+      <div class="cards">
+        <button class="card" data-app="finance">
+          <div class="ico" style="background:linear-gradient(160deg,#007AFF,#5E5CE6)">💰</div>
+          <h3>家庭理财</h3>
+          <div class="desc">净资产 · 账户 · 利息 · 预算预测 · 密码保险箱 · 独立管理（本地加密）</div>
+        </button>
+        <button class="card" data-app="gallery">
+          <div class="ico" style="background:linear-gradient(160deg,#34C759,#30B0C7)">🖼️</div>
+          <h3>家庭影像</h3>
+          <div class="desc">照片/视频 · 按时间·地点归类 · 去重清理 · 相册 · 私密区</div>
+        </button>
+        <div class="card disabled">
+          <div class="ico" style="background:linear-gradient(160deg,#8E8E93,#aeaeb2)">＋</div>
+          <h3>更多应用</h3>
+          <div class="desc">敬请期待：家庭文档、日程、清单……</div>
+        </div>
+      </div>
+      <div class="foot">数据全部保存在本机，离线可用</div>
+    </div>
+    <iframe id="frame" title="app"></iframe>
+  </div>
+
+  <script>
+    const frame = document.getElementById('frame');
+    const home = document.getElementById('home');
+    const tabs = [...document.querySelectorAll('.tab')];
+    const SRC = { finance: '/finance/', gallery: '/gallery/' };
+    function show(app) {
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.app === app));
+      if (app === 'home') {
+        home.classList.remove('hide'); frame.classList.remove('show');
+      } else {
+        if (frame.dataset.app !== app) { frame.src = SRC[app]; frame.dataset.app = app; }
+        home.classList.add('hide'); frame.classList.add('show');
+      }
+      location.hash = app;
+    }
+    document.querySelectorAll('[data-app]').forEach(el => {
+      if (el.classList.contains('disabled')) return;
+      el.addEventListener('click', () => show(el.dataset.app));
+    });
+    show((location.hash || '#home').slice(1) in SRC ? location.hash.slice(1) : 'home');
+  </script>
+</body>
+</html>
