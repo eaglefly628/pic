@@ -25,6 +25,10 @@ export interface MediaItem {
   private?: boolean;
   /** 内容指纹（SHA-256），用于精确去重 */
   hash?: string;
+  /** 感知哈希（dHash, 64bit 16hex），用于相似/近重复 */
+  phash?: string;
+  /** 清晰度（拉普拉斯方差，越小越糊） */
+  blur?: number;
   addedAt: number;
 }
 

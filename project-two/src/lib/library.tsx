@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import type { Album, MediaItem, MediaKind } from "../types";
 import * as store from "./store";
 import { extractMeta, makeImageThumb, makeVideoThumb } from "./exif";
+import { analyzeBlob } from "./analyze";
 
 function uid(p = "m"): string {
   return p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -27,6 +28,7 @@ interface LibCtx {
   removeItem: (id: string) => Promise<void>;
   removeMany: (ids: string[]) => Promise<void>;
   scanHashes: (onProgress?: (done: number, total: number) => void) => Promise<void>;
+  analyze: (onProgress?: (done: number, total: number) => void) => Promise<void>;
   createAlbum: (name: string) => Promise<Album>;
 }
 
@@ -128,6 +130,23 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     }
   }, [items]);
 
+  const analyze = useCallback(async (onProgress?: (done: number, total: number) => void) => {
+    const targets = items.filter((m) => m.phash === undefined);
+    for (let i = 0; i < targets.length; i++) {
+      const m = targets[i];
+      const b = await store.getThumb(m.id);
+      if (b) {
+        try {
+          const a = await analyzeBlob(b);
+          const next = { ...m, phash: a.phash, blur: a.blur };
+          await store.putMeta(next);
+          setItems((prev) => prev.map((x) => (x.id === m.id ? next : x)));
+        } catch { /* 跳过无法分析的项 */ }
+      }
+      onProgress?.(i + 1, targets.length);
+    }
+  }, [items]);
+
   const createAlbum = useCallback(async (name: string) => {
     const a: Album = { id: uid("al"), name, createdAt: Date.now() };
     await store.putAlbum(a);
@@ -136,7 +155,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ ready, items, albums, thumbUrl, getOrigUrl, addFile, updateItem, removeItem, removeMany, scanHashes, createAlbum }}>
+    <Ctx.Provider value={{ ready, items, albums, thumbUrl, getOrigUrl, addFile, updateItem, removeItem, removeMany, scanHashes, analyze, createAlbum }}>
       {children}
     </Ctx.Provider>
   );
