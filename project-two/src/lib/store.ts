@@ -2,12 +2,13 @@
 import type { Album, MediaItem } from "../types";
 
 const DB = "familygallery";
-const VER = 2;
+const VER = 3;
 const S_META = "meta";
 const S_THUMB = "thumbs";
 const S_ORIG = "orig";
 const S_ALBUM = "albums";
 const S_CONFIG = "config";
+const S_FACES = "faces";
 
 let dbp: Promise<IDBDatabase> | null = null;
 
@@ -22,6 +23,7 @@ function open(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(S_ORIG)) db.createObjectStore(S_ORIG);
       if (!db.objectStoreNames.contains(S_ALBUM)) db.createObjectStore(S_ALBUM, { keyPath: "id" });
       if (!db.objectStoreNames.contains(S_CONFIG)) db.createObjectStore(S_CONFIG);
+      if (!db.objectStoreNames.contains(S_FACES)) db.createObjectStore(S_FACES);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -73,6 +75,13 @@ export async function setConfig(key: string, val: unknown): Promise<void> {
 }
 export async function delConfig(key: string): Promise<void> {
   await tx([S_CONFIG], "readwrite", (t) => { t.objectStore(S_CONFIG).delete(key); });
+}
+
+export async function getFaces<T = unknown>(itemId: string): Promise<T | undefined> {
+  return tx([S_FACES], "readonly", (t) => reqP(t.objectStore(S_FACES).get(itemId) as IDBRequest<T | undefined>));
+}
+export async function putFaces(itemId: string, faces: unknown): Promise<void> {
+  await tx([S_FACES], "readwrite", (t) => { t.objectStore(S_FACES).put(faces, itemId); });
 }
 
 export async function getAllMeta(): Promise<MediaItem[]> {

@@ -31,6 +31,8 @@ export interface MediaItem {
   blur?: number;
   /** Base 目录模式：相对基准目录的路径（存在则原文件在磁盘，不在 IndexedDB） */
   path?: string;
+  /** 人脸归类得到的人物 id（undefined 表示尚未扫描人脸） */
+  people?: string[];
   addedAt: number;
 }
 

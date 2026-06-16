@@ -4,6 +4,7 @@ import * as store from "./store";
 import { extractMeta, makeImageThumb, makeVideoThumb } from "./exif";
 import { analyzeBlob } from "./analyze";
 import { fsSupported, pickDirectory, ensurePermission, walkMedia, fileByPath, type DirHandle } from "./baseDir";
+import { ensureFaceModels, detectFaces, cropFace, dist, SAME_PERSON, type Person, type DetFace } from "./faces";
 
 function uid(p = "m"): string {
   return p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -35,6 +36,9 @@ interface LibCtx {
   pickBaseDir: (onProgress?: (done: number, total: number) => void) => Promise<void>;
   syncBaseDir: (onProgress?: (done: number, total: number) => void) => Promise<void>;
   disconnectBaseDir: () => Promise<void>;
+  persons: Person[];
+  scanFaces: (onProgress?: (done: number, total: number) => void) => Promise<void>;
+  renamePerson: (id: string, name: string) => Promise<void>;
 }
 
 const Ctx = createContext<LibCtx | null>(null);
@@ -51,6 +55,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const thumbs = useRef<Map<string, string>>(new Map());
   const baseHandle = useRef<DirHandle | null>(null);
   const [baseName, setBaseName] = useState<string | null>(null);
+  const [persons, setPersons] = useState<Person[]>([]);
 
   const ensureThumb = useCallback(async (id: string) => {
     if (thumbs.current.has(id)) return;
@@ -73,6 +78,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const h = await store.getConfig<DirHandle>("baseDir");
       if (h && (await ensurePermission(h, false))) { baseHandle.current = h; setBaseName(h.name ?? "媒体库"); }
+      const ps = await store.getConfig<Person[]>("persons");
+      if (ps) setPersons(ps);
     })();
   }, []);
 
@@ -233,6 +240,54 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => prev.filter((m) => !rm.has(m.id)));
   }, [items]);
 
+  const scanFaces = useCallback(async (onProgress?: (done: number, total: number) => void) => {
+    await ensureFaceModels();
+    const targets = items.filter((i) => i.kind === "image" && i.people === undefined);
+    const ps: Person[] = persons.map((p) => ({ ...p, centroid: p.centroid.slice() }));
+    const updated = new Map<string, string[]>();
+    let done = 0;
+    for (const it of targets) {
+      try {
+        const thumb = await store.getThumb(it.id);
+        let people: string[] = [];
+        if (thumb) {
+          const { faces, img } = await detectFaces(thumb);
+          const ids = new Set<string>();
+          const stored: DetFace[] = [];
+          for (const fc of faces) {
+            let best: Person | null = null, bd = Infinity;
+            for (const p of ps) { const d = dist(p.centroid, fc.descriptor); if (d < bd) { bd = d; best = p; } }
+            let pid: string;
+            if (best && bd < SAME_PERSON) {
+              for (let k = 0; k < best.centroid.length; k++) best.centroid[k] = (best.centroid[k] * best.count + fc.descriptor[k]) / (best.count + 1);
+              best.count++; pid = best.id;
+            } else {
+              const np: Person = { id: uid("p"), centroid: fc.descriptor.slice(), count: 1, avatar: await cropFace(img, fc.box) };
+              ps.push(np); pid = np.id;
+            }
+            ids.add(pid);
+            stored.push({ ...fc, personId: pid });
+          }
+          URL.revokeObjectURL(img.src);
+          await store.putFaces(it.id, stored);
+          people = [...ids];
+        }
+        await store.putMeta({ ...it, people });
+        updated.set(it.id, people);
+      } catch { /* 单张失败跳过 */ }
+      onProgress?.(++done, targets.length);
+    }
+    await store.setConfig("persons", ps);
+    setPersons(ps);
+    if (updated.size) setItems((prev) => prev.map((m) => updated.has(m.id) ? { ...m, people: updated.get(m.id) } : m));
+  }, [items, persons]);
+
+  const renamePerson = useCallback(async (id: string, name: string) => {
+    const next = persons.map((p) => (p.id === id ? { ...p, name } : p));
+    setPersons(next);
+    await store.setConfig("persons", next);
+  }, [persons]);
+
   const createAlbum = useCallback(async (name: string) => {
     const a: Album = { id: uid("al"), name, createdAt: Date.now() };
     await store.putAlbum(a);
@@ -241,7 +296,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ ready, items, albums, thumbUrl, getOrigUrl, addFile, updateItem, removeItem, removeMany, scanHashes, analyze, createAlbum, baseDir: { name: baseName, supported: fsSupported() }, pickBaseDir, syncBaseDir, disconnectBaseDir }}>
+    <Ctx.Provider value={{ ready, items, albums, thumbUrl, getOrigUrl, addFile, updateItem, removeItem, removeMany, scanHashes, analyze, createAlbum, baseDir: { name: baseName, supported: fsSupported() }, pickBaseDir, syncBaseDir, disconnectBaseDir, persons, scanFaces, renamePerson }}>
       {children}
     </Ctx.Provider>
   );

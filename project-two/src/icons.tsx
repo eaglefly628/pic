@@ -21,6 +21,12 @@ export const IconPin = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) 
 export const IconAlbum = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
   <svg {...base(size, stroke, width)}><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="M3 9h18" /><path d="M8 5V3.5M16 5V3.5" /></svg>
 );
+export const IconUser = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" /></svg>
+);
+export const IconMap = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M9 3 3.5 5.2v15.3L9 18l6 3 5.5-2.2V3.5L15 6 9 3Z" /><path d="M9 3v15M15 6v15" /></svg>
+);
 export const IconLock = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
   <svg {...base(size, stroke, width)}><rect x="4" y="10" width="16" height="11" rx="2.5" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
 );
