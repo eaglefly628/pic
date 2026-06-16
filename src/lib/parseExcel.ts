@@ -5,29 +5,10 @@ import type { Category, Dataset } from "../data/types";
 
 type Meta = { cat: Category; type: string; comp: string; inst: string; owner: string; color: string };
 
-const ACCOUNT_META: Record<string, Meta> = {
-  "cc招行": { cat: "liquid", type: "储蓄/活期", comp: "现金及银行", inst: "招商银行", owner: "本人", color: "#FF2D55" },
-  "CC华瑞": { cat: "liquid", type: "储蓄/活期", comp: "现金及银行", inst: "华瑞银行", owner: "本人", color: "#FF6482" },
-  "bb招行现金": { cat: "liquid", type: "现金/活期", comp: "现金及银行", inst: "招商银行", owner: "配偶", color: "#FF9F0A" },
-  "桔子gg": { cat: "invest", type: "理财", comp: "理财/固收", inst: "—", owner: "本人", color: "#30B0C7" },
-  "理财通": { cat: "invest", type: "理财", comp: "理财/固收", inst: "微信理财通", owner: "本人", color: "#34C759" },
-  "光大工资卡": { cat: "liquid", type: "储蓄/工资", comp: "现金及银行", inst: "光大银行", owner: "本人", color: "#FF453A" },
-  "现金外币": { cat: "liquid", type: "现金/外币", comp: "现金及银行", inst: "—", owner: "全家", color: "#8E8E93" },
-  "买房": { cat: "estate", type: "房产", comp: "房产", inst: "—", owner: "全家", color: "#007AFF" },
-  "装修": { cat: "estate", type: "房产/装修", comp: "房产", inst: "—", owner: "全家", color: "#0A84FF" },
-  "CC理财微众": { cat: "invest", type: "理财", comp: "理财/固收", inst: "微众银行", owner: "本人", color: "#5E5CE6" },
-  "汇丰": { cat: "liquid", type: "储蓄", comp: "现金及银行", inst: "汇丰银行", owner: "本人", color: "#BF5AF2" },
-  "微众bb": { cat: "liquid", type: "储蓄", comp: "现金及银行", inst: "微众银行", owner: "配偶", color: "#FF375F" },
-  "cc 中国银行": { cat: "liquid", type: "储蓄/活期", comp: "现金及银行", inst: "中国银行", owner: "本人", color: "#64D2FF" },
-  "白白华瑞": { cat: "liquid", type: "储蓄", comp: "现金及银行", inst: "华瑞银行", owner: "本人", color: "#AC8E68" },
-  "信用卡": { cat: "debt", type: "负债/信用卡", comp: "负债", inst: "—", owner: "全家", color: "#FF3B30" },
-  "港股+美股": { cat: "invest", type: "证券/股票", comp: "股票", inst: "—", owner: "本人", color: "#32D74B" },
-  "华通bb": { cat: "invest", type: "证券/理财", comp: "理财/固收", inst: "—", owner: "配偶", color: "#66D4CF" },
-  "CC 罗氏股票": { cat: "invest", type: "证券/股票", comp: "股票", inst: "罗氏", owner: "本人", color: "#30D158" },
-  "A股bb银河": { cat: "invest", type: "证券/股票", comp: "股票", inst: "银河证券", owner: "配偶", color: "#28CD41" },
-  "黄金": { cat: "invest", type: "黄金", comp: "黄金", inst: "—", owner: "全家", color: "#FFD60A" },
-};
-const FALLBACK: Meta = { cat: "liquid", type: "其他", comp: "其他", inst: "—", owner: "全家", color: "#8E8E93" };
+// 账户名 -> 预设分类的映射。分发版默认留空（不内置任何真实账户名）；
+// 导入时未匹配的账户走 FALLBACK，导入后可在应用内逐个编辑分类/资产类型。
+const ACCOUNT_META: Record<string, Meta> = {};
+const FALLBACK: Meta = { cat: "liquid", type: "其他", comp: "现金及银行", inst: "—", owner: "本人", color: "#8E8E93" };
 
 function excelSerialToISO(serial: number): string {
   const ms = Math.round((serial - 25569) * 86400 * 1000);

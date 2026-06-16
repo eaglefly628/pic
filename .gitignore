@@ -25,3 +25,6 @@ yarn-error.log*
 # Tauri / Rust 构建产物
 src-tauri/target/
 src-tauri/gen/
+
+# 真实数据仅本机，不进仓库/不进分发包
+src/data/history.json
