@@ -2,17 +2,18 @@ import React, { useState } from "react";
 import type { MediaItem } from "./types";
 import { useTheme } from "./lib/theme";
 import { useLibrary } from "./lib/library";
-import { IconSummary, IconPhoto, IconPin, IconAlbum, IconUpload, IconGear, IconSearch, IconImage, IconWand } from "./icons";
+import { IconSummary, IconPhoto, IconPin, IconAlbum, IconUpload, IconGear, IconSearch, IconImage, IconWand, IconCalendar } from "./icons";
 import Summary from "./screens/Summary";
 import Gallery from "./screens/Gallery";
 import Places from "./screens/Places";
+import Events from "./screens/Events";
 import Albums from "./screens/Albums";
 import ImportScreen from "./screens/ImportScreen";
 import Settings from "./screens/Settings";
 import Cleanup from "./screens/Cleanup";
 import { Lightbox } from "./components/Lightbox";
 
-type Screen = "summary" | "gallery" | "places" | "albums" | "cleanup" | "import" | "settings";
+type Screen = "summary" | "gallery" | "places" | "events" | "albums" | "cleanup" | "import" | "settings";
 const glass: React.CSSProperties = { backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)" };
 const groupLabel: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", padding: "14px 10px 4px", letterSpacing: "0.02em" };
 
@@ -20,7 +21,7 @@ function navStyle(active: boolean): React.CSSProperties {
   return { display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 500, padding: "7px 10px", borderRadius: 8, marginBottom: 1, background: active ? "var(--accent)" : "transparent", color: active ? "#fff" : "var(--text-secondary)" };
 }
 
-const TITLES: Record<Screen, string> = { summary: "总览", gallery: "图库", places: "地点", albums: "相册", cleanup: "整理", import: "导入", settings: "设置" };
+const TITLES: Record<Screen, string> = { summary: "总览", gallery: "图库", places: "地点", events: "事件", albums: "相册", cleanup: "整理", import: "导入", settings: "设置" };
 
 export default function App() {
   const { theme, toggle } = useTheme();
@@ -49,6 +50,7 @@ export default function App() {
             <Nav active={screen === "summary"} onClick={() => setScreen("summary")} icon={<IconSummary />} label="总览" />
             <Nav active={screen === "gallery"} onClick={() => setScreen("gallery")} icon={<IconPhoto />} label="图库" badge={String(items.filter((m) => !m.private).length)} />
             <Nav active={screen === "places"} onClick={() => setScreen("places")} icon={<IconPin />} label="地点" />
+            <Nav active={screen === "events"} onClick={() => setScreen("events")} icon={<IconCalendar />} label="事件" />
             <Nav active={screen === "albums"} onClick={() => setScreen("albums")} icon={<IconAlbum />} label="相册" badge={String(albums.length)} />
             <div style={groupLabel}>工具</div>
             <Nav active={screen === "cleanup"} onClick={() => setScreen("cleanup")} icon={<IconWand />} label="整理（去重/清理）" />
@@ -74,6 +76,7 @@ export default function App() {
             {screen === "summary" && <Summary goImport={() => setScreen("import")} />}
             {screen === "gallery" && <Gallery onOpen={open} goImport={() => setScreen("import")} />}
             {screen === "places" && <Places onOpen={open} />}
+            {screen === "events" && <Events onOpen={open} />}
             {screen === "albums" && <Albums onOpen={open} />}
             {screen === "cleanup" && <Cleanup />}
             {screen === "import" && <ImportScreen goGallery={() => setScreen("gallery")} />}
