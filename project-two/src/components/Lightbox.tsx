@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import type { MediaItem } from "../types";
 import { useLibrary } from "../lib/library";
 import { dateTimeLabel, fmtSize } from "../lib/format";
-import { IconClose, IconChevron, IconStar, IconTrash, IconLock, IconPin } from "../icons";
+import { IconClose, IconChevron, IconStar, IconTrash, IconPin } from "../icons";
 
 export function Lightbox({ items, index, setIndex, onClose }: {
   items: MediaItem[]; index: number; setIndex: (i: number) => void; onClose: () => void;
@@ -40,7 +40,6 @@ export function Lightbox({ items, index, setIndex, onClose }: {
         <span style={{ fontSize: 12, opacity: 0.6 }}>{index + 1} / {n}</span>
         <div style={{ flex: 1 }} />
         <IconBtn title={cur.favorite ? "取消收藏" : "收藏"} onClick={() => updateItem(cur.id, { favorite: !cur.favorite })}><IconStar size={18} stroke={cur.favorite ? "#FFD60A" : "#fff"} /></IconBtn>
-        <IconBtn title={cur.private ? "移出私密" : "设为私密"} onClick={() => updateItem(cur.id, { private: !cur.private })}><IconLock size={17} stroke={cur.private ? "#FF9F0A" : "#fff"} /></IconBtn>
         <IconBtn title="删除" onClick={() => { if (confirm("删除这张照片/视频？")) { removeItem(cur.id); onClose(); } }}><IconTrash size={17} stroke="#FF6961" /></IconBtn>
         <IconBtn title="关闭" onClick={onClose}><IconClose size={20} /></IconBtn>
       </div>

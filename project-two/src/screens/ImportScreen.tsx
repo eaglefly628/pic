@@ -6,7 +6,11 @@ import { IconUpload, IconImage } from "../icons";
 export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
   const { addFile, albums } = useLibrary();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [isPrivate, setPrivate] = useState(false);
+  const dirRef = useRef<HTMLInputElement | null>(null);
+  const setDir = (el: HTMLInputElement | null) => {
+    if (el) { el.setAttribute("webkitdirectory", ""); el.setAttribute("directory", ""); el.setAttribute("mozdirectory", ""); }
+    dirRef.current = el;
+  };
   const [albumId, setAlbumId] = useState("");
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState({ done: 0, total: 0, current: "" });
@@ -24,7 +28,7 @@ export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
       setProg({ done: i, total: list.length, current: f.name });
       if (!f.type.startsWith("image/") && !f.type.startsWith("video/")) { skipped++; continue; }
       try {
-        await addFile(f, { isPrivate, albums: albumId ? [albumId] : [] });
+        await addFile(f, { albums: albumId ? [albumId] : [] });
         added++;
       } catch { failed++; }
     }
@@ -51,22 +55,22 @@ export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
           <span style={{ width: 56, height: 56, borderRadius: 15, background: "linear-gradient(160deg,var(--accent),#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconImage size={28} /></span>
         </div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>点击选择，或把照片/视频拖到这里</div>
-        <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 6 }}>支持批量导入；自动读取拍摄时间与 GPS，按时间/地点归类。文件全部存在本机。</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>点击选择文件，或把照片/视频/整个文件夹拖到这里</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 6 }}>支持批量导入；也可用下方「选择文件夹」整目录导入。自动读取拍摄时间与 GPS，按时间/地点归类。文件全部存在本机。</div>
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }}
+          onChange={(e) => { if (e.target.files) handleFiles(e.target.files); e.target.value = ""; }} />
+        <input ref={setDir} type="file" multiple style={{ display: "none" }}
           onChange={(e) => { if (e.target.files) handleFiles(e.target.files); e.target.value = ""; }} />
       </div>
 
       <div style={{ ...card, padding: "16px 22px", display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)", cursor: "pointer" }}>
-          <input type="checkbox" checked={isPrivate} onChange={(e) => setPrivate(e.target.checked)} />导入到私密区
-        </label>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>加入相册</span>
           <Select value={albumId} onChange={(e) => setAlbumId(e.target.value)} style={{ width: 180, height: 32 }}
             options={[{ value: "", label: "（不加入）" }, ...albums.map((a) => ({ value: a.id, label: a.name }))]} />
         </div>
         <div style={{ flex: 1 }} />
+        <Btn variant="ghost" onClick={() => dirRef.current?.click()} disabled={busy}>选择文件夹</Btn>
         <Btn onClick={() => fileRef.current?.click()} disabled={busy}><IconUpload size={15} stroke="#fff" />选择文件</Btn>
       </div>
 

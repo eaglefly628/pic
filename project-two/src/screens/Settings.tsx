@@ -36,12 +36,6 @@ export default function Settings() {
         <Row label="主题" hint="浅色 / 深色"><Btn variant="ghost" onClick={toggle}>{theme === "light" ? "🌙 切换深色" : "☀️ 切换浅色"}</Btn></Row>
       </Section>
 
-      <Section title="私密区">
-        <Row label="重置私密区密码" hint="忘记密码时清除（私密内容仍在，重设密码后可见）">
-          <Btn variant="ghost" onClick={() => { if (confirm("清除私密区密码？需重新设置。")) localStorage.removeItem("familygallery.pwhash"); }}>清除密码</Btn>
-        </Row>
-      </Section>
-
       <Section title="危险区">
         <Row label="清空全部影像" hint="删除本机所有照片/视频/相册，不可恢复"><Btn variant="danger" onClick={wipe}>全部删除</Btn></Row>
       </Section>
