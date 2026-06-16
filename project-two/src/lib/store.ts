@@ -84,6 +84,22 @@ export async function clearAll(): Promise<void> {
   });
 }
 
+/** 申请持久化存储，避免库在空间紧张时被系统清理（这是真实照片库的关键） */
+export async function requestPersist(): Promise<boolean> {
+  try {
+    if (navigator.storage?.persisted && (await navigator.storage.persisted())) return true;
+    if (navigator.storage?.persist) return await navigator.storage.persist();
+  } catch { /* 不支持则忽略 */ }
+  return false;
+}
+
+export async function storageInfo(): Promise<{ usage: number; quota: number; persisted: boolean }> {
+  let usage = 0, quota = 0, persisted = false;
+  try { const e = await navigator.storage?.estimate?.(); usage = e?.usage ?? 0; quota = e?.quota ?? 0; } catch { /* ignore */ }
+  try { persisted = (await navigator.storage?.persisted?.()) ?? false; } catch { /* ignore */ }
+  return { usage, quota, persisted };
+}
+
 export async function getAlbums(): Promise<Album[]> {
   return tx([S_ALBUM], "readonly", (t) => reqP(t.objectStore(S_ALBUM).getAll() as IDBRequest<Album[]>));
 }

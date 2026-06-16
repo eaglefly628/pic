@@ -54,3 +54,6 @@ export const IconArrowRight = ({ size = 15, stroke = "#fff", width = 2.4 }: P) =
 export const IconImage = ({ size = 30, stroke = "#fff", width = 1.6 }: P) => (
   <svg {...base(size, stroke, width)}><rect x="3" y="4" width="18" height="16" rx="2.5" /><circle cx="8.5" cy="9.5" r="1.6" /><path d="M21 16l-5-5L5 20" /></svg>
 );
+export const IconWand = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M5 19 16 8" /><path d="m15 4 .6 1.6L17 6l-1.4.4L15 8l-.6-1.6L13 6l1.4-.4Z" /><path d="m19 11 .5 1.3 1.5.5-1.5.5-.5 1.3-.5-1.3-1.5-.5 1.5-.5Z" /></svg>
+);

@@ -11,6 +11,10 @@ function kindOf(file: File): MediaKind | null {
   if (file.type.startsWith("video/")) return "video";
   return null;
 }
+async function hashBlob(b: Blob): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", await b.arrayBuffer());
+  return [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
 
 interface LibCtx {
   ready: boolean;
@@ -21,6 +25,8 @@ interface LibCtx {
   addFile: (file: File, opts?: { isPrivate?: boolean; albums?: string[] }) => Promise<void>;
   updateItem: (id: string, patch: Partial<MediaItem>) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
+  removeMany: (ids: string[]) => Promise<void>;
+  scanHashes: (onProgress?: (done: number, total: number) => void) => Promise<void>;
   createAlbum: (name: string) => Promise<Album>;
 }
 
@@ -53,6 +59,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, [ensureThumb]);
 
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => { void store.requestPersist(); }, []);
 
   const thumbUrl = useCallback((id: string) => thumbs.current.get(id), []);
 
@@ -73,11 +80,12 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       const t = await makeVideoThumb(file);
       thumb = t.blob; width = t.width; height = t.height; durationSec = t.durationSec;
     }
+    const hash = await hashBlob(file).catch(() => undefined);
     const item: MediaItem = {
       id: uid(), name: file.name, kind, mime: file.type, size: file.size,
       width, height, durationSec,
       takenAt: meta.takenAt, takenSource: meta.takenSource, lat: meta.lat, lng: meta.lng,
-      albums: opts?.albums ?? [], tags: [], private: opts?.isPrivate, addedAt: Date.now(),
+      albums: opts?.albums ?? [], tags: [], private: opts?.isPrivate, hash, addedAt: Date.now(),
     };
     await store.addItem(item, thumb, file);
     thumbs.current.set(item.id, URL.createObjectURL(thumb));
@@ -97,6 +105,29 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => prev.filter((m) => m.id !== id));
   }, []);
 
+  const removeMany = useCallback(async (ids: string[]) => {
+    for (const id of ids) {
+      await store.deleteItem(id);
+      const u = thumbs.current.get(id);
+      if (u) { URL.revokeObjectURL(u); thumbs.current.delete(id); }
+    }
+    const set = new Set(ids);
+    setItems((prev) => prev.filter((m) => !set.has(m.id)));
+  }, []);
+
+  const scanHashes = useCallback(async (onProgress?: (done: number, total: number) => void) => {
+    const targets = items.filter((m) => !m.hash);
+    for (let i = 0; i < targets.length; i++) {
+      const m = targets[i];
+      const b = await store.getOrig(m.id);
+      if (b) {
+        const hash = await hashBlob(b).catch(() => undefined);
+        if (hash) { const next = { ...m, hash }; await store.putMeta(next); setItems((prev) => prev.map((x) => (x.id === m.id ? next : x))); }
+      }
+      onProgress?.(i + 1, targets.length);
+    }
+  }, [items]);
+
   const createAlbum = useCallback(async (name: string) => {
     const a: Album = { id: uid("al"), name, createdAt: Date.now() };
     await store.putAlbum(a);
@@ -105,7 +136,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ ready, items, albums, thumbUrl, getOrigUrl, addFile, updateItem, removeItem, createAlbum }}>
+    <Ctx.Provider value={{ ready, items, albums, thumbUrl, getOrigUrl, addFile, updateItem, removeItem, removeMany, scanHashes, createAlbum }}>
       {children}
     </Ctx.Provider>
   );

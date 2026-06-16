@@ -23,6 +23,8 @@ export interface MediaItem {
   favorite?: boolean;
   /** 是否归入私密区 */
   private?: boolean;
+  /** 内容指纹（SHA-256），用于精确去重 */
+  hash?: string;
   addedAt: number;
 }
 
