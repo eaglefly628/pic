@@ -60,6 +60,7 @@
     <button class="tab active" data-app="home">首页</button>
     <button class="tab" data-app="finance">家庭理财</button>
     <button class="tab" data-app="gallery">家庭影像</button>
+    <button class="tab" data-app="vault">家庭密码</button>
     <span class="spacer"></span>
     <span class="hint">本地 · 私密 · 不上传</span>
   </div>
@@ -81,6 +82,11 @@
           <h3>家庭影像</h3>
           <div class="desc">照片/视频 · 按时间·地点归类 · 去重清理 · 相册 · 私密区</div>
         </button>
+        <button class="card" data-app="vault">
+          <div class="ico" style="background:linear-gradient(160deg,#5E5CE6,#007AFF)">🔐</div>
+          <h3>家庭密码</h3>
+          <div class="desc">网站账号 · 银行卡 · 安全笔记 · 家庭信息 · 一个主密码 · AES‑256 本地加密</div>
+        </button>
         <div class="card disabled">
           <div class="ico" style="background:linear-gradient(160deg,#8E8E93,#aeaeb2)">＋</div>
           <h3>更多应用</h3>
@@ -96,7 +102,7 @@
     const frame = document.getElementById('frame');
     const home = document.getElementById('home');
     const tabs = [...document.querySelectorAll('.tab')];
-    const SRC = { finance: '/finance/', gallery: '/gallery/' };
+    const SRC = { finance: '/finance/', gallery: '/gallery/', vault: '/vault/' };
     function show(app) {
       tabs.forEach(t => t.classList.toggle('active', t.dataset.app === app));
       if (app === 'home') {

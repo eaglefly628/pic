@@ -1,0 +1,23 @@
+{
+  "name": "family-vault",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "家庭密码管理器 — 本地优先、零知识加密的全家密码/卡片/信息保险库（一个主密码）",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

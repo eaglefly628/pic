@@ -9,6 +9,7 @@
     /            -> hub/index.html（入口页）
     /finance/*   -> project-one/dist（家庭理财）
     /gallery/*   -> project-two/dist（家庭影像）
+    /vault/*     -> project-three/dist（家庭密码）
 
 直接运行：  python run.py     （或双击 start.bat）
 数据全部保存在本机，不联网、不上传。按 Ctrl+C 退出。
@@ -25,6 +26,7 @@ HUB = ROOT / "hub" / "index.html"
 MOUNTS = {
     "/finance": (ROOT / "project-one" / "dist"),
     "/gallery": (ROOT / "project-two" / "dist"),
+    "/vault": (ROOT / "project-three" / "dist"),
 }
 PORT = 5180
 
@@ -53,7 +55,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         # 子应用根路径未带斜杠时重定向，确保相对资源解析正确
         bare = self.path.split("?")[0]
-        if bare in ("/finance", "/gallery"):
+        if bare in ("/finance", "/gallery", "/vault"):
             self.send_response(301)
             self.send_header("Location", bare + "/")
             self.end_headers()
@@ -92,7 +94,7 @@ def main() -> int:
         print("┌──────────────────────────────────────────────┐")
         print("│  君百家 · 家庭电子管理系统                     │")
         print(f"│  已启动：{url:<36}│")
-        print("│  顶部菜单进入：家庭理财 / 家庭影像             │")
+        print("│  顶部菜单进入：理财 / 影像 / 密码              │")
         print("│  数据本地保存 · 按 Ctrl+C 退出                 │")
         print("└──────────────────────────────────────────────┘")
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

@@ -14,3 +14,7 @@ dist-ssr/
 *.vault
 *.xlsx
 *.xls
+
+# Python
+__pycache__/
+*.pyc
