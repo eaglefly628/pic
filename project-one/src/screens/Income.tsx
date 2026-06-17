@@ -3,6 +3,7 @@ import { useVault } from "../vault/VaultContext";
 import type { IncomeItem } from "../vault/types";
 import { fmt } from "../lib/format";
 import { Btn, Field, Modal, Select, TextField, TextArea, EmptyState, card, uid } from "../ui";
+import { useCountUp, rise } from "../lib/anim";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
 
 const CATS = ["工资", "奖金", "经营", "投资分红", "租金", "其他"];
@@ -18,22 +19,24 @@ export default function Income() {
   const [editing, setEditing] = useState<IncomeItem | null>(null);
 
   const totalMonthly = items.reduce((s, it) => s + monthly(it), 0);
+  const mAnim = useCountUp(totalMonthly);
+  const yAnim = useCountUp(totalMonthly * 12);
 
   const startNew = () => { setEditing(null); setOpen(true); };
   const remove = (id: string) => update((d) => { d.incomes = (d.incomes ?? []).filter((x) => x.id !== id); });
 
   return (
-    <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
-        <div style={{ background: "linear-gradient(155deg, var(--green), #1FAD66)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 6px 18px rgba(52,199,89,0.25)" }}>
+    <div style={{ padding: "24px 32px 40px" }}>
+      <div className="fv-rise" style={{ ...rise(0), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
+        <div style={{ background: "linear-gradient(155deg, var(--green), #1FAD66)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 8px 20px -6px rgba(52,199,89,0.4)" }}>
           <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>每月收入合计</div>
-          <div style={{ fontSize: 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{fmt(totalMonthly)}</div>
+          <div style={{ fontSize: 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{fmt(mAnim)}</div>
         </div>
-        <Metric label="每年收入合计" value={fmt(totalMonthly * 12)} />
+        <Metric label="每年收入合计" value={fmt(yAnim)} />
         <Metric label="收入来源" value={`${items.length} 项`} />
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
+      <div className="fv-rise" style={{ ...rise(70), display: "flex", alignItems: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>记录工资、租金、分红等收入</div>
         <div style={{ flex: 1 }} />
         <Btn onClick={startNew}><IconPlus />新增收入</Btn>
@@ -42,7 +45,7 @@ export default function Income() {
       {items.length === 0 ? (
         <EmptyState text="还没有收入记录" action={<Btn variant="soft" onClick={startNew}>添加第一项</Btn>} />
       ) : (
-        <div style={{ ...card, overflow: "hidden" }}>
+        <div className="fv-rise" style={{ ...rise(140), ...card, overflow: "hidden" }}>
           <div style={{ display: "flex", padding: "8px 22px", fontSize: 11, color: "var(--text-tertiary)", background: "var(--bg-card-2)" }}>
             <span style={{ flex: 1 }}>名称</span>
             <span style={{ width: 90 }}>分类</span>

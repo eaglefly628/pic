@@ -1,36 +1,41 @@
 import React, { useState } from "react";
 import type { View } from "../lib/compute";
 import { Btn, card } from "../ui";
+import { fmt } from "../lib/format";
+import { useCountUp, rise } from "../lib/anim";
 import { IconChevron, IconPlus } from "../icons";
 
 type AccVM = View["groups"][number]["accounts"][number];
 
 export default function Accounts({ view, onOpen, onAddAccount }: { view: View; onOpen: (id: string) => void; onAddAccount: () => void }) {
   const t = view.totals;
+  const netA = useCountUp(t.netRaw);
+  const aA = useCountUp(t.assetsRaw);
+  const lA = useCountUp(t.liabRaw);
   const [mode, setMode] = useState<"group" | "flat">("group");
 
   return (
-    <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
+    <div style={{ padding: "24px 32px 40px" }}>
+      <div className="fv-rise" style={{ ...rise(0), display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
         <div style={{ flex: 1, ...card, padding: "16px 22px", display: "flex", alignItems: "center", gap: 28 }}>
           <div>
             <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>净资产</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>{t.netWorth}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>{fmt(netA)}</div>
           </div>
           <div style={{ width: 0.5, height: 34, background: "var(--separator-strong)" }} />
           <div>
             <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>总资产</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", marginTop: 3 }}>{t.totalAssets}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", marginTop: 3 }}>{fmt(aA)}</div>
           </div>
           <div>
             <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>总负债</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--red)", fontVariantNumeric: "tabular-nums", marginTop: 3 }}>{t.totalLiabilities}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--red)", fontVariantNumeric: "tabular-nums", marginTop: 3 }}>{fmt(lA)}</div>
           </div>
         </div>
         <Btn onClick={onAddAccount} style={{ height: 36 }}><IconPlus />新增账户</Btn>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+      <div className="fv-rise" style={{ ...rise(70), display: "flex", alignItems: "center", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2 }}>
           <button onClick={() => setMode("group")} className="fv-tap" style={seg(mode === "group")}>按分类</button>
           <button onClick={() => setMode("flat")} className="fv-tap" style={seg(mode === "flat")}>全部排序</button>
@@ -38,8 +43,8 @@ export default function Accounts({ view, onOpen, onAddAccount }: { view: View; o
       </div>
 
       {mode === "group" ? (
-        view.groups.map((grp) => (
-          <div key={grp.cat} style={{ marginBottom: 22 }}>
+        view.groups.map((grp, gi) => (
+          <div key={grp.cat} className="fv-rise" style={{ ...rise(140 + gi * 70), marginBottom: 22 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 4px 9px" }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-secondary)", letterSpacing: "0.01em" }}>{grp.title}</div>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: grp.subtotalColor, fontVariantNumeric: "tabular-nums" }}>{grp.subtotal}</div>
@@ -50,7 +55,7 @@ export default function Accounts({ view, onOpen, onAddAccount }: { view: View; o
           </div>
         ))
       ) : (
-        <div style={{ ...card, overflow: "hidden" }}>
+        <div className="fv-rise" style={{ ...rise(140), ...card, overflow: "hidden" }}>
           {view.flatAccounts.map((acc) => <AccountRow key={acc.id} acc={acc} onOpen={onOpen} showCat />)}
         </div>
       )}

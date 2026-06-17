@@ -353,6 +353,7 @@ export function buildView(ds: Dataset, ui: UIState) {
       initial: da.name.slice(0, 1),
       sub: (da.institution && da.institution !== "—" ? da.institution + " · " : "") + "归属 " + (da.owner ?? "全家") + " · " + daComp,
       balance: fmt(dLast),
+      balanceRaw: dLast,
       line: dc.line,
       area: dc.area,
       grid: dc.grid,

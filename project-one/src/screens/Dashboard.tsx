@@ -1,36 +1,9 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import type { View } from "../lib/compute";
 import type { RangeKey } from "../lib/compute";
 import { card } from "../ui";
 import { fmt } from "../lib/format";
-
-const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-
-/** 数字滚动到目标值（easeOutCubic） */
-function useCountUp(target: number, duration = 750): number {
-  const [val, setVal] = useState(reduceMotion ? target : 0);
-  const fromRef = useRef(reduceMotion ? target : 0);
-  useEffect(() => {
-    if (reduceMotion) { setVal(target); return; }
-    const from = fromRef.current;
-    const start = performance.now();
-    let raf = 0;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      const e = 1 - Math.pow(1 - t, 3);
-      setVal(from + (target - from) * e);
-      if (t < 1) raf = requestAnimationFrame(tick);
-      else fromRef.current = target;
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); fromRef.current = target; };
-  }, [target, duration]);
-  return val;
-}
-
-function rise(delayMs: number): React.CSSProperties {
-  return { animationDelay: `${delayMs}ms` };
-}
+import { useCountUp, rise, reduceMotion } from "../lib/anim";
 
 function greetingWord() {
   const h = new Date().getHours();
@@ -95,26 +68,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
           <TrendChart view={view} />
         </div>
 
-        <div style={{ ...card, padding: "20px 22px" }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14 }}>资产构成</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-            <svg viewBox="0 0 120 120" style={{ width: 118, height: 118, flex: "none", transform: "rotate(-90deg)" }}>
-              <circle cx="60" cy="60" r="46" fill="none" stroke="var(--track)" strokeWidth="15" />
-              {view.donut.map((seg, i) => (
-                <circle key={i} cx="60" cy="60" r="46" fill="none" stroke={seg.color} strokeWidth="15" strokeDasharray={seg.dash} strokeDashoffset={seg.offset} strokeLinecap="butt" />
-              ))}
-            </svg>
-            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-              {view.donut.map((seg, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: seg.color, flex: "none" }} />
-                  <span style={{ color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{seg.name}</span>
-                  <span style={{ marginLeft: "auto", color: "var(--text-primary)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{seg.pct}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <DonutCard donut={view.donut} />
       </div>
 
       {view.monthlyChanges.length > 0 && (
@@ -207,6 +161,53 @@ function TrendChart({ view }: { view: View }) {
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{fmt(hp.value)}</div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DonutCard({ donut }: { donut: View["donut"] }) {
+  const [hi, setHi] = useState<number | null>(null);
+  return (
+    <div style={{ ...card, padding: "20px 22px" }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14 }}>资产构成</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+        <div style={{ position: "relative", width: 118, height: 118, flex: "none" }}>
+          <svg viewBox="0 0 120 120" style={{ width: 118, height: 118, transform: "rotate(-90deg)" }}>
+            <circle cx="60" cy="60" r="46" fill="none" stroke="var(--track)" strokeWidth="15" />
+            {donut.map((seg, i) => (
+              <circle
+                key={i} cx="60" cy="60" r="46" fill="none" stroke={seg.color}
+                strokeWidth={hi === i ? 21 : hi == null ? 15 : 13}
+                strokeDasharray={seg.dash} strokeDashoffset={seg.offset} strokeLinecap="butt"
+                onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)}
+                style={{ transition: "stroke-width .2s cubic-bezier(.2,.7,.3,1), opacity .2s ease", opacity: hi == null || hi === i ? 1 : 0.4, cursor: "pointer" }}
+              />
+            ))}
+          </svg>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+            {hi != null ? (
+              <div key={hi} style={{ textAlign: "center", animation: reduceMotion ? undefined : "fvRise .2s ease" }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{donut[hi].pct}</div>
+                <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", maxWidth: 84, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{donut[hi].name}</div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>占比</div>
+            )}
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+          {donut.map((seg, i) => (
+            <div
+              key={i} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)}
+              style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "5px 7px", borderRadius: 7, cursor: "pointer", transition: "background-color .15s ease, opacity .15s ease", background: hi === i ? "var(--hover)" : "transparent", opacity: hi == null || hi === i ? 1 : 0.5 }}
+            >
+              <span style={{ width: 9, height: 9, borderRadius: 3, background: seg.color, flex: "none", transform: hi === i ? "scale(1.35)" : "scale(1)", transition: "transform .15s ease" }} />
+              <span style={{ color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{seg.name}</span>
+              <span style={{ marginLeft: "auto", color: "var(--text-primary)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{seg.pct}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

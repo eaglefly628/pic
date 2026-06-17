@@ -4,6 +4,7 @@ import { CAT_TITLE, latestBalances } from "../lib/compute";
 import type { Dataset } from "../data/types";
 import { fmt } from "../lib/format";
 import { card } from "../ui";
+import { useCountUp, rise } from "../lib/anim";
 
 /** 可复用的利息预测视图（主账户与私房钱共用） */
 export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRate: (id: string, dec: number) => void }) {
@@ -23,22 +24,25 @@ export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRa
     })
     .sort((x, y) => Math.abs(y.annual) - Math.abs(x.annual));
   const totalAnnual = rows.reduce((s, r) => s + r.annual, 0);
+  const yAnim = useCountUp(totalAnnual);
+  const mAnim = useCountUp(totalAnnual / 12);
+  const dAnim = useCountUp(totalAnnual / 365);
 
   return (
-    <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
-        <div style={{ background: "linear-gradient(155deg, var(--accent), #5E5CE6)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 6px 18px var(--accent-soft)" }}>
+    <div style={{ padding: "24px 32px 40px" }}>
+      <div className="fv-rise" style={{ ...rise(0), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
+        <div style={{ background: "linear-gradient(155deg, var(--accent), #5E5CE6)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 8px 20px -6px var(--accent-soft)" }}>
           <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>预计年利息合计</div>
-          <div style={{ fontSize: 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{fmt(totalAnnual)}</div>
+          <div style={{ fontSize: 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{fmt(yAnim)}</div>
         </div>
-        <Metric label="预计月利息" value={fmt(totalAnnual / 12)} />
-        <Metric label="预计日利息" value={fmt(totalAnnual / 365)} />
+        <Metric label="预计月利息" value={fmt(mAnim)} />
+        <Metric label="预计日利息" value={fmt(dAnim)} />
       </div>
 
       {rows.length === 0 ? (
         <div style={{ ...card, padding: "40px 22px", textAlign: "center", color: "var(--text-tertiary)", fontSize: 13 }}>还没有账户，先去添加账户。</div>
       ) : (
-        <div style={{ ...card, overflow: "hidden" }}>
+        <div className="fv-rise" style={{ ...rise(110), ...card, overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "15px 22px 13px" }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>当前利息预测（按账户）</div>
             <div style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>在「年利率」列直接为每个账户设置利率，默认 0</div>

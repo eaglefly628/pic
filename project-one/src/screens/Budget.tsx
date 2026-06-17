@@ -4,6 +4,7 @@ import type { ExpenseItem } from "../vault/types";
 import { buildChart, currentNetWorth, estimateAnnualInterest, netSeries, type ChartGeom } from "../lib/compute";
 import { fmt } from "../lib/format";
 import { Btn, Field, Modal, Select, TextField, TextArea, EmptyState, card, uid } from "../ui";
+import { useCountUp, rise } from "../lib/anim";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
 
 const CATS = ["生活", "教育", "医疗", "房贷/房租", "车辆", "旅行", "保险", "大额采购", "其他"];
@@ -68,16 +69,16 @@ export default function Budget() {
   const remove = (id: string) => update((d) => { d.expenses = (d.expenses ?? []).filter((x) => x.id !== id); });
 
   return (
-    <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 18 }}>
-        <Metric label="当前净资产" value={fmt(calc.net0)} />
-        <Metric label="每月净现金流" value={fmt(calc.monthlyNet)} accent={calc.monthlyNet >= 0 ? "var(--green)" : "var(--red)"} />
-        <Metric label="预计 1 年后" value={fmt(at(12))} />
-        <Metric label={`预计 ${years} 年后`} value={fmt(at(years * 12))} />
+    <div style={{ padding: "24px 32px 40px" }}>
+      <div className="fv-rise" style={{ ...rise(0), display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 18 }}>
+        <Metric label="当前净资产" value={calc.net0} />
+        <Metric label="每月净现金流" value={calc.monthlyNet} accent={calc.monthlyNet >= 0 ? "var(--green)" : "var(--red)"} />
+        <Metric label="预计 1 年后" value={at(12)} />
+        <Metric label={`预计 ${years} 年后`} value={at(years * 12)} />
       </div>
 
       {/* 预测图 */}
-      <div style={{ ...card, padding: "18px 22px 12px", marginBottom: 18 }}>
+      <div className="fv-rise" style={{ ...rise(80), ...card, padding: "18px 22px 12px", marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <div>
             <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>资产预测（未来 {years} 年）</div>
@@ -99,7 +100,7 @@ export default function Budget() {
       </div>
 
       {/* 开销列表 */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
+      <div className="fv-rise" style={{ ...rise(160), display: "flex", alignItems: "center", marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>未来预期开销 · 折合每月 {fmt(calc.recurringMonthly)}</div>
         <div style={{ flex: 1 }} />
         <Btn onClick={() => { setEditing(null); setOpen(true); }}><IconPlus />新增开销</Btn>
@@ -108,7 +109,7 @@ export default function Budget() {
       {expenses.length === 0 ? (
         <EmptyState text="还没有预期开销" action={<Btn variant="soft" onClick={() => { setEditing(null); setOpen(true); }}>添加第一项</Btn>} />
       ) : (
-        <div style={{ ...card, overflow: "hidden" }}>
+        <div className="fv-rise" style={{ ...rise(220), ...card, overflow: "hidden" }}>
           {expenses.map((e, i) => (
             <div key={e.id} style={{ display: "flex", alignItems: "center", padding: "12px 22px", borderTop: i === 0 ? "none" : "0.5px solid var(--separator)", fontSize: 13 }}>
               <span style={{ flex: 1, color: "var(--text-primary)", fontWeight: 500 }}>{e.name}</span>
@@ -174,13 +175,13 @@ function ForecastChart({ chart, series, xLabels, boundary }: { chart: ChartGeom;
             <text x="50" y={g.ty} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
           </g>
         ))}
-        <path d={chart.area} fill="url(#fvBudget)" />
+        <path key={"a" + chart.area} className="fv-fade-in" d={chart.area} fill="url(#fvBudget)" />
         {/* 今天分界线 */}
         {boundary > 0 && <line x1={bx} x2={bx} y1={16} y2={170} stroke="var(--separator-strong)" strokeWidth="1" />}
         {boundary > 0 && <text x={bx} y={13} textAnchor="middle" fontSize="10" fill="var(--text-tertiary)">今天</text>}
         {/* 真实段（实线绿）+ 预测段（虚线蓝） */}
-        {realPts.length > 1 && <path d={pathOf(realPts)} fill="none" stroke="var(--green)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />}
-        {predPts.length > 1 && <path d={pathOf(predPts)} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeDasharray="5 4" strokeLinecap="round" strokeLinejoin="round" />}
+        {realPts.length > 1 && <path key={"r" + pathOf(realPts)} className="fv-draw-line" pathLength={1} d={pathOf(realPts)} fill="none" stroke="var(--green)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />}
+        {predPts.length > 1 && <path key={"p" + pathOf(predPts)} className="fv-fade-in" d={pathOf(predPts)} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeDasharray="5 4" strokeLinecap="round" strokeLinejoin="round" />}
         {hp && <line x1={hp.x} x2={hp.x} y1={16} y2={170} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />}
         {hp && <circle cx={hp.x} cy={hp.y} r="4.5" fill={isReal ? "var(--green)" : "var(--accent)"} stroke="var(--bg-card)" strokeWidth="2.5" />}
         {xLabels.map((x, i) => (
@@ -199,11 +200,12 @@ function ForecastChart({ chart, series, xLabels, boundary }: { chart: ChartGeom;
 
 const mini: React.CSSProperties = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, background: "var(--fill-quaternary)", border: "none", cursor: "pointer" };
 
-function Metric({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function Metric({ label, value, accent }: { label: string; value: number; accent?: string }) {
+  const n = useCountUp(value);
   return (
     <div style={{ ...card, padding: "16px 20px" }}>
       <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>{label}</div>
-      <div style={{ fontSize: 21, fontWeight: 600, color: accent ?? "var(--text-primary)", marginTop: 7, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ fontSize: 21, fontWeight: 600, color: accent ?? "var(--text-primary)", marginTop: 7, fontVariantNumeric: "tabular-nums" }}>{fmt(n)}</div>
     </div>
   );
 }

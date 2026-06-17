@@ -1,15 +1,18 @@
 import React from "react";
 import type { View } from "../lib/compute";
 import { card } from "../ui";
+import { fmt } from "../lib/format";
+import { useCountUp, rise } from "../lib/anim";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
 
 export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAccount }: {
   view: View; onAddSnapshot: () => void; onEditAccount: () => void; onDeleteAccount: () => void;
 }) {
   const d = view.detail;
+  const balAnim = useCountUp(d.balanceRaw);
   return (
-    <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 22 }}>
+    <div style={{ padding: "24px 32px 40px" }}>
+      <div className="fv-rise" style={{ ...rise(0), display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 22 }}>
         <span style={{ width: 54, height: 54, borderRadius: 13, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${d.color} 15%, transparent)`, color: d.color }}>
           <span style={{ fontSize: 19, fontWeight: 700 }}>{d.initial}</span>
         </span>
@@ -25,12 +28,12 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
           <button onClick={onDeleteAccount} title="删除账户" className="fv-icnbtn" style={iconBtn}><IconTrash size={15} stroke="var(--red)" /></button>
           <div style={{ textAlign: "right", marginLeft: 8 }}>
             <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>当前余额</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em", marginTop: 2 }}>{d.balance}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em", marginTop: 2 }}>{fmt(balAnim)}</div>
           </div>
         </div>
       </div>
 
-      <div style={{ ...card, padding: "20px 24px 14px", marginBottom: 18 }}>
+      <div className="fv-rise" style={{ ...rise(70), ...card, padding: "20px 24px 14px", marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>余额历史</div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
@@ -51,8 +54,8 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
               <text x="46" y={g.ty} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
             </g>
           ))}
-          <path d={d.area} fill="url(#fvArea2)" />
-          <path d={d.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path key={"a" + d.area} className="fv-fade-in" d={d.area} fill="url(#fvArea2)" />
+          <path key={"l" + d.line} className="fv-draw-line" pathLength={1} d={d.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
           {d.dots.map((dot, i) => (
             <g key={i}>
               <circle cx={dot.x} cy={dot.y} r="3.2" fill="var(--bg-card)" stroke="var(--accent)" strokeWidth="2" />
@@ -63,7 +66,7 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
       </div>
 
       {d.changes.length > 0 && (
-        <div style={{ ...card, padding: "18px 22px", marginBottom: 18 }}>
+        <div className="fv-rise" style={{ ...rise(140), ...card, padding: "18px 22px", marginBottom: 18 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>每月变化量</div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 96 }}>
             {d.changes.map((c, i) => (
@@ -77,7 +80,7 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
         </div>
       )}
 
-      <div style={{ ...card, overflow: "hidden" }}>
+      <div className="fv-rise" style={{ ...rise(210), ...card, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "15px 22px 13px" }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>余额快照</div>
           <button onClick={onAddSnapshot} className="fv-btn" style={{ display: "flex", alignItems: "center", gap: 5, height: 30, padding: "0 12px", borderRadius: 8, background: "var(--accent-soft)", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 12.5, fontWeight: 600 }}>
