@@ -73,7 +73,7 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
       <Field label="颜色">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {PALETTE.map((c) => (
-            <button key={c} onClick={() => setColor(c)} style={{ width: 26, height: 26, borderRadius: 7, background: c, border: color === c ? "2px solid var(--text-primary)" : "2px solid transparent", cursor: "pointer" }} />
+            <button key={c} onClick={() => setColor(c)} className="fv-tap" style={{ width: 26, height: 26, borderRadius: 7, background: c, border: color === c ? "2px solid var(--text-primary)" : "2px solid transparent", cursor: "pointer" }} />
           ))}
         </div>
       </Field>

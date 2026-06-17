@@ -59,8 +59,8 @@ export default function Income() {
               <span style={{ width: 70, textAlign: "center", fontSize: 11.5, color: "var(--text-tertiary)" }}>{it.period === "month" ? "每月" : "每年"}</span>
               <span style={{ width: 140, textAlign: "right", fontWeight: 600, color: "var(--green)", fontVariantNumeric: "tabular-nums" }}>{fmt(monthly(it))}</span>
               <span style={{ width: 70, display: "flex", justifyContent: "flex-end", gap: 4 }}>
-                <button onClick={() => { setEditing(it); setOpen(true); }} title="编辑" style={mini}><IconEdit size={14} stroke="var(--text-secondary)" /></button>
-                <button onClick={() => remove(it.id)} title="删除" style={mini}><IconTrash size={14} stroke="var(--red)" /></button>
+                <button onClick={() => { setEditing(it); setOpen(true); }} title="编辑" className="fv-icnbtn" style={mini}><IconEdit size={14} stroke="var(--text-secondary)" /></button>
+                <button onClick={() => remove(it.id)} title="删除" className="fv-icnbtn" style={mini}><IconTrash size={14} stroke="var(--red)" /></button>
               </span>
             </div>
           ))}

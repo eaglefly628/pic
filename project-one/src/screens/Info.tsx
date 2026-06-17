@@ -62,8 +62,8 @@ export default function Info() {
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>{it.title}</div>
                 <span style={{ fontSize: 10.5, color: "var(--text-secondary)", background: "var(--fill-quaternary)", padding: "2px 8px", borderRadius: 6 }}>{it.type}</span>
                 <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-                  <button onClick={() => startEdit(it)} title="编辑" style={miniBtn}><IconEdit size={14} stroke="var(--text-secondary)" /></button>
-                  <button onClick={() => remove(it.id)} title="删除" style={miniBtn}><IconTrash size={14} stroke="var(--red)" /></button>
+                  <button onClick={() => startEdit(it)} title="编辑" className="fv-icnbtn" style={miniBtn}><IconEdit size={14} stroke="var(--text-secondary)" /></button>
+                  <button onClick={() => remove(it.id)} title="删除" className="fv-icnbtn" style={miniBtn}><IconTrash size={14} stroke="var(--red)" /></button>
                 </span>
               </div>
               {it.fields.filter((f) => f.label || f.value).map((f, i) => (

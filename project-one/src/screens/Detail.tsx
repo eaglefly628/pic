@@ -21,8 +21,8 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
           <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 4 }}>{d.sub}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={onEditAccount} title="编辑账户" style={iconBtn}><IconEdit size={15} stroke="var(--text-secondary)" /></button>
-          <button onClick={onDeleteAccount} title="删除账户" style={iconBtn}><IconTrash size={15} stroke="var(--red)" /></button>
+          <button onClick={onEditAccount} title="编辑账户" className="fv-icnbtn" style={iconBtn}><IconEdit size={15} stroke="var(--text-secondary)" /></button>
+          <button onClick={onDeleteAccount} title="删除账户" className="fv-icnbtn" style={iconBtn}><IconTrash size={15} stroke="var(--red)" /></button>
           <div style={{ textAlign: "right", marginLeft: 8 }}>
             <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>当前余额</div>
             <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em", marginTop: 2 }}>{d.balance}</div>
@@ -80,7 +80,7 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
       <div style={{ ...card, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "15px 22px 13px" }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>余额快照</div>
-          <button onClick={onAddSnapshot} style={{ display: "flex", alignItems: "center", gap: 5, height: 30, padding: "0 12px", borderRadius: 8, background: "var(--accent-soft)", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 12.5, fontWeight: 600 }}>
+          <button onClick={onAddSnapshot} className="fv-btn" style={{ display: "flex", alignItems: "center", gap: 5, height: 30, padding: "0 12px", borderRadius: 8, background: "var(--accent-soft)", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 12.5, fontWeight: 600 }}>
             <IconPlus size={15} stroke="currentColor" width={2.3} />新增快照
           </button>
         </div>

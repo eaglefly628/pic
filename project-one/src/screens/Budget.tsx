@@ -116,8 +116,8 @@ export default function Budget() {
               <span style={{ width: 110, fontSize: 11.5, color: "var(--text-tertiary)" }}>{e.period === "month" ? "每月" : e.period === "year" ? "每年" : `一次 · ${e.date ?? ""}`}</span>
               <span style={{ width: 130, textAlign: "right", fontWeight: 600, color: "var(--red)", fontVariantNumeric: "tabular-nums" }}>{fmt(e.amount)}</span>
               <span style={{ width: 70, display: "flex", justifyContent: "flex-end", gap: 4 }}>
-                <button onClick={() => { setEditing(e); setOpen(true); }} title="编辑" style={mini}><IconEdit size={14} stroke="var(--text-secondary)" /></button>
-                <button onClick={() => remove(e.id)} title="删除" style={mini}><IconTrash size={14} stroke="var(--red)" /></button>
+                <button onClick={() => { setEditing(e); setOpen(true); }} title="编辑" className="fv-icnbtn" style={mini}><IconEdit size={14} stroke="var(--text-secondary)" /></button>
+                <button onClick={() => remove(e.id)} title="删除" className="fv-icnbtn" style={mini}><IconTrash size={14} stroke="var(--red)" /></button>
               </span>
             </div>
           ))}

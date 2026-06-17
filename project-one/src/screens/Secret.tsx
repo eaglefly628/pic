@@ -86,14 +86,14 @@ export default function Secret({ onExit }: { onExit: () => void }) {
         </span>
         {status === "unlocked" && view && (
           sub === "detail" ? (
-            <button onClick={() => setSub("accounts")} style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 500, padding: "5px 7px" }}>
+            <button onClick={() => setSub("accounts")} className="fv-tap" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 500, padding: "5px 7px" }}>
               <span style={{ transform: "rotate(180deg)", display: "inline-flex" }}><IconChevron size={16} stroke="var(--accent)" /></span>{view.detail.name}
             </button>
           ) : (
             <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2, marginLeft: 6 }}>
-              <button onClick={() => setSub("dashboard")} style={seg(sub === "dashboard")}>仪表盘</button>
-              <button onClick={() => setSub("accounts")} style={seg(sub === "accounts")}>账户</button>
-              <button onClick={() => setSub("interest")} style={seg(sub === "interest")}>利息</button>
+              <button onClick={() => setSub("dashboard")} className="fv-tap" style={seg(sub === "dashboard")}>仪表盘</button>
+              <button onClick={() => setSub("accounts")} className="fv-tap" style={seg(sub === "accounts")}>账户</button>
+              <button onClick={() => setSub("interest")} className="fv-tap" style={seg(sub === "interest")}>利息</button>
             </div>
           )
         )}
@@ -161,7 +161,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
             )}
             {err && <div style={{ fontSize: 12, color: "var(--red)" }}>{err}</div>}
             <Btn onClick={submitPw} disabled={busy} style={{ height: 40, width: "100%" }}>{busy ? "处理中…" : onboard ? "创建并进入" : "解锁"}{!busy && <IconArrowRight size={15} stroke="#fff" />}</Btn>
-            {!onboard && <button onClick={resetSecret} style={{ background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 11.5, cursor: "pointer", textDecoration: "underline" }}>忘记密码？重置独立管理（清空后重设）</button>}
+            {!onboard && <button onClick={resetSecret} className="fv-tap" style={{ background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 11.5, cursor: "pointer", textDecoration: "underline" }}>忘记密码？重置独立管理（清空后重设）</button>}
             <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.6 }}>⚠️ 独立管理密码同样无法找回；与主密码相互独立。</div>
           </div>
         </div>
