@@ -66,6 +66,50 @@ body { background: #b8c6db; }
 @keyframes fvFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fvRise { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
 
+/* ── 交互打磨：统一的 hover / press / focus 反馈 ───────────────────── */
+.fv-root button { -webkit-tap-highlight-color: transparent; }
+
+/* 通用按压：轻微回弹 */
+.fv-tap { transition: transform .12s ease, filter .15s ease, background-color .15s ease, box-shadow .15s ease; }
+.fv-tap:active { transform: scale(0.97); }
+
+/* 实心/彩色按钮：悬停提亮、按压回弹 */
+.fv-btn { transition: filter .15s ease, transform .12s ease, box-shadow .15s ease; }
+.fv-btn:hover { filter: brightness(1.05); }
+.fv-btn:active { transform: scale(0.97); filter: brightness(0.96); }
+
+/* 侧栏导航项：未选中时悬停浮起底色 */
+.fv-nav { transition: background-color .15s ease, color .15s ease; }
+.fv-nav:hover:not(.active) { background: var(--hover) !important; color: var(--text-primary) !important; }
+.fv-nav:active:not(.active) { background: var(--separator) !important; }
+
+/* 列表行：悬停整行高亮 */
+.fv-row { transition: background-color .13s ease; }
+.fv-row:hover { background: var(--hover); }
+.fv-row:active { background: var(--separator); }
+
+/* 图标小按钮：悬停底色 + 按压 */
+.fv-icnbtn { transition: background-color .15s ease, color .15s ease, transform .12s ease; }
+.fv-icnbtn:hover { background: var(--hover) !important; color: var(--text-primary) !important; }
+.fv-icnbtn:active { transform: scale(0.93); }
+
+/* 可点击卡片：悬停轻微抬起 */
+.fv-card-int { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.fv-card-int:hover { transform: translateY(-2px); box-shadow: var(--win-shadow); }
+
+/* 输入控件聚焦：强调色描边 */
+.fv-root input:focus, .fv-root textarea:focus, .fv-root select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* 键盘可达性：仅键盘聚焦时显示描边环 */
+.fv-root :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fv-root :focus:not(:focus-visible) { outline: none; }
+@media (prefers-reduced-motion: reduce) {
+  .fv-tap, .fv-btn, .fv-nav, .fv-row, .fv-icnbtn, .fv-card-int { transition: none; }
+  .fv-tap:active, .fv-btn:active, .fv-icnbtn:active, .fv-card-int:hover { transform: none; }
+}
+
 /* 让原生控件（下拉、日期选择、复选框等）跟随明暗模式 */
 .fv-root[data-theme="light"] { color-scheme: light; }
 .fv-root[data-theme="dark"] { color-scheme: dark; }

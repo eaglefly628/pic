@@ -5,11 +5,11 @@ export const card: React.CSSProperties = {
 };
 
 type BtnVariant = "primary" | "soft" | "ghost" | "danger";
-export function Btn({ variant = "primary", children, style, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant }) {
+export function Btn({ variant = "primary", children, style, className, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant }) {
   const base: React.CSSProperties = {
     display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
     height: 34, padding: "0 15px", borderRadius: 9, border: "none", cursor: "pointer",
-    fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", transition: "filter .15s",
+    fontSize: 13, fontWeight: 500, whiteSpace: "nowrap",
   };
   const variants: Record<BtnVariant, React.CSSProperties> = {
     primary: { background: "var(--accent)", color: "#fff", boxShadow: "0 2px 6px var(--accent-soft)" },
@@ -18,7 +18,7 @@ export function Btn({ variant = "primary", children, style, ...rest }: React.But
     danger: { background: "color-mix(in srgb, var(--red) 14%, transparent)", color: "var(--red)", fontWeight: 600 },
   };
   return (
-    <button {...rest} style={{ ...base, ...variants[variant], ...style }}>
+    <button {...rest} className={"fv-btn" + (className ? " " + className : "")} style={{ ...base, ...variants[variant], ...style }}>
       {children}
     </button>
   );

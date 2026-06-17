@@ -32,8 +32,8 @@ export default function Accounts({ view, onOpen, onAddAccount }: { view: View; o
 
       <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2 }}>
-          <button onClick={() => setMode("group")} style={seg(mode === "group")}>按分类</button>
-          <button onClick={() => setMode("flat")} style={seg(mode === "flat")}>全部排序</button>
+          <button onClick={() => setMode("group")} className="fv-tap" style={seg(mode === "group")}>按分类</button>
+          <button onClick={() => setMode("flat")} className="fv-tap" style={seg(mode === "flat")}>全部排序</button>
         </div>
       </div>
 
@@ -60,7 +60,7 @@ export default function Accounts({ view, onOpen, onAddAccount }: { view: View; o
 
 function AccountRow({ acc, onOpen, showCat }: { acc: AccVM; onOpen: (id: string) => void; showCat?: boolean }) {
   return (
-    <div onClick={() => onOpen(acc.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", borderTop: acc.border, cursor: "pointer" }}>
+    <div onClick={() => onOpen(acc.id)} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", borderTop: acc.border, cursor: "pointer" }}>
       <span style={{ width: 38, height: 38, borderRadius: 10, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${acc.color} 15%, transparent)`, color: acc.color }}>
         <span style={{ fontSize: 13, fontWeight: 700 }}>{acc.initial}</span>
       </span>

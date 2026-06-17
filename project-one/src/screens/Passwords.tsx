@@ -146,7 +146,7 @@ function PwVault({ items, clearSec, onMutate }: { items: PasswordItem[]; clearSe
 
 function RowBtn({ children, onClick, title }: { children: React.ReactNode; onClick: () => void; title: string }) {
   return (
-    <button onClick={onClick} title={title} style={{ width: 28, height: 28, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 7, background: "transparent", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}>
+    <button onClick={onClick} title={title} className="fv-icnbtn" style={{ width: 28, height: 28, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 7, background: "transparent", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}>
       {children}
     </button>
   );

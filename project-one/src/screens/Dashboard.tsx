@@ -55,9 +55,9 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
               <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 2 }}>{view.trend.caption}</div>
             </div>
             <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2 }}>
-              <button onClick={() => setRange("3m")} style={segStyle(range === "3m")}>近3月</button>
-              <button onClick={() => setRange("1y")} style={segStyle(range === "1y")}>近1年</button>
-              <button onClick={() => setRange("all")} style={segStyle(range === "all")}>全部</button>
+              <button onClick={() => setRange("3m")} className="fv-tap" style={segStyle(range === "3m")}>近3月</button>
+              <button onClick={() => setRange("1y")} className="fv-tap" style={segStyle(range === "1y")}>近1年</button>
+              <button onClick={() => setRange("all")} className="fv-tap" style={segStyle(range === "all")}>全部</button>
             </div>
           </div>
           <TrendChart view={view} />
@@ -106,7 +106,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
         <div style={{ padding: "16px 22px 12px", fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>最近更新</div>
         {view.recent.length === 0 && <div style={{ padding: "0 22px 18px", fontSize: 12.5, color: "var(--text-tertiary)" }}>暂无变动记录</div>}
         {view.recent.map((r) => (
-          <div key={r.id} onClick={() => onOpen(r.id)} style={{ display: "flex", alignItems: "center", gap: 13, padding: "11px 22px", borderTop: "0.5px solid var(--separator)", cursor: "pointer" }}>
+          <div key={r.id} onClick={() => onOpen(r.id)} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 13, padding: "11px 22px", borderTop: "0.5px solid var(--separator)", cursor: "pointer" }}>
             <span style={{ width: 34, height: 34, borderRadius: 9, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${r.color} 16%, transparent)` }}>
               <span style={{ width: 12, height: 12, borderRadius: 4, background: r.color }} />
             </span>

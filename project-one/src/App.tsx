@@ -119,7 +119,7 @@ function Shell({ data }: { data: VaultData }) {
           </nav>
 
           <div style={{ padding: "10px 12px 12px", borderTop: "0.5px solid var(--separator)" }}>
-            <button onClick={() => setScreen("info")} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", cursor: "pointer", padding: "6px 9px", borderRadius: 9, background: screen === "info" ? "var(--accent-soft)" : "transparent" }}>
+            <button onClick={() => setScreen("info")} className={"fv-nav" + (screen === "info" ? " active" : "")} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", cursor: "pointer", padding: "6px 9px", borderRadius: 9, background: screen === "info" ? "var(--accent-soft)" : "transparent" }}>
               <span style={{ width: 28, height: 28, borderRadius: "50%", flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(160deg,#0A84FF,#5E5CE6)", color: "#fff", fontSize: 12, fontWeight: 700 }}>{userInitial}</span>
               <div style={{ lineHeight: 1.25, minWidth: 0, textAlign: "left" }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{view.meta.userName}</div>
@@ -134,7 +134,7 @@ function Shell({ data }: { data: VaultData }) {
         <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg-content)" }}>
           <div style={{ height: 52, flex: "none", display: "flex", alignItems: "center", gap: 12, padding: "0 18px", background: "var(--bg-toolbar)", ...glass, borderBottom: "0.5px solid var(--separator)", zIndex: 5 }}>
             {screen === "detail" && (
-              <button onClick={() => setScreen("accounts")} style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13.5, fontWeight: 500, padding: "5px 7px", marginLeft: -7, borderRadius: 7 }}>
+              <button onClick={() => setScreen("accounts")} className="fv-tap" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13.5, fontWeight: 500, padding: "5px 7px", marginLeft: -7, borderRadius: 7 }}>
                 <span style={{ transform: "rotate(180deg)", display: "inline-flex" }}><IconChevron size={17} stroke="var(--accent)" /></span>账户
               </button>
             )}
@@ -145,10 +145,10 @@ function Shell({ data }: { data: VaultData }) {
               <span style={{ fontSize: 12.5, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>搜索全部</span>
               <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-tertiary)", border: "0.5px solid var(--separator-strong)", borderRadius: 4, padding: "1px 4px" }}>⌘K</span>
             </div>
-            <button onClick={toggle} title="切换外观" style={{ width: 30, height: 30, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-secondary)" }}>
+            <button onClick={toggle} title="切换外观" className="fv-icnbtn" style={{ width: 30, height: 30, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-secondary)" }}>
               <span>{theme === "light" ? "🌙" : "☀️"}</span>
             </button>
-            <button onClick={lock} style={{ display: "flex", alignItems: "center", gap: 6, height: 30, padding: "0 12px", borderRadius: 8, background: "var(--accent)", border: "none", cursor: "pointer", color: "#fff", fontSize: 12.5, fontWeight: 500 }}>
+            <button onClick={lock} className="fv-btn" style={{ display: "flex", alignItems: "center", gap: 6, height: 30, padding: "0 12px", borderRadius: 8, background: "var(--accent)", border: "none", cursor: "pointer", color: "#fff", fontSize: 12.5, fontWeight: 500 }}>
               <IconLock size={14} stroke="currentColor" />锁定
             </button>
           </div>
@@ -206,7 +206,7 @@ function Shell({ data }: { data: VaultData }) {
 
 function NavBtn({ active, onClick, icon, label, badge }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: string }) {
   return (
-    <button onClick={onClick} style={navStyle(active)}>
+    <button onClick={onClick} className={"fv-nav" + (active ? " active" : "")} style={navStyle(active)}>
       {icon}<span>{label}</span>
       {badge != null && <span style={{ marginLeft: "auto", fontSize: 11, color: active ? "rgba(255,255,255,0.85)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{badge}</span>}
     </button>
