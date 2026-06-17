@@ -326,6 +326,9 @@ export function buildView(ds: Dataset, ui: UIState) {
       netDelta: fmtSigned(netDelta),
       netDeltaPct: (netPct >= 0 ? "↑ " : "↓ ") + fmtPct(Math.abs(netPct)),
       netUp: netDelta >= 0,
+      assetsRaw: totalAssets,
+      liabRaw: totalLiab,
+      netRaw: net,
     },
     trend: {
       caption: rangeCaption,

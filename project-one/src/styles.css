@@ -65,6 +65,15 @@ body { background: #b8c6db; }
 .fv-scroll::-webkit-scrollbar-track { background: transparent; }
 @keyframes fvFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fvRise { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+@keyframes fvUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fvDrawLine { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes fvFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* 入场上浮（配合 inline animation-delay 做错落） */
+.fv-rise { animation: fvUp .52s cubic-bezier(.2,.7,.3,1) both; }
+/* 折线描线动画（需 pathLength=1） */
+.fv-draw-line { stroke-dasharray: 1; animation: fvDrawLine .9s ease forwards; }
+.fv-fade-in { opacity: 0; animation: fvFadeIn .9s ease .12s forwards; }
 
 /* ── 交互打磨：统一的 hover / press / focus 反馈 ───────────────────── */
 .fv-root button { -webkit-tap-highlight-color: transparent; }
@@ -108,6 +117,7 @@ body { background: #b8c6db; }
 @media (prefers-reduced-motion: reduce) {
   .fv-tap, .fv-btn, .fv-nav, .fv-row, .fv-icnbtn, .fv-card-int { transition: none; }
   .fv-tap:active, .fv-btn:active, .fv-icnbtn:active, .fv-card-int:hover { transform: none; }
+  .fv-rise, .fv-draw-line, .fv-fade-in { animation: none; opacity: 1; stroke-dasharray: none; }
 }
 
 /* 让原生控件（下拉、日期选择、复选框等）跟随明暗模式 */

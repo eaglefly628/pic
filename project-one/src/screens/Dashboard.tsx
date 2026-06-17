@@ -1,8 +1,36 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { View } from "../lib/compute";
 import type { RangeKey } from "../lib/compute";
 import { card } from "../ui";
 import { fmt } from "../lib/format";
+
+const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+/** 数字滚动到目标值（easeOutCubic） */
+function useCountUp(target: number, duration = 750): number {
+  const [val, setVal] = useState(reduceMotion ? target : 0);
+  const fromRef = useRef(reduceMotion ? target : 0);
+  useEffect(() => {
+    if (reduceMotion) { setVal(target); return; }
+    const from = fromRef.current;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const e = 1 - Math.pow(1 - t, 3);
+      setVal(from + (target - from) * e);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); fromRef.current = target; };
+  }, [target, duration]);
+  return val;
+}
+
+function rise(delayMs: number): React.CSSProperties {
+  return { animationDelay: `${delayMs}ms` };
+}
 
 function greetingWord() {
   const h = new Date().getHours();
@@ -25,29 +53,33 @@ function segStyle(active: boolean): React.CSSProperties {
 export default function Dashboard({ view, onOpen, range, setRange }: { view: View; onOpen: (id: string) => void; range: RangeKey; setRange: (r: RangeKey) => void }) {
   const today = new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" });
   const t = view.totals;
+  const netAnim = useCountUp(t.netRaw);
   return (
-    <div style={{ padding: "28px 32px 40px", animation: "fvFade 0.3s ease" }}>
-      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
+    <div style={{ padding: "28px 32px 40px" }}>
+      <div className="fv-rise" style={{ ...rise(0), display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>{greetingWord()}，{view.meta.userName}</div>
           <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 3 }}>{today} · {view.meta.vaultName}{view.meta.real ? "" : " · 示例数据"}</div>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
-        <MetricCard label="总资产" value={t.totalAssets} chip="资产合计" chipNote={`${view.meta.accountCount} 个账户`} chipColor="var(--green)" />
-        <MetricCard label="总负债" value={t.totalLiabilities} chip="含信用卡/贷款" chipNote="负债合计" chipColor="var(--red)" />
-        <div style={{ background: "linear-gradient(155deg, var(--accent), #5E5CE6)", borderRadius: 14, padding: "20px 22px", boxShadow: "0 6px 18px var(--accent-soft)", color: "#fff" }}>
-          <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>净资产</div>
-          <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.01em", marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{t.netWorth}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9 }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(255,255,255,0.22)", padding: "2px 7px", borderRadius: 6 }}>{t.netDelta}</span>
-            <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.8)" }}>较上期</span>
+      <div className="fv-rise" style={{ ...rise(70), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
+        <MetricCard label="总资产" value={t.assetsRaw} chip="资产合计" chipNote={`${view.meta.accountCount} 个账户`} chipColor="var(--green)" />
+        <MetricCard label="总负债" value={t.liabRaw} chip="含信用卡/贷款" chipNote="负债合计" chipColor="var(--red)" />
+        <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #5E5CE6)", borderRadius: 14, padding: "20px 22px", boxShadow: "0 10px 26px -8px var(--accent-soft)", color: "#fff" }}>
+          <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 85% at 88% 0%, rgba(255,255,255,0.30), transparent 58%)", pointerEvents: "none" }} />
+          <div style={{ position: "relative" }}>
+            <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>净资产</div>
+            <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.01em", marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{fmt(netAnim)}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(255,255,255,0.22)", padding: "2px 7px", borderRadius: 6 }}>{t.netDelta}</span>
+              <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.8)" }}>较上期</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 16, marginBottom: 18 }}>
+      <div className="fv-rise" style={{ ...rise(140), display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 16, marginBottom: 18 }}>
         <div style={{ ...card, padding: "20px 22px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
             <div>
@@ -86,7 +118,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
       </div>
 
       {view.monthlyChanges.length > 0 && (
-        <div style={{ ...card, padding: "18px 22px", marginBottom: 18 }}>
+        <div className="fv-rise" style={{ ...card, ...rise(210), padding: "18px 22px", marginBottom: 18 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>
             每月变化量<span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 8 }}>近 12 期净资产变化</span>
           </div>
@@ -102,7 +134,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
         </div>
       )}
 
-      <div style={{ ...card, overflow: "hidden" }}>
+      <div className="fv-rise" style={{ ...card, ...rise(280), overflow: "hidden" }}>
         <div style={{ padding: "16px 22px 12px", fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>最近更新</div>
         {view.recent.length === 0 && <div style={{ padding: "0 22px 18px", fontSize: 12.5, color: "var(--text-tertiary)" }}>暂无变动记录</div>}
         {view.recent.map((r) => (
@@ -160,8 +192,8 @@ function TrendChart({ view }: { view: View }) {
             <text x="38" y={g.ty} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
           </g>
         ))}
-        <path d={view.trend.area} fill="url(#fvArea)" />
-        <path d={view.trend.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        <path key={"a" + view.trend.area} className="fv-fade-in" d={view.trend.area} fill="url(#fvArea)" />
+        <path key={"l" + view.trend.line} className="fv-draw-line" pathLength={1} d={view.trend.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
         {hp && <line x1={hp.x} x2={hp.x} y1={16} y2={190} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />}
         <circle cx={view.trend.lastX} cy={view.trend.lastY} r="4.5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />
         {hp && <circle cx={hp.x} cy={hp.y} r="5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />}
@@ -179,11 +211,12 @@ function TrendChart({ view }: { view: View }) {
   );
 }
 
-function MetricCard({ label, value, chip, chipNote, chipColor }: { label: string; value: string; chip: string; chipNote: string; chipColor: string }) {
+function MetricCard({ label, value, chip, chipNote, chipColor }: { label: string; value: number; chip: string; chipNote: string; chipColor: string }) {
+  const n = useCountUp(value);
   return (
     <div style={{ ...card, padding: "20px 22px" }}>
       <div style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 500 }}>{label}</div>
-      <div style={{ fontSize: 27, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em", marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ fontSize: 27, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em", marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{fmt(n)}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 12, fontWeight: 600, color: chipColor, background: `color-mix(in srgb, ${chipColor} 13%, transparent)`, padding: "2px 7px", borderRadius: 6 }}>{chip}</span>
         <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>{chipNote}</span>
