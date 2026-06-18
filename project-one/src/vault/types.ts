@@ -58,6 +58,22 @@ export interface Settings {
   clipboardClearSec: number; // 复制后清空剪贴板（秒）
 }
 
+/** 行情数据源：twelvedata 需免费 key；frankfurter(汇率)、coingecko(加密) 免 key */
+export type MarketSource = "twelvedata" | "frankfurter" | "coingecko";
+export type MarketCategory = "index" | "forex" | "commodity" | "bond" | "stock" | "crypto";
+export interface WatchItem {
+  id: string;
+  symbol: string;   // 数据源使用的代码
+  name: string;     // 显示名
+  category: MarketCategory;
+  source: MarketSource;
+}
+export interface MarketConfig {
+  apiKey?: string;     // Twelve Data 免费 key（解锁指数/个股/商品/美债）
+  refreshSec: number;  // 自动刷新间隔（秒）
+  watch: WatchItem[];
+}
+
 /** 解锁后内存中的完整金库数据 */
 export interface VaultData {
   dataset: Dataset; // 资金账户与历史快照
@@ -70,6 +86,8 @@ export interface VaultData {
   incomes?: IncomeItem[];
   /** 未来预期开销 */
   expenses?: ExpenseItem[];
+  /** 财经行情：自选清单与 API key */
+  markets?: MarketConfig;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

@@ -6,7 +6,7 @@ import type { VaultData } from "./vault/types";
 import { addAccount, addSnapshot, deleteAccount, updateAccount } from "./vault/ops";
 import {
   IconShield, IconDashboard, IconCard, IconLock, IconUser, IconImport, IconGear, IconChevron, IconSearch, IconKey,
-  IconPercent, IconWallet, IconChartUp,
+  IconPercent, IconWallet, IconChartUp, IconMarkets,
 } from "./icons";
 import Unlock from "./screens/Unlock";
 import Dashboard from "./screens/Dashboard";
@@ -19,10 +19,11 @@ import Settings from "./screens/Settings";
 import Interest from "./screens/Interest";
 import Income from "./screens/Income";
 import Budget from "./screens/Budget";
+import Markets from "./screens/Markets";
 import Secret from "./screens/Secret";
 import { AccountEditor, SnapshotEditor } from "./screens/editors";
 
-type Screen = "dashboard" | "accounts" | "detail" | "passwords" | "info" | "import" | "settings" | "interest" | "income" | "budget";
+type Screen = "dashboard" | "accounts" | "detail" | "passwords" | "info" | "import" | "settings" | "interest" | "income" | "budget" | "markets";
 
 const glass: React.CSSProperties = {
   backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)",
@@ -84,7 +85,7 @@ function Shell({ data }: { data: VaultData }) {
 
   const TITLES: Record<Screen, string> = {
     dashboard: "仪表盘", accounts: "资金账户", detail: view.detail.name, passwords: "密码保险箱",
-    info: "个人信息", import: "导入 / 导出", settings: "设置", interest: "利息预测", income: "收入情况", budget: "预算与预测",
+    info: "个人信息", import: "导入 / 导出", settings: "设置", interest: "利息预测", income: "收入情况", budget: "预算与预测", markets: "财经行情",
   };
   const pageTitle = TITLES[screen];
 
@@ -112,6 +113,7 @@ function Shell({ data }: { data: VaultData }) {
             {navInd && <div aria-hidden className="fv-navhi" style={{ position: "absolute", top: navInd.top, left: navInd.left, width: navInd.width, height: navInd.height, background: "var(--accent)", borderRadius: 8, boxShadow: "0 2px 8px var(--accent-soft)", zIndex: 0 }} />}
             <div style={{ ...groupLabel, padding: "8px 10px 4px" }}>概览</div>
             <NavBtn active={screen === "dashboard"} onClick={() => setScreen("dashboard")} icon={<IconDashboard />} label="仪表盘" />
+            <NavBtn active={screen === "markets"} onClick={() => setScreen("markets")} icon={<IconMarkets />} label="财经行情" />
             <div style={groupLabel}>资金</div>
             <NavBtn active={screen === "accounts" || screen === "detail"} onClick={() => setScreen("accounts")} icon={<IconCard />} label="资金账户" badge={String(view.meta.accountCount)} />
             <NavBtn active={screen === "interest"} onClick={() => setScreen("interest")} icon={<IconPercent />} label="利息预测" />
@@ -184,6 +186,7 @@ function Shell({ data }: { data: VaultData }) {
             {screen === "interest" && <Interest />}
             {screen === "income" && <Income />}
             {screen === "budget" && <Budget />}
+            {screen === "markets" && <Markets />}
           </div>
         </main>
 

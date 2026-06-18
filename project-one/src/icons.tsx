@@ -123,3 +123,6 @@ export const IconWallet = ({ size = 17, stroke = "currentColor", width = 1.7 }: 
 export const IconChartUp = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
   <svg {...base(size, stroke, width)}><path d="M4 4v16h16" /><path d="m7 14 3.5-3.5 3 3L20 7" /><path d="M20 11V7h-4" /></svg>
 );
+export const IconMarkets = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M4 4v16h16" /><rect x="7" y="9" width="2.6" height="7" rx="0.8" /><rect x="12.5" y="6" width="2.6" height="10" rx="0.8" /><path d="M8.3 9V7M8.3 18v-2M13.8 6V4.5M13.8 18v-2" /></svg>
+);
