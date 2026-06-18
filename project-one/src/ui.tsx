@@ -58,6 +58,20 @@ export function Select({ options, ...props }: React.SelectHTMLAttributes<HTMLSel
   );
 }
 
+export function Segmented<T extends string>({ value, options, onChange, style }: {
+  value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; style?: React.CSSProperties;
+}) {
+  const idx = Math.max(0, options.findIndex((o) => o.value === value));
+  return (
+    <div style={{ position: "relative", display: "flex", background: "var(--fill-quaternary)", borderRadius: 8, padding: 2, ...style }}>
+      <div aria-hidden style={{ position: "absolute", top: 2, bottom: 2, left: 2, width: `calc((100% - 4px) / ${options.length})`, transform: `translateX(${idx * 100}%)`, background: "var(--bg-card)", borderRadius: 6, boxShadow: "0 1px 2px rgba(0,0,0,0.14)", transition: "transform .26s cubic-bezier(.3,.85,.3,1)" }} />
+      {options.map((o) => (
+        <button key={o.value} className="fv-tap" onClick={() => onChange(o.value)} style={{ position: "relative", zIndex: 1, flex: 1, border: "none", background: "transparent", cursor: "pointer", fontSize: 12, fontWeight: 500, padding: "5px 13px", borderRadius: 6, whiteSpace: "nowrap", color: o.value === value ? "var(--text-primary)" : "var(--text-secondary)", transition: "color .2s" }}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
 export function Modal({ open, title, onClose, children, footer, width = 460 }: {
   open: boolean; title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; width?: number;
 }) {

@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import type { View } from "../lib/compute";
-import { Btn, card } from "../ui";
+import { Btn, card, Segmented } from "../ui";
 import { fmt } from "../lib/format";
 import { useCountUp, rise } from "../lib/anim";
 import { IconChevron, IconPlus } from "../icons";
@@ -36,10 +36,8 @@ export default function Accounts({ view, onOpen, onAddAccount }: { view: View; o
       </div>
 
       <div className="fv-rise" style={{ ...rise(70), display: "flex", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2 }}>
-          <button onClick={() => setMode("group")} className="fv-tap" style={seg(mode === "group")}>按分类</button>
-          <button onClick={() => setMode("flat")} className="fv-tap" style={seg(mode === "flat")}>全部排序</button>
-        </div>
+        <Segmented value={mode} onChange={(m) => setMode(m as "group" | "flat")} style={{ width: 200 }}
+          options={[{ value: "group", label: "按分类" }, { value: "flat", label: "全部排序" }]} />
       </div>
 
       {mode === "group" ? (
@@ -93,12 +91,4 @@ function AccountRow({ acc, onOpen, showCat }: { acc: AccVM; onOpen: (id: string)
       </span>
     </div>
   );
-}
-
-function seg(active: boolean): React.CSSProperties {
-  return {
-    border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, padding: "5px 14px", borderRadius: 6, whiteSpace: "nowrap",
-    background: active ? "var(--bg-card)" : "transparent", color: active ? "var(--text-primary)" : "var(--text-secondary)",
-    boxShadow: active ? "0 1px 2px rgba(0,0,0,0.12)" : "none",
-  };
 }

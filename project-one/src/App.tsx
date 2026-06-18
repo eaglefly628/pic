@@ -82,7 +82,7 @@ function Shell({ data }: { data: VaultData }) {
   const pageTitle = TITLES[screen];
 
   return (
-    <div style={{ minHeight: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--wallpaper)", padding: 32 }}>
+    <div className="fv-wallpaper" style={{ minHeight: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
       <div style={{ position: "relative", width: 1200, height: 800, maxWidth: "100%", borderRadius: 13, overflow: "hidden", boxShadow: "var(--win-shadow)", display: "flex", background: "var(--bg-content)", border: "0.5px solid var(--separator-strong)" }}>
         {/* SIDEBAR */}
         <aside style={{ width: 236, flex: "none", background: "var(--bg-sidebar)", ...glass, borderRight: "0.5px solid var(--separator)", display: "flex", flexDirection: "column" }}>

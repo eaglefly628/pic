@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import type { View } from "../lib/compute";
 import type { RangeKey } from "../lib/compute";
-import { card } from "../ui";
+import { card, Segmented } from "../ui";
 import { fmt } from "../lib/format";
 import { useCountUp, rise, reduceMotion } from "../lib/anim";
 
@@ -13,16 +13,6 @@ function greetingWord() {
   if (h < 18) return "下午好";
   return "晚上好";
 }
-function segStyle(active: boolean): React.CSSProperties {
-  return {
-    border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, padding: "4px 11px",
-    borderRadius: 6, whiteSpace: "nowrap", transition: "all .15s",
-    background: active ? "var(--bg-card)" : "transparent",
-    color: active ? "var(--text-primary)" : "var(--text-secondary)",
-    boxShadow: active ? "0 1px 2px rgba(0,0,0,0.12)" : "none",
-  };
-}
-
 export default function Dashboard({ view, onOpen, range, setRange }: { view: View; onOpen: (id: string) => void; range: RangeKey; setRange: (r: RangeKey) => void }) {
   const today = new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" });
   const t = view.totals;
@@ -59,11 +49,8 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
               <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap" }}>净资产趋势</div>
               <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 2 }}>{view.trend.caption}</div>
             </div>
-            <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2 }}>
-              <button onClick={() => setRange("3m")} className="fv-tap" style={segStyle(range === "3m")}>近3月</button>
-              <button onClick={() => setRange("1y")} className="fv-tap" style={segStyle(range === "1y")}>近1年</button>
-              <button onClick={() => setRange("all")} className="fv-tap" style={segStyle(range === "all")}>全部</button>
-            </div>
+            <Segmented value={range} onChange={(r) => setRange(r as RangeKey)} style={{ width: 212 }}
+              options={[{ value: "3m", label: "近3月" }, { value: "1y", label: "近1年" }, { value: "all", label: "全部" }]} />
           </div>
           <TrendChart view={view} />
         </div>
@@ -80,7 +67,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
             {view.monthlyChanges.map((c, i) => (
               <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 0 }}>
                 <div style={{ fontSize: 10, fontWeight: 600, color: c.up ? "var(--green)" : "var(--red)", whiteSpace: "nowrap" }}>{c.text}</div>
-                <div style={{ width: "58%", maxWidth: 30, height: Math.max(4, c.ratio * 56), borderRadius: 4, background: c.up ? "var(--green)" : "var(--red)" }} />
+                <div className="fv-grow" style={{ animationDelay: `${i * 40}ms`, width: "58%", maxWidth: 30, height: Math.max(4, c.ratio * 56), borderRadius: 4, background: c.up ? "var(--green)" : "var(--red)" }} />
                 <div style={{ fontSize: 10, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{c.label}</div>
               </div>
             ))}
@@ -149,6 +136,7 @@ function TrendChart({ view }: { view: View }) {
         <path key={"a" + view.trend.area} className="fv-fade-in" d={view.trend.area} fill="url(#fvArea)" />
         <path key={"l" + view.trend.line} className="fv-draw-line" pathLength={1} d={view.trend.line} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
         {hp && <line x1={hp.x} x2={hp.x} y1={16} y2={190} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />}
+        <circle className="fv-pulse" cx={view.trend.lastX} cy={view.trend.lastY} r="4" fill="var(--accent)" />
         <circle cx={view.trend.lastX} cy={view.trend.lastY} r="4.5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />
         {hp && <circle cx={hp.x} cy={hp.y} r="5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />}
         {view.trend.xLabels.map((x, i) => (
@@ -172,7 +160,7 @@ function DonutCard({ donut }: { donut: View["donut"] }) {
       <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14 }}>资产构成</div>
       <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
         <div style={{ position: "relative", width: 118, height: 118, flex: "none" }}>
-          <svg viewBox="0 0 120 120" style={{ width: 118, height: 118, transform: "rotate(-90deg)" }}>
+          <svg viewBox="0 0 120 120" className="fv-donut-in" style={{ width: 118, height: 118, transform: "rotate(-90deg)" }}>
             <circle cx="60" cy="60" r="46" fill="none" stroke="var(--track)" strokeWidth="15" />
             {donut.map((seg, i) => (
               <circle

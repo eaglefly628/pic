@@ -72,7 +72,7 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
             {d.changes.map((c, i) => (
               <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: c.up ? "var(--green)" : "var(--red)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{c.text}</div>
-                <div style={{ width: "60%", maxWidth: 38, height: Math.max(4, c.ratio * 56), borderRadius: 5, background: c.up ? "var(--green)" : "var(--red)" }} />
+                <div className="fv-grow" style={{ animationDelay: `${i * 45}ms`, width: "60%", maxWidth: 38, height: Math.max(4, c.ratio * 56), borderRadius: 5, background: c.up ? "var(--green)" : "var(--red)" }} />
                 <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{c.label}</div>
               </div>
             ))}

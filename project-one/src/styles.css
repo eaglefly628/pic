@@ -75,6 +75,20 @@ body { background: #b8c6db; }
 .fv-draw-line { stroke-dasharray: 1; animation: fvDrawLine .9s ease forwards; }
 .fv-fade-in { opacity: 0; animation: fvFadeIn .9s ease .12s forwards; }
 
+/* 灵性动效 ───────────────────────────── */
+/* 背景壁纸极慢流动，整窗呼吸感 */
+@keyframes fvDrift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+.fv-wallpaper { background: var(--wallpaper); background-size: 180% 180%; animation: fvDrift 28s ease-in-out infinite; }
+/* 圆环入场画出 + 轻缩放 */
+@keyframes fvDonutIn { from { opacity: 0; transform: rotate(-90deg) scale(.84); } to { opacity: 1; transform: rotate(-90deg) scale(1); } }
+.fv-donut-in { animation: fvDonutIn .7s cubic-bezier(.2,.7,.3,1) both; }
+/* 柱状从底部长出 */
+@keyframes fvGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.fv-grow { transform-origin: bottom; animation: fvGrow .55s cubic-bezier(.2,.7,.3,1) both; }
+/* “此刻”点呼吸脉冲 */
+@keyframes fvPulse { 0% { r: 4; opacity: .55; } 70% { r: 12; opacity: 0; } 100% { r: 12; opacity: 0; } }
+.fv-pulse { animation: fvPulse 2.6s ease-out infinite; }
+
 /* ── 交互打磨：统一的 hover / press / focus 反馈 ───────────────────── */
 .fv-root button { -webkit-tap-highlight-color: transparent; }
 
@@ -118,6 +132,10 @@ body { background: #b8c6db; }
   .fv-tap, .fv-btn, .fv-nav, .fv-row, .fv-icnbtn, .fv-card-int { transition: none; }
   .fv-tap:active, .fv-btn:active, .fv-icnbtn:active, .fv-card-int:hover { transform: none; }
   .fv-rise, .fv-draw-line, .fv-fade-in { animation: none; opacity: 1; stroke-dasharray: none; }
+  .fv-wallpaper { animation: none; }
+  .fv-donut-in, .fv-grow { animation: none; transform: none; }
+  .fv-donut-in { transform: rotate(-90deg); }
+  .fv-pulse { display: none; }
 }
 
 /* 让原生控件（下拉、日期选择、复选框等）跟随明暗模式 */
