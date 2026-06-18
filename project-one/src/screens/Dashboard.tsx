@@ -13,6 +13,14 @@ function greetingWord() {
   if (h < 18) return "下午好";
   return "晚上好";
 }
+function greetingEmoji() {
+  const h = new Date().getHours();
+  if (h < 6) return "🌙";
+  if (h < 11) return "🌅";
+  if (h < 14) return "☀️";
+  if (h < 18) return "⛅";
+  return "🌆";
+}
 export default function Dashboard({ view, onOpen, range, setRange }: { view: View; onOpen: (id: string) => void; range: RangeKey; setRange: (r: RangeKey) => void }) {
   const today = new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" });
   const t = view.totals;
@@ -21,7 +29,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
     <div style={{ padding: "28px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>{greetingWord()}，{view.meta.userName}</div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}><span style={{ marginRight: 8 }}>{greetingEmoji()}</span>{greetingWord()}，{view.meta.userName}</div>
           <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 3 }}>{today} · {view.meta.vaultName}{view.meta.real ? "" : " · 示例数据"}</div>
         </div>
       </div>
@@ -31,6 +39,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
         <MetricCard label="总负债" value={t.liabRaw} chip="含信用卡/贷款" chipNote="负债合计" chipColor="var(--red)" />
         <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #5E5CE6)", borderRadius: 14, padding: "20px 22px", boxShadow: "0 10px 26px -8px var(--accent-soft)", color: "#fff" }}>
           <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 85% at 88% 0%, rgba(255,255,255,0.30), transparent 58%)", pointerEvents: "none" }} />
+          <div aria-hidden className="fv-sheen" />
           <div style={{ position: "relative" }}>
             <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>净资产</div>
             <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.01em", marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{fmt(netAnim)}</div>

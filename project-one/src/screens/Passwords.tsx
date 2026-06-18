@@ -121,7 +121,7 @@ function PwVault({ items, clearSec, onMutate }: { items: PasswordItem[]; clearSe
                 <span title={`强度：${st.label}`} style={{ width: 7, height: 7, borderRadius: "50%", background: st.score >= 3 ? "var(--green)" : st.score >= 2 ? "var(--orange)" : "var(--red)" }} />
                 <RowBtn title={reveal[it.id] ? "隐藏" : "显示"} onClick={() => setReveal((r) => ({ ...r, [it.id]: !r[it.id] }))}>{reveal[it.id] ? <IconEyeOff /> : <IconEye />}</RowBtn>
                 <RowBtn title="复制密码" onClick={() => copy(it.password, "pw" + it.id)}>{copied === "pw" + it.id ? <IconCheck stroke="var(--green)" /> : <IconCopy />}</RowBtn>
-                <RowBtn title={it.favorite ? "取消收藏" : "收藏"} onClick={() => toggleFav(it.id)}><IconStar stroke={it.favorite ? "var(--orange)" : "var(--text-tertiary)"} /></RowBtn>
+                <RowBtn title={it.favorite ? "取消收藏" : "收藏"} onClick={() => toggleFav(it.id)}><span key={it.favorite ? "f" : "n"} className={it.favorite ? "fv-pop" : undefined} style={{ display: "inline-flex" }}><IconStar stroke={it.favorite ? "var(--orange)" : "var(--text-tertiary)"} /></span></RowBtn>
                 <RowBtn title="编辑" onClick={() => { setEditing(it); setOpen(true); }}><IconEdit /></RowBtn>
                 <RowBtn title="删除" onClick={() => remove(it.id)}><IconTrash stroke="var(--red)" /></RowBtn>
               </div>
@@ -181,7 +181,7 @@ function PasswordEditor({ open, initial, onClose, onSave }: { open: boolean; ini
         <div style={{ display: "flex", gap: 8 }}>
           <TextField type={show ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} style={{ fontFamily: "ui-monospace, monospace" }} />
           <Btn variant="ghost" type="button" onClick={() => setShow((s) => !s)} style={{ width: 40, padding: 0 }}>{show ? <IconEyeOff /> : <IconEye />}</Btn>
-          <Btn variant="ghost" type="button" title="生成强密码" onClick={() => { setPassword(genPassword(16)); setShow(true); }} style={{ width: 40, padding: 0 }}><IconRefresh /></Btn>
+          <Btn variant="ghost" type="button" title="生成强密码" className="fv-spin-hover" onClick={() => { setPassword(genPassword(16)); setShow(true); }} style={{ width: 40, padding: 0 }}><IconRefresh /></Btn>
         </div>
         {password && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>

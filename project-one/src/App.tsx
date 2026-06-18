@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVault } from "./vault/VaultContext";
 import { useTheme } from "./lib/theme";
 import { buildView, type RangeKey } from "./lib/compute";
@@ -31,9 +31,10 @@ const groupLabel: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 
 
 function navStyle(active: boolean): React.CSSProperties {
   return {
+    position: "relative", zIndex: 1,
     display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none",
     cursor: "pointer", fontSize: 13.5, fontWeight: 500, padding: "7px 10px", borderRadius: 8, marginBottom: 1,
-    background: active ? "var(--accent)" : "transparent", color: active ? "#fff" : "var(--text-secondary)",
+    background: "transparent", color: active ? "#fff" : "var(--text-secondary)",
   };
 }
 
@@ -56,6 +57,12 @@ function Shell({ data }: { data: VaultData }) {
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [selectedId, setSelectedId] = useState<string>(data.dataset.accounts[0]?.id ?? "");
   const [range, setRange] = useState<RangeKey>("1y");
+  const navRef = useRef<HTMLElement>(null);
+  const [navInd, setNavInd] = useState<{ top: number; height: number; left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = navRef.current?.querySelector('[data-active="1"]') as HTMLElement | null;
+    if (el) setNavInd({ top: el.offsetTop, height: el.offsetHeight, left: el.offsetLeft, width: el.offsetWidth });
+  }, [screen]);
 
   const [accEditor, setAccEditor] = useState<{ open: boolean; editing: boolean }>({ open: false, editing: false });
   const [snapEditor, setSnapEditor] = useState(false);
@@ -101,7 +108,8 @@ function Shell({ data }: { data: VaultData }) {
             </div>
           </div>
 
-          <nav className="fv-scroll" style={{ flex: 1, overflowY: "auto", padding: "4px 12px" }}>
+          <nav ref={navRef} className="fv-scroll" style={{ flex: 1, overflowY: "auto", padding: "4px 12px", position: "relative" }}>
+            {navInd && <div aria-hidden className="fv-navhi" style={{ position: "absolute", top: navInd.top, left: navInd.left, width: navInd.width, height: navInd.height, background: "var(--accent)", borderRadius: 8, boxShadow: "0 2px 8px var(--accent-soft)", zIndex: 0 }} />}
             <div style={{ ...groupLabel, padding: "8px 10px 4px" }}>概览</div>
             <NavBtn active={screen === "dashboard"} onClick={() => setScreen("dashboard")} icon={<IconDashboard />} label="仪表盘" />
             <div style={groupLabel}>资金</div>
@@ -206,7 +214,7 @@ function Shell({ data }: { data: VaultData }) {
 
 function NavBtn({ active, onClick, icon, label, badge }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: string }) {
   return (
-    <button onClick={onClick} className={"fv-nav" + (active ? " active" : "")} style={navStyle(active)}>
+    <button onClick={onClick} data-active={active ? "1" : undefined} className={"fv-nav" + (active ? " active" : "")} style={navStyle(active)}>
       {icon}<span>{label}</span>
       {badge != null && <span style={{ marginLeft: "auto", fontSize: 11, color: active ? "rgba(255,255,255,0.85)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{badge}</span>}
     </button>

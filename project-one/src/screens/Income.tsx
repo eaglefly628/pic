@@ -28,9 +28,12 @@ export default function Income() {
   return (
     <div style={{ padding: "24px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
-        <div style={{ background: "linear-gradient(155deg, var(--green), #1FAD66)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 8px 20px -6px rgba(52,199,89,0.4)" }}>
-          <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>每月收入合计</div>
-          <div style={{ fontSize: 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{fmt(mAnim)}</div>
+        <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--green), #1FAD66)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 8px 20px -6px rgba(52,199,89,0.4)" }}>
+          <div aria-hidden className="fv-sheen" />
+          <div style={{ position: "relative" }}>
+            <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>每月收入合计</div>
+            <div style={{ fontSize: 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{fmt(mAnim)}</div>
+          </div>
         </div>
         <Metric label="每年收入合计" value={fmt(yAnim)} />
         <Metric label="收入来源" value={`${items.length} 项`} />
