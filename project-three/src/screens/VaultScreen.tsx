@@ -62,7 +62,7 @@ export default function VaultScreen() {
           </div>
           <div style={{ flex: 1 }} />
           <div style={{ position: "relative" }}>
-            <button onClick={() => setMenu((v) => !v)} onBlur={() => setTimeout(() => setMenu(false), 150)} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "var(--accent)", color: "#fff", fontSize: 13.5, fontWeight: 600, padding: "8px 14px", borderRadius: 9 }}>
+            <button onClick={() => setMenu((v) => !v)} onBlur={() => setTimeout(() => setMenu(false), 150)} className="fv-btn" style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "var(--accent)", color: "#fff", fontSize: 13.5, fontWeight: 600, padding: "8px 14px", borderRadius: 9 }}>
               <IconPlus size={16} stroke="#fff" /> 新建
             </button>
             {menu && (
@@ -70,7 +70,7 @@ export default function VaultScreen() {
                 {TYPES.map((t) => {
                   const Ic = TYPE_ICON[t];
                   return (
-                    <button key={t} onMouseDown={() => { setCreating(t); setMenu(false); }} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", background: "transparent", color: "var(--text-primary)", fontSize: 13.5, padding: "8px 10px", borderRadius: 8 }}>
+                    <button key={t} onMouseDown={() => { setCreating(t); setMenu(false); }} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", background: "transparent", color: "var(--text-primary)", fontSize: 13.5, padding: "8px 10px", borderRadius: 8 }}>
                       <Ic size={15} stroke="var(--text-secondary)" /> {TYPE_LABEL[t]}
                     </button>
                   );
@@ -87,7 +87,7 @@ export default function VaultScreen() {
             list.map((it) => {
               const Ic = TYPE_ICON[it.type];
               return (
-                <button key={it.id} onClick={() => setViewItem(it)} style={rowStyle}>
+                <button key={it.id} onClick={() => setViewItem(it)} className="fv-row" style={rowStyle}>
                   <span style={{ width: 36, height: 36, borderRadius: 10, background: "var(--fill-q)", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}><Ic size={17} stroke="var(--accent)" /></span>
                   <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -112,7 +112,7 @@ export default function VaultScreen() {
 
 function SideItem({ label, count, active, onClick, icon }: { label: string; count: number; active: boolean; onClick: () => void; icon: React.ReactNode }) {
   return (
-    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", background: active ? "var(--fill)" : "transparent", color: active ? "var(--text-primary)" : "var(--text-secondary)", fontSize: 13.5, fontWeight: 500, padding: "8px 10px", borderRadius: 9, marginBottom: 2 }}>
+    <button onClick={onClick} className={"fv-nav" + (active ? " active" : "")} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", background: active ? "var(--fill)" : "transparent", color: active ? "var(--text-primary)" : "var(--text-secondary)", fontSize: 13.5, fontWeight: 500, padding: "8px 10px", borderRadius: 9, marginBottom: 2 }}>
       <span style={{ display: "flex", color: active ? "var(--accent)" : "var(--text-tertiary)" }}>{icon}</span>
       <span style={{ flex: 1, textAlign: "left" }}>{label}</span>
       <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>{count}</span>

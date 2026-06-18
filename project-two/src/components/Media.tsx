@@ -9,6 +9,7 @@ export function MediaTile({ item, onOpen }: { item: MediaItem; onOpen: () => voi
   return (
     <button
       onClick={onOpen}
+      className="fv-tile"
       style={{
         position: "relative", aspectRatio: "1 / 1", width: "100%", padding: 0, border: "none",
         borderRadius: 10, overflow: "hidden", cursor: "pointer", background: "var(--fill-quaternary)",

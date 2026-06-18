@@ -16,7 +16,7 @@ export function Btn({ children, onClick, variant = "primary", disabled, type = "
     danger: { background: "rgba(255,59,48,0.12)", color: "var(--red)" },
   };
   return (
-    <button type={type} onClick={onClick} disabled={disabled} style={{
+    <button type={type} onClick={onClick} disabled={disabled} className="fv-btn" style={{
       ...v[variant], border: v[variant].border ?? "none", borderRadius: 10, padding: "9px 16px",
       fontSize: 13.5, fontWeight: 600, opacity: disabled ? 0.5 : 1, cursor: disabled ? "default" : "pointer",
       width: full ? "100%" : undefined, transition: "filter .15s, opacity .15s", ...style,

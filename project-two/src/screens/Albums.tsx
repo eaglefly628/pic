@@ -47,7 +47,7 @@ export default function Albums({ onOpen }: { onOpen: (list: MediaItem[], i: numb
             const cover = list[0];
             const url = cover && thumbUrl(cover.id);
             return (
-              <button key={a.id} onClick={() => setSel(a.id)} style={{ ...card, padding: 0, border: "none", cursor: "pointer", overflow: "hidden", textAlign: "left" }}>
+              <button key={a.id} onClick={() => setSel(a.id)} className="fv-card-int" style={{ ...card, padding: 0, border: "none", cursor: "pointer", overflow: "hidden", textAlign: "left" }}>
                 <div style={{ aspectRatio: "4/3", background: "var(--fill-quaternary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {url ? <img src={url} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <IconAlbum size={26} stroke="var(--text-tertiary)" />}
                 </div>

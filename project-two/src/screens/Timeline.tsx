@@ -50,7 +50,7 @@ export default function Timeline({ onOpen }: { onOpen: (list: MediaItem[], i: nu
               const url = thumbUrl(it.id);
               const ago = nowY - new Date(it.takenAt).getFullYear();
               return (
-                <button key={it.id} onClick={() => onOpen(memories, i)} style={{ position: "relative", flexShrink: 0, width: 138, height: 138, borderRadius: 12, overflow: "hidden", border: "none", cursor: "pointer", padding: 0, background: "var(--fill-quaternary)" }}>
+                <button key={it.id} onClick={() => onOpen(memories, i)} className="fv-tile" style={{ position: "relative", flexShrink: 0, width: 138, height: 138, borderRadius: 12, overflow: "hidden", border: "none", cursor: "pointer", padding: 0, background: "var(--fill-quaternary)" }}>
                   {url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
                   <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "16px 9px 7px", background: "linear-gradient(transparent, rgba(0,0,0,.65))", color: "#fff", fontSize: 12, fontWeight: 600, textAlign: "left" }}>{ago} 年前</div>
                 </button>
@@ -66,7 +66,7 @@ export default function Timeline({ onOpen }: { onOpen: (list: MediaItem[], i: nu
           const cover = y.items[0];
           const url = cover && thumbUrl(cover.id);
           return (
-            <button key={y.key} onClick={() => setSel(y.key)} style={{ border: "none", cursor: "pointer", padding: 0, background: "none", textAlign: "left" }}>
+            <button key={y.key} onClick={() => setSel(y.key)} className="fv-card-int" style={{ border: "none", cursor: "pointer", padding: 0, background: "none", textAlign: "left" }}>
               <div style={{ position: "relative", aspectRatio: "1/1", borderRadius: 14, overflow: "hidden", background: "var(--fill-quaternary)" }}>
                 {url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(transparent 55%, rgba(0,0,0,.6))" }} />

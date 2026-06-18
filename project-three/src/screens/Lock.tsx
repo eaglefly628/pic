@@ -43,7 +43,8 @@ export default function Lock() {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg)" }}>
       <div style={{ ...card, width: 380, maxWidth: "100%", padding: "34px 30px", animation: "fvPop .25s ease" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 22 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 16, background: "linear-gradient(160deg, var(--accent), var(--accent2))", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+          <div style={{ position: "relative", overflow: "hidden", width: 56, height: 56, borderRadius: 16, background: "linear-gradient(160deg, var(--accent), var(--accent2))", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+            <div aria-hidden className="fv-sheen" />
             <IconLock size={26} stroke="#fff" />
           </div>
           <div style={{ fontSize: 19, fontWeight: 700 }}>{isSetup ? "创建主密码" : "解锁保险库"}</div>

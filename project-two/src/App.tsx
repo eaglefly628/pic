@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import type { MediaItem } from "./types";
 import { useTheme } from "./lib/theme";
 import { useLibrary } from "./lib/library";
@@ -21,7 +21,7 @@ const glass: React.CSSProperties = { backdropFilter: "blur(40px) saturate(180%)"
 const groupLabel: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", padding: "14px 10px 4px", letterSpacing: "0.02em" };
 
 function navStyle(active: boolean): React.CSSProperties {
-  return { display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 500, padding: "7px 10px", borderRadius: 8, marginBottom: 1, background: active ? "var(--accent)" : "transparent", color: active ? "#fff" : "var(--text-secondary)" };
+  return { position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 500, padding: "7px 10px", borderRadius: 8, marginBottom: 1, background: "transparent", color: active ? "#fff" : "var(--text-secondary)" };
 }
 
 const TITLES: Record<Screen, string> = { summary: "总览", gallery: "图库", timeline: "时间", places: "地点", map: "地图", events: "事件", people: "人物", albums: "相册", cleanup: "整理", import: "导入", settings: "设置" };
@@ -32,9 +32,15 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("summary");
   const [lb, setLb] = useState<{ list: MediaItem[]; index: number } | null>(null);
   const open = (list: MediaItem[], index: number) => setLb({ list, index });
+  const navRef = useRef<HTMLElement>(null);
+  const [navInd, setNavInd] = useState<{ top: number; height: number; left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = navRef.current?.querySelector('[data-active="1"]') as HTMLElement | null;
+    if (el) setNavInd({ top: el.offsetTop, height: el.offsetHeight, left: el.offsetLeft, width: el.offsetWidth });
+  }, [screen]);
 
   return (
-    <div className="fv-root" data-theme={theme} style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--wallpaper)", padding: 24 }}>
+    <div className="fv-root fv-wallpaper" data-theme={theme} style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ position: "relative", width: 1320, height: "88vh", maxWidth: "100%", borderRadius: 13, overflow: "hidden", boxShadow: "var(--win-shadow)", display: "flex", background: "var(--bg-content)", border: "0.5px solid var(--separator-strong)" }}>
         {/* 侧栏 */}
         <aside style={{ width: 224, flex: "none", background: "var(--bg-sidebar)", ...glass, borderRight: "0.5px solid var(--separator)", display: "flex", flexDirection: "column" }}>
@@ -48,7 +54,8 @@ export default function App() {
               <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>本地 · 不联网</div>
             </div>
           </div>
-          <nav className="fv-scroll" style={{ flex: 1, overflowY: "auto", padding: "4px 12px" }}>
+          <nav ref={navRef} className="fv-scroll" style={{ flex: 1, overflowY: "auto", padding: "4px 12px", position: "relative" }}>
+            {navInd && <div aria-hidden className="fv-navhi" style={{ position: "absolute", top: navInd.top, left: navInd.left, width: navInd.width, height: navInd.height, background: "var(--accent)", borderRadius: 8, boxShadow: "0 2px 8px var(--accent-soft)", zIndex: 0 }} />}
             <div style={{ ...groupLabel, padding: "8px 10px 4px" }}>浏览</div>
             <Nav active={screen === "summary"} onClick={() => setScreen("summary")} icon={<IconSummary />} label="总览" />
             <Nav active={screen === "gallery"} onClick={() => setScreen("gallery")} icon={<IconPhoto />} label="图库" badge={String(items.filter((m) => !m.private).length)} />
@@ -74,8 +81,8 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", gap: 6, width: 180, height: 30, padding: "0 10px", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)" }}>
               <IconSearch /><span style={{ fontSize: 12.5, color: "var(--text-tertiary)" }}>搜索（即将支持）</span>
             </div>
-            <button onClick={toggle} title="切换外观" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-secondary)" }}>{theme === "light" ? "🌙" : "☀️"}</button>
-            <button onClick={() => setScreen("import")} style={{ display: "flex", alignItems: "center", gap: 6, height: 30, padding: "0 12px", borderRadius: 8, background: "var(--accent)", border: "none", cursor: "pointer", color: "#fff", fontSize: 12.5, fontWeight: 500 }}><IconUpload size={14} stroke="#fff" />导入</button>
+            <button onClick={toggle} title="切换外观" className="fv-icnbtn" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-secondary)" }}>{theme === "light" ? "🌙" : "☀️"}</button>
+            <button onClick={() => setScreen("import")} className="fv-btn" style={{ display: "flex", alignItems: "center", gap: 6, height: 30, padding: "0 12px", borderRadius: 8, background: "var(--accent)", border: "none", cursor: "pointer", color: "#fff", fontSize: 12.5, fontWeight: 500 }}><IconUpload size={14} stroke="#fff" />导入</button>
           </div>
 
           <div className="fv-scroll" style={{ flex: 1, overflowY: "auto" }}>
@@ -101,7 +108,7 @@ export default function App() {
 
 function Nav({ active, onClick, icon, label, badge }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: string }) {
   return (
-    <button onClick={onClick} style={navStyle(active)}>
+    <button onClick={onClick} data-active={active ? "1" : undefined} className={"fv-nav" + (active ? " active" : "")} style={navStyle(active)}>
       {icon}<span>{label}</span>
       {badge != null && <span style={{ marginLeft: "auto", fontSize: 11, color: active ? "rgba(255,255,255,0.85)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{badge}</span>}
     </button>

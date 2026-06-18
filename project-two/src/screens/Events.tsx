@@ -52,7 +52,7 @@ export default function Events({ onOpen }: { onOpen: (list: MediaItem[], i: numb
           const cover = e.items[0];
           const url = cover && thumbUrl(cover.id);
           return (
-            <button key={e.id} onClick={() => setSel(e.id)} style={{ ...card, padding: 0, border: "none", cursor: "pointer", overflow: "hidden", textAlign: "left" }}>
+            <button key={e.id} onClick={() => setSel(e.id)} className="fv-card-int" style={{ ...card, padding: 0, border: "none", cursor: "pointer", overflow: "hidden", textAlign: "left" }}>
               <div style={{ aspectRatio: "4/3", background: "var(--fill-quaternary)" }}>
                 {url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
               </div>

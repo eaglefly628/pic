@@ -24,7 +24,7 @@ export default function App() {
         <Tab active={view === "vault"} onClick={() => setView("vault")}>保险库</Tab>
         <Tab active={view === "settings"} onClick={() => setView("settings")}>设置</Tab>
         <div style={{ flex: 1 }} />
-        <button onClick={lock} style={lockBtn} title="立即锁定">
+        <button onClick={lock} className="fv-btn" style={lockBtn} title="立即锁定">
           <IconLock size={14} stroke="currentColor" /> 锁定
         </button>
       </header>
@@ -42,7 +42,7 @@ export default function App() {
 
 function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} style={{ border: "none", background: active ? "var(--fill)" : "transparent", color: active ? "var(--text-primary)" : "var(--text-secondary)", fontSize: 13.5, fontWeight: 500, padding: "7px 14px", borderRadius: 9 }}>{children}</button>
+    <button onClick={onClick} className={"fv-nav fv-tap" + (active ? " active" : "")} style={{ border: "none", background: active ? "var(--fill)" : "transparent", color: active ? "var(--text-primary)" : "var(--text-secondary)", fontSize: 13.5, fontWeight: 500, padding: "7px 14px", borderRadius: 9 }}>{children}</button>
   );
 }
 

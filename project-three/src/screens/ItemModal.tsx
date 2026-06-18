@@ -42,11 +42,11 @@ export default function ItemModal({ item, newType, onClose }: { item?: VaultItem
             {!edit && <div style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>{TYPE_LABEL[cur.type]}</div>}
           </div>
           {item && !edit && (
-            <button onClick={() => toggleFavorite(item.id)} style={iconBtn} title="收藏">
-              <IconStar size={17} stroke={item.favorite ? "var(--orange)" : "var(--text-tertiary)"} />
+            <button onClick={() => toggleFavorite(item.id)} className="fv-icnbtn" style={iconBtn} title="收藏">
+              <span key={item.favorite ? "f" : "n"} className={item.favorite ? "fv-pop" : undefined} style={{ display: "inline-flex" }}><IconStar size={17} stroke={item.favorite ? "var(--orange)" : "var(--text-tertiary)"} /></span>
             </button>
           )}
-          <button onClick={onClose} style={iconBtn}><IconClose stroke="var(--text-tertiary)" /></button>
+          <button onClick={onClose} className="fv-icnbtn" style={iconBtn}><IconClose stroke="var(--text-tertiary)" /></button>
         </div>
 
         <div style={{ padding: "18px 20px", overflow: "auto", flex: 1 }}>
@@ -117,8 +117,8 @@ function ViewRow({ label, value, secret, link, shown, onToggle, onCopy }: { labe
         <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontFamily: secret ? "ui-monospace, monospace" : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-primary)" }}>
           {masked ? "••••••••••" : link ? <a href={/^https?:\/\//.test(value!) ? value : `https://${value}`} target="_blank" rel="noreferrer" style={{ color: "var(--accent2)", textDecoration: "none" }}>{value}</a> : value}
         </span>
-        {secret && <button onClick={onToggle} style={iconBtn} title={shown ? "隐藏" : "显示"}>{shown ? <IconEyeOff stroke="var(--text-tertiary)" /> : <IconEye stroke="var(--text-tertiary)" />}</button>}
-        <button onClick={onCopy} style={iconBtn} title="复制"><IconCopy stroke="var(--text-secondary)" /></button>
+        {secret && <button onClick={onToggle} className="fv-icnbtn" style={iconBtn} title={shown ? "隐藏" : "显示"}>{shown ? <IconEyeOff stroke="var(--text-tertiary)" /> : <IconEye stroke="var(--text-tertiary)" />}</button>}
+        <button onClick={onCopy} className="fv-icnbtn" style={iconBtn} title="复制"><IconCopy stroke="var(--text-secondary)" /></button>
       </div>
     </div>
   );
@@ -140,7 +140,7 @@ function TotpRow({ secret, copy }: { secret: string; copy: (t: string, l?: strin
       <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--fill-q)", borderRadius: 10, padding: "9px 11px" }}>
         <span style={{ flex: 1, fontSize: 18, fontWeight: 700, letterSpacing: 3, fontFamily: "ui-monospace, monospace", color: "var(--text-primary)" }}>{code.replace(/(\d{3})(\d{3})/, "$1 $2")}</span>
         <span style={{ fontSize: 12, color: left <= 5 ? "var(--red)" : "var(--text-tertiary)", width: 26, textAlign: "right" }}>{left}s</span>
-        <button onClick={() => copy(code, "验证码")} style={iconBtn} title="复制"><IconCopy stroke="var(--text-secondary)" /></button>
+        <button onClick={() => copy(code, "验证码")} className="fv-icnbtn" style={iconBtn} title="复制"><IconCopy stroke="var(--text-secondary)" /></button>
       </div>
     </div>
   );
@@ -203,8 +203,8 @@ function PasswordEdit({ value, onChange, shown, onToggle }: { value: string; onC
       <div style={labelCss}>密码</div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, ...inputStyle, padding: "4px 6px 4px 12px" }}>
         <input value={value} type={shown ? "text" : "password"} onChange={(e) => onChange(e.target.value)} autoComplete="off" style={{ flex: 1, border: "none", background: "transparent", color: "var(--text-primary)", fontSize: 14, fontFamily: "ui-monospace, monospace" }} />
-        <button type="button" onClick={onToggle} style={iconBtn}>{shown ? <IconEyeOff stroke="var(--text-tertiary)" /> : <IconEye stroke="var(--text-tertiary)" />}</button>
-        <button type="button" onClick={() => onChange(generatePassword({ length: len, upper: true, lower: true, digits: true, symbols: sym }))} style={iconBtn} title="生成强密码"><IconRefresh stroke="var(--accent)" /></button>
+        <button type="button" onClick={onToggle} className="fv-icnbtn" style={iconBtn}>{shown ? <IconEyeOff stroke="var(--text-tertiary)" /> : <IconEye stroke="var(--text-tertiary)" />}</button>
+        <button type="button" onClick={() => onChange(generatePassword({ length: len, upper: true, lower: true, digits: true, symbols: sym }))} className="fv-icnbtn fv-spin-hover" style={iconBtn} title="生成强密码"><IconRefresh stroke="var(--accent)" /></button>
         <button type="button" onClick={() => setOpts((v) => !v)} style={{ ...iconBtn, fontSize: 11, color: "var(--text-tertiary)", width: "auto", padding: "0 6px" }}>选项</button>
       </div>
       {value && (
@@ -231,8 +231,8 @@ function FieldsEditor({ fields, onChange }: { fields: CustomField[]; onChange: (
         <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
           <input value={f.label} onChange={(e) => upd(i, { label: e.target.value })} placeholder="名称（如 宽带账号）" style={{ ...inputStyle, flex: "0 0 38%" }} />
           <input value={f.value} onChange={(e) => upd(i, { value: e.target.value })} placeholder="内容" type={f.secret ? "password" : "text"} autoComplete="off" style={{ ...inputStyle, flex: 1 }} />
-          <button type="button" onClick={() => upd(i, { secret: !f.secret })} style={iconBtn} title="设为隐藏">{f.secret ? <IconEyeOff stroke="var(--text-tertiary)" /> : <IconEye stroke="var(--text-tertiary)" />}</button>
-          <button type="button" onClick={() => onChange(fields.filter((_, j) => j !== i))} style={iconBtn}><IconTrash stroke="var(--text-tertiary)" /></button>
+          <button type="button" onClick={() => upd(i, { secret: !f.secret })} className="fv-icnbtn" style={iconBtn} title="设为隐藏">{f.secret ? <IconEyeOff stroke="var(--text-tertiary)" /> : <IconEye stroke="var(--text-tertiary)" />}</button>
+          <button type="button" onClick={() => onChange(fields.filter((_, j) => j !== i))} className="fv-icnbtn" style={iconBtn}><IconTrash stroke="var(--text-tertiary)" /></button>
         </div>
       ))}
       <button type="button" onClick={() => onChange([...fields, { label: "", value: "" }])} style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 12.5, fontWeight: 600, marginTop: 2 }}>+ 添加字段</button>

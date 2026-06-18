@@ -74,7 +74,7 @@ export default function SettingsScreen() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ ...card, padding: "18px 20px", marginBottom: 16 }}>
+    <div className="fv-rise" style={{ ...card, padding: "18px 20px", marginBottom: 16 }}>
       <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 12 }}>{title}</div>
       {children}
     </div>

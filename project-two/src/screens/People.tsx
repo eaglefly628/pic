@@ -69,7 +69,7 @@ export default function People({ onOpen }: { onOpen: (list: MediaItem[], i: numb
           {sorted.map((p) => {
             const cover = items.find((i) => i.people?.includes(p.id));
             return (
-              <button key={p.id} onClick={() => { setSel(p.id); setEditing(p.name || ""); }} style={{ ...card, padding: "16px 12px", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 9 }}>
+              <button key={p.id} onClick={() => { setSel(p.id); setEditing(p.name || ""); }} className="fv-card-int" style={{ ...card, padding: "16px 12px", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 9 }}>
                 <Avatar url={avatars.get(p.id) || (cover ? thumbUrl(cover.id) : undefined)} size={84} />
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>{p.name || "未命名"}</div>
                 <div style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>{p.count} 张</div>
