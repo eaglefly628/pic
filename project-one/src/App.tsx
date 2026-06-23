@@ -6,7 +6,7 @@ import type { VaultData } from "./vault/types";
 import { addAccount, addSnapshot, deleteAccount, updateAccount } from "./vault/ops";
 import {
   IconShield, IconDashboard, IconCard, IconLock, IconUser, IconImport, IconGear, IconChevron, IconSearch, IconKey,
-  IconPercent, IconWallet, IconChartUp, IconMarkets, IconTerminal,
+  IconPercent, IconWallet, IconChartUp, IconMarkets,
 } from "./icons";
 import Unlock from "./screens/Unlock";
 import Dashboard from "./screens/Dashboard";
@@ -20,11 +20,10 @@ import Interest from "./screens/Interest";
 import Income from "./screens/Income";
 import Budget from "./screens/Budget";
 import Markets from "./screens/Markets";
-import DevWorld from "./screens/DevWorld";
 import Secret from "./screens/Secret";
 import { AccountEditor, SnapshotEditor } from "./screens/editors";
 
-type Screen = "dashboard" | "accounts" | "detail" | "passwords" | "info" | "import" | "settings" | "interest" | "income" | "budget" | "markets" | "dev";
+type Screen = "dashboard" | "accounts" | "detail" | "passwords" | "info" | "import" | "settings" | "interest" | "income" | "budget" | "markets";
 
 const glass: React.CSSProperties = {
   backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)",
@@ -87,7 +86,6 @@ function Shell({ data }: { data: VaultData }) {
   const TITLES: Record<Screen, string> = {
     dashboard: "仪表盘", accounts: "资金账户", detail: view.detail.name, passwords: "密码保险箱",
     info: "个人信息", import: "导入 / 导出", settings: "设置", interest: "利息预测", income: "收入情况", budget: "预算与预测", markets: "财经行情",
-    dev: "开发世界",
   };
   const pageTitle = TITLES[screen];
 
@@ -116,8 +114,6 @@ function Shell({ data }: { data: VaultData }) {
             <div style={{ ...groupLabel, padding: "8px 10px 4px" }}>概览</div>
             <NavBtn active={screen === "dashboard"} onClick={() => setScreen("dashboard")} icon={<IconDashboard />} label="仪表盘" />
             <NavBtn active={screen === "markets"} onClick={() => setScreen("markets")} icon={<IconMarkets />} label="财经行情" />
-            <div style={groupLabel}>工作空间</div>
-            <NavBtn active={screen === "dev"} onClick={() => setScreen("dev")} icon={<IconTerminal />} label="开发世界" />
             <div style={groupLabel}>资金</div>
             <NavBtn active={screen === "accounts" || screen === "detail"} onClick={() => setScreen("accounts")} icon={<IconCard />} label="资金账户" badge={String(view.meta.accountCount)} />
             <NavBtn active={screen === "interest"} onClick={() => setScreen("interest")} icon={<IconPercent />} label="利息预测" />
@@ -191,7 +187,6 @@ function Shell({ data }: { data: VaultData }) {
             {screen === "income" && <Income />}
             {screen === "budget" && <Budget />}
             {screen === "markets" && <Markets />}
-            {screen === "dev" && <DevWorld userName={view.meta.userName} />}
           </div>
         </main>
 

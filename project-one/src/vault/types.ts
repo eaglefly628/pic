@@ -74,53 +74,6 @@ export interface MarketConfig {
   watch: WatchItem[];
 }
 
-/** 「开发世界」：个人工作空间（任务 / 笔记 / 代码片段 / 书签） */
-export type TaskStatus = "todo" | "doing" | "done";
-export type TaskPriority = "low" | "med" | "high";
-export interface DevTask {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  due?: string;        // YYYY-MM-DD
-  tags?: string[];
-  note?: string;
-  createdAt: number;
-  updatedAt: number;
-}
-export interface DevNote {
-  id: string;
-  title: string;
-  body: string;        // 纯文本/Markdown
-  category?: string;
-  tags?: string[];
-  pinned?: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
-export interface DevSnippet {
-  id: string;
-  title: string;
-  lang?: string;
-  code: string;
-  tags?: string[];
-  createdAt: number;
-  updatedAt: number;
-}
-export interface DevLink {
-  id: string;
-  title: string;
-  url: string;
-  category?: string;
-  createdAt: number;
-}
-export interface DevWorld {
-  tasks: DevTask[];
-  notes: DevNote[];
-  snippets: DevSnippet[];
-  links: DevLink[];
-}
-
 /** 解锁后内存中的完整金库数据 */
 export interface VaultData {
   dataset: Dataset; // 资金账户与历史快照
@@ -135,8 +88,6 @@ export interface VaultData {
   expenses?: ExpenseItem[];
   /** 财经行情：自选清单与 API key */
   markets?: MarketConfig;
-  /** 开发世界：个人工作空间 */
-  devWorld?: DevWorld;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
