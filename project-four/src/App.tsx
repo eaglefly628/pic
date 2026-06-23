@@ -7,12 +7,13 @@ import Tasks from "./screens/dev/Tasks";
 import Notes from "./screens/dev/Notes";
 import Snippets from "./screens/dev/Snippets";
 import Bookmarks from "./screens/dev/Bookmarks";
+import Life from "./screens/dev/Life";
 import { IconLock, IconTerminal } from "./icons";
 
-type View = "overview" | "tasks" | "notes" | "snippets" | "links" | "settings";
+type View = "overview" | "tasks" | "notes" | "snippets" | "links" | "life" | "settings";
 const TABS: { v: View; l: string }[] = [
   { v: "overview", l: "概览" }, { v: "tasks", l: "任务" }, { v: "notes", l: "笔记" },
-  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "settings", l: "设置" },
+  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "settings", l: "设置" },
 ];
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
           {view === "notes" && <Notes data={data} mut={update} />}
           {view === "snippets" && <Snippets data={data} mut={update} />}
           {view === "links" && <Bookmarks data={data} mut={update} />}
+          {view === "life" && <Life data={data} mut={update} />}
           {view === "settings" && <SettingsScreen />}
         </div>
       </main>

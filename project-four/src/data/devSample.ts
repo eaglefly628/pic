@@ -1,5 +1,6 @@
 // 首次创建时的示例内容（可随时编辑/删除）。
 import type { DevData } from "../types";
+import { presetCollections } from "./lifeSample";
 
 let _n = 0;
 const id = (p: string) => p + "_" + (Date.now() + _n++).toString(36);
@@ -7,9 +8,12 @@ const day = (offset: number) => { const d = new Date(); d.setDate(d.getDate() + 
 
 export function sampleData(): DevData {
   const now = Date.now();
+  const life = presetCollections();
   return {
     settings: { autoLockMin: 5 },
     updatedAt: now,
+    collections: life.collections,
+    lifeItems: life.items,
     tasks: [
       { id: id("t"), title: "梳理本周需求 & 排优先级", status: "doing", priority: "high", due: day(0), tags: ["计划"], createdAt: now, updatedAt: now },
       { id: id("t"), title: "Review 同事的 PR（支付模块）", status: "todo", priority: "high", due: day(1), tags: ["代码评审"], createdAt: now, updatedAt: now },
