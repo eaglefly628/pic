@@ -126,3 +126,27 @@ export const IconChartUp = ({ size = 17, stroke = "currentColor", width = 1.7 }:
 export const IconMarkets = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
   <svg {...base(size, stroke, width)}><path d="M4 4v16h16" /><rect x="7" y="9" width="2.6" height="7" rx="0.8" /><rect x="12.5" y="6" width="2.6" height="10" rx="0.8" /><path d="M8.3 9V7M8.3 18v-2M13.8 6V4.5M13.8 18v-2" /></svg>
 );
+export const IconTerminal = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="m7 9 3 3-3 3" /><path d="M13 15h4" /></svg>
+);
+export const IconCalendar = ({ size = 16, stroke = "currentColor", width = 1.8 }: P) => (
+  <svg {...base(size, stroke, width)}><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 9.5h18" /><path d="M8 3v4M16 3v4" /></svg>
+);
+export const IconList = ({ size = 16, stroke = "currentColor", width = 1.8 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" /></svg>
+);
+export const IconNote = ({ size = 16, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M6 3h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M14 3v4h4" /><path d="M8.5 13h7M8.5 16.5h4.5" /></svg>
+);
+export const IconCode = ({ size = 16, stroke = "currentColor", width = 1.9 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="m9 8-4 4 4 4" /><path d="m15 8 4 4-4 4" /><path d="m13 6-2 12" /></svg>
+);
+export const IconLink = ({ size = 15, stroke = "currentColor", width = 1.8 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="m10 14 4-4" /><path d="M12.5 7.5 14 6a3.5 3.5 0 0 1 5 5l-1.5 1.5" /><path d="M11.5 16.5 10 18a3.5 3.5 0 0 1-5-5l1.5-1.5" /></svg>
+);
+export const IconPin = ({ size = 14, stroke = "currentColor", width = 1.8 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M12 17v5" /><path d="M9 3.5h6l-1 6.5 2.5 2.5a1 1 0 0 1-.7 1.7H8.2a1 1 0 0 1-.7-1.7L10 10 9 3.5Z" /></svg>
+);
+export const IconFlag = ({ size = 14, stroke = "currentColor", width = 1.9 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M5 21V4" /><path d="M5 4.5h11l-2 3.5 2 3.5H5" /></svg>
+);
