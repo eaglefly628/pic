@@ -8,22 +8,24 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
     --accent: #007AFF; --text: #1d1d1f; --text2: #6e6e73; --text3: #a1a1a6;
-    --card: rgba(255,255,255,0.78); --sep: rgba(0,0,0,0.08);
+    --card: rgba(255,255,255,0.80); --sep: rgba(0,0,0,0.08);
   }
   html, body { height: 100%; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased; color: var(--text);
     background: linear-gradient(150deg, #e7d8ef 0%, #d3e0f6 46%, #d9efe7 100%);
-    display: flex; flex-direction: column; overflow: hidden;
+    display: flex; flex-direction: column; overflow: hidden; transition: background .4s ease;
   }
+  body.scene-male   { background: linear-gradient(150deg, #dde7f0 0%, #d7e8e2 52%, #e3ebf1 100%); }
+  body.scene-female { background: linear-gradient(150deg, #f6e0ea 0%, #efe1f4 50%, #f8eadf 100%); }
   /* 顶部菜单 */
   #bar {
     height: 50px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px;
     background: rgba(255,255,255,0.6); backdrop-filter: blur(30px) saturate(180%);
     -webkit-backdrop-filter: blur(30px) saturate(180%); border-bottom: 0.5px solid var(--sep); z-index: 10;
   }
-  .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; margin-right: 14px; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; margin-right: 14px; cursor: pointer; }
   .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(160deg, var(--accent), #5E5CE6); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 800; }
   .tab { border: none; background: transparent; cursor: pointer; font-size: 13.5px; font-weight: 500; color: var(--text2); padding: 7px 14px; border-radius: 9px; }
   .tab:hover { background: rgba(0,0,0,0.05); }
@@ -34,96 +36,222 @@
   #stage { flex: 1; position: relative; min-height: 0; }
   iframe { width: 100%; height: 100%; border: none; display: none; background: #fff; }
   iframe.show { display: block; }
-  /* 首页 */
-  #home { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; gap: 28px; overflow: auto; }
-  #home.hide { display: none; }
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; overflow: auto; padding: 40px 32px 48px; }
+  .screen.hide { display: none; }
+
+  /* 首页：两扇门 */
+  #home { justify-content: center; gap: 30px; }
   .welcome { text-align: center; }
-  .welcome h1 { font-size: 26px; letter-spacing: -0.01em; }
+  .welcome h1 { font-size: 27px; letter-spacing: -0.01em; }
   .welcome p { color: var(--text2); font-size: 14px; margin-top: 8px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 280px)); gap: 18px; }
-  .card {
-    background: var(--card); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border: 0.5px solid var(--sep); border-radius: 18px; padding: 22px; cursor: pointer; text-align: left;
-    box-shadow: 0 8px 28px -12px rgba(20,20,40,0.28); transition: transform .15s, box-shadow .15s;
+  .doors { display: flex; gap: 22px; width: 100%; max-width: 880px; }
+  .door {
+    flex: 1; min-height: 320px; border: none; cursor: pointer; border-radius: 24px; padding: 30px 28px;
+    color: #fff; text-align: left; display: flex; flex-direction: column; position: relative; overflow: hidden;
+    box-shadow: 0 18px 50px -18px rgba(20,20,40,0.45); transition: transform .18s, box-shadow .18s;
   }
-  .card:hover { transform: translateY(-3px); box-shadow: 0 16px 40px -14px rgba(20,20,40,0.4); }
-  .card.disabled { cursor: default; opacity: 0.55; }
-  .card .ico { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #fff; margin-bottom: 14px; }
-  .card h3 { font-size: 17px; }
-  .card .desc { font-size: 12.5px; color: var(--text2); margin-top: 6px; line-height: 1.6; }
-  .foot { font-size: 12px; color: var(--text3); }
+  .door:hover { transform: translateY(-4px); box-shadow: 0 26px 64px -20px rgba(20,20,40,0.55); }
+  .door.male   { background: linear-gradient(155deg, #3b6fb0 0%, #2f7d6b 60%, #274c5e 100%); }
+  .door.female { background: linear-gradient(155deg, #e683a4 0%, #c77fd8 58%, #b66ab0 100%); }
+  .door .demoji { font-size: 46px; }
+  .door .dtag { margin-top: auto; font-size: 13px; opacity: 0.85; font-weight: 600; letter-spacing: 0.04em; }
+  .door .dtitle { font-size: 30px; font-weight: 800; margin-top: 4px; letter-spacing: -0.01em; }
+  .door .dsub { font-size: 13px; opacity: 0.92; margin-top: 12px; line-height: 1.7; }
+  .door .denter { margin-top: 18px; font-size: 14px; font-weight: 700; }
+  .door .glow { position: absolute; right: -40px; top: -40px; width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,0.16); }
+
+  .sharedrow { width: 100%; max-width: 880px; }
+  .sharedlabel { font-size: 12px; color: var(--text3); font-weight: 600; margin-bottom: 10px; letter-spacing: 0.04em; }
+  .sharedcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .scard { background: var(--card); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 0.5px solid var(--sep); border-radius: 14px; padding: 14px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; text-align: left; transition: transform .15s; }
+  .scard:hover { transform: translateY(-2px); }
+  .scard .ico { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; flex: none; }
+  .scard h4 { font-size: 14px; } .scard .d { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+  /* 男主 / 女主世界 */
+  .back { align-self: flex-start; border: none; background: rgba(255,255,255,0.7); border: 0.5px solid var(--sep); cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text2); padding: 7px 14px; border-radius: 10px; margin-bottom: 18px; }
+  .back:hover { background: #fff; }
+  .whead { text-align: center; margin-bottom: 26px; }
+  .whead h2 { font-size: 25px; letter-spacing: -0.01em; }
+  .whead p { color: var(--text2); font-size: 13.5px; margin-top: 7px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 14px; width: 100%; max-width: 920px; }
+  .tile {
+    position: relative; background: var(--card); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 0.5px solid var(--sep); border-radius: 16px; padding: 16px; cursor: pointer; text-align: left;
+    box-shadow: 0 8px 24px -14px rgba(20,20,40,0.3); transition: transform .15s, box-shadow .15s; display: flex; flex-direction: column;
+  }
+  .tile:hover { transform: translateY(-3px); box-shadow: 0 16px 36px -16px rgba(20,20,40,0.42); }
+  .tile.soon { cursor: default; }
+  .tile.soon:hover { transform: none; box-shadow: 0 8px 24px -14px rgba(20,20,40,0.3); }
+  .tico { width: 46px; height: 46px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; margin-bottom: 12px; }
+  .tname { font-size: 15px; font-weight: 700; }
+  .tdesc { font-size: 11.5px; color: var(--text2); margin-top: 5px; line-height: 1.55; min-height: 34px; }
+  .badge { margin-top: 11px; align-self: flex-start; font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+  .badge.soon { background: rgba(0,0,0,0.05); color: var(--text3); }
+  .badge.live { background: rgba(0,122,255,0.12); color: var(--accent); }
+  .foot { font-size: 12px; color: var(--text3); margin-top: 30px; text-align: center; }
+  /* toast */
+  #toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1d1d1f; color: #fff; font-size: 13px; padding: 10px 18px; border-radius: 11px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 50; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
-<body>
+<body class="scene-home">
   <div id="bar">
-    <div class="brand"><span class="logo">家</span>我家里的一切</div>
-    <button class="tab active" data-app="home">首页</button>
-    <button class="tab" data-app="finance">家庭理财</button>
-    <button class="tab" data-app="gallery">家庭影像</button>
-    <button class="tab" data-app="vault">家庭密码</button>
-    <button class="tab" data-app="dev">开发世界</button>
+    <div class="brand" data-go="home"><span class="logo">家</span>我家里的一切</div>
+    <button class="tab active" data-go="home">入口</button>
+    <button class="tab" data-go="male">男主</button>
+    <button class="tab" data-go="female">女主</button>
     <span class="spacer"></span>
     <span class="hint">本地 · 私密 · 不上传</span>
   </div>
 
   <div id="stage">
-    <div id="home">
-      <div class="welcome">
-        <h1>我家里的一切</h1>
-        <p>我们家的应用都在这里 · 选择一个进入</p>
+    <!-- 首页：两扇门 -->
+    <div id="home" class="screen">
+      <div class="welcome"><h1>我家里的一切</h1><p>他和她的世界 · 各进各的门</p></div>
+      <div class="doors">
+        <button class="door male" data-go="male">
+          <span class="glow"></span>
+          <div class="demoji">🎣</div>
+          <div class="dtag">男主入口</div>
+          <div class="dtitle">他的世界</div>
+          <div class="dsub">开发 · 钓鱼 · 爱车 · 麻将 · 文玩盘玩 · 茶 · 酒柜 · 收藏 · 腕表 · 看球 …</div>
+          <div class="denter">进入 →</div>
+        </button>
+        <button class="door female" data-go="female">
+          <span class="glow"></span>
+          <div class="demoji">💄</div>
+          <div class="dtag">女主入口</div>
+          <div class="dtitle">她的世界</div>
+          <div class="dsub">彩妆 · 护肤保养 · 珠宝鉴赏 · 衣橱穿搭 · 包包 · 香水 · 美甲 · 烘焙 · 花艺 …</div>
+          <div class="denter">进入 →</div>
+        </button>
       </div>
-      <div class="cards">
-        <button class="card" data-app="finance">
-          <div class="ico" style="background:linear-gradient(160deg,#007AFF,#5E5CE6)">💰</div>
-          <h3>家庭理财</h3>
-          <div class="desc">净资产 · 账户 · 利息 · 预算预测 · 密码保险箱 · 独立管理（本地加密）</div>
-        </button>
-        <button class="card" data-app="gallery">
-          <div class="ico" style="background:linear-gradient(160deg,#34C759,#30B0C7)">🖼️</div>
-          <h3>家庭影像</h3>
-          <div class="desc">照片/视频 · 按时间·地点归类 · 去重清理 · 相册 · 私密区</div>
-        </button>
-        <button class="card" data-app="vault">
-          <div class="ico" style="background:linear-gradient(160deg,#5E5CE6,#007AFF)">🔐</div>
-          <h3>家庭密码</h3>
-          <div class="desc">网站账号 · 银行卡 · 安全笔记 · 家庭信息 · 一个主密码 · AES‑256 本地加密</div>
-        </button>
-        <button class="card" data-app="dev">
-          <div class="ico" style="background:linear-gradient(160deg,#1d1d1f,#5E5CE6)">👨‍💻</div>
-          <h3>男主的开发世界</h3>
-          <div class="desc">任务看板 · 笔记本 · 代码片段 · 书签 · 主密码加密的个人工作台</div>
-        </button>
-        <div class="card disabled">
-          <div class="ico" style="background:linear-gradient(160deg,#8E8E93,#aeaeb2)">＋</div>
-          <h3>更多应用</h3>
-          <div class="desc">敬请期待：家庭文档、日程、清单……</div>
-        </div>
+      <div class="sharedrow">
+        <div class="sharedlabel">家里共用</div>
+        <div class="sharedcards" id="sharedcards"></div>
       </div>
-      <div class="foot">数据全部保存在本机，离线可用</div>
+      <div class="foot">数据全部保存在本机，离线可用 · 不联网、不上传</div>
     </div>
+
+    <!-- 男主世界 -->
+    <div id="male" class="screen hide">
+      <button class="back" data-go="home">← 回入口</button>
+      <div class="whead"><h2>男主的世界 🎣</h2><p>他喜欢的，都在这儿 · 点开「开发世界」已经能用，其它陆续做</p></div>
+      <div class="grid" id="malegrid"></div>
+      <div class="foot">想先做哪个？告诉我，就像开发世界那样做扎实。</div>
+    </div>
+
+    <!-- 女主世界 -->
+    <div id="female" class="screen hide">
+      <button class="back" data-go="home">← 回入口</button>
+      <div class="whead"><h2>女主的世界 💄</h2><p>她喜欢的，都在这儿 · 挑一个先做成真正能用的</p></div>
+      <div class="grid" id="femalegrid"></div>
+      <div class="foot">想先做哪个？告诉我，就像开发世界那样做扎实。</div>
+    </div>
+
     <iframe id="frame" title="app"></iframe>
   </div>
+  <div id="toast"></div>
 
   <script>
-    const frame = document.getElementById('frame');
-    const home = document.getElementById('home');
-    const tabs = [...document.querySelectorAll('.tab')];
     const SRC = { finance: '/finance/', gallery: '/gallery/', vault: '/vault/', dev: '/dev/' };
-    function show(app) {
-      tabs.forEach(t => t.classList.toggle('active', t.dataset.app === app));
-      if (app === 'home') {
-        home.classList.remove('hide'); frame.classList.remove('show');
-      } else {
-        if (frame.dataset.app !== app) { frame.src = SRC[app]; frame.dataset.app = app; }
-        home.classList.add('hide'); frame.classList.add('show');
-      }
-      location.hash = app;
+    // 男主：中年男人的爱好全家桶（开发世界已实装，其余为占位）
+    const MALE = [
+      { icon: '👨‍💻', name: '开发世界', desc: '任务·日程·笔记·片段·书签·密钥', app: 'dev', grad: 'linear-gradient(160deg,#1d1d1f,#5E5CE6)' },
+      { icon: '🎣', name: '钓鱼', desc: '钓点·渔获·装备·潮汐天气' },
+      { icon: '🚗', name: '爱车', desc: '保养·油耗·里程·违章·改装' },
+      { icon: '🀄', name: '麻将牌局', desc: '牌友·约局·输赢账·番种' },
+      { icon: '📿', name: '文玩盘玩', desc: '手串·核桃·葫芦·包浆进度' },
+      { icon: '🍵', name: '茶 · 茶具', desc: '茶叶库存·紫砂壶·品鉴笔记' },
+      { icon: '🥃', name: '酒柜 · 雪茄', desc: '白酒·红酒·威士忌·年份' },
+      { icon: '🪙', name: '收藏', desc: '邮票·钱币·纪念币·老物件' },
+      { icon: '⌚', name: '腕表', desc: '收藏·佩戴轮换·保养上链' },
+      { icon: '📷', name: '摄影', desc: '器材·镜头·作品·参数' },
+      { icon: '⚽', name: '看球', desc: '赛程·主队·竞猜小账' },
+      { icon: '♟️', name: '棋友', desc: '象棋·围棋·棋谱·对局' },
+      { icon: '⛺', name: '户外露营', desc: '路线·装备·自驾游' },
+      { icon: '🪴', name: '盆景花草', desc: '浇水提醒·养护档案' },
+      { icon: '🫖', name: '养生健康', desc: '血压·步数·作息·枸杞' },
+    ];
+    // 女主：爱好全家桶
+    const FEMALE = [
+      { icon: '💄', name: '彩妆', desc: '库存·色号·保质期·空瓶清单' },
+      { icon: '🧴', name: '护肤保养', desc: '早晚流程·面膜·医美记录' },
+      { icon: '💎', name: '珠宝鉴赏', desc: '黄金·翡翠·钻石·证书·估值' },
+      { icon: '👗', name: '衣橱穿搭', desc: '单品·搭配·换季·购物清单' },
+      { icon: '👜', name: '包包', desc: '收藏·轮换·保养' },
+      { icon: '🌸', name: '香水', desc: '前中后调·场合·库存' },
+      { icon: '💅', name: '美甲', desc: '款式·店铺·打卡' },
+      { icon: '🧁', name: '烘焙美食', desc: '食谱·配方·烘焙记录' },
+      { icon: '🧘‍♀️', name: '瑜伽塑形', desc: '课程·打卡·身材管理' },
+      { icon: '💐', name: '花艺插花', desc: '花材·作品·养护' },
+      { icon: '☕', name: '下午茶探店', desc: '咖啡豆·甜品·探店地图' },
+      { icon: '📺', name: '追剧追星', desc: '片单·爱豆·演唱会' },
+      { icon: '✈️', name: '旅行打卡', desc: '目的地·攻略·拍照点' },
+      { icon: '📔', name: '手账文具', desc: '手帐·胶带·贴纸' },
+      { icon: '🐱', name: '萌宠', desc: '猫狗档案·疫苗·用品' },
+    ];
+    const SHARED = [
+      { icon: '💰', name: '家庭理财', desc: '净资产·账户·预算·保险箱', app: 'finance', grad: 'linear-gradient(160deg,#007AFF,#5E5CE6)' },
+      { icon: '🖼️', name: '家庭影像', desc: '照片视频·归类·去重·相册', app: 'gallery', grad: 'linear-gradient(160deg,#34C759,#30B0C7)' },
+      { icon: '🔐', name: '家庭密码', desc: '账号·银行卡·安全笔记', app: 'vault', grad: 'linear-gradient(160deg,#5E5CE6,#007AFF)' },
+    ];
+    const MALE_PAL = ['#2f7d6b', '#3b6fb0', '#5a6470', '#4a7a3a', '#8a6a3a', '#3a6b7a', '#6b4a7a', '#7a6b3a'];
+    const FEM_PAL = ['#e07a9a', '#c77fd8', '#e0a050', '#d86a8a', '#b07ad0', '#e08a6a', '#cf7fb0', '#c06a9a'];
+
+    function grad(i, pal) { return `linear-gradient(160deg, ${pal[i % pal.length]}, ${pal[(i + 2) % pal.length]})`; }
+    function tile(item, i, pal) {
+      const soon = !item.app;
+      const bg = item.grad || grad(i, pal);
+      return `<button class="tile ${soon ? 'soon' : ''}" ${item.app ? `data-go="${item.app}"` : 'data-soon="' + item.name + '"'}>
+        <div class="tico" style="background:${bg}">${item.icon}</div>
+        <div class="tname">${item.name}</div>
+        <div class="tdesc">${item.desc}</div>
+        <span class="badge ${soon ? 'soon' : 'live'}">${soon ? '即将开放' : '进入 →'}</span>
+      </button>`;
     }
-    document.querySelectorAll('[data-app]').forEach(el => {
-      if (el.classList.contains('disabled')) return;
-      el.addEventListener('click', () => show(el.dataset.app));
+    function scard(item) {
+      return `<button class="scard" data-go="${item.app}">
+        <div class="ico" style="background:${item.grad}">${item.icon}</div>
+        <div><h4>${item.name}</h4><div class="d">${item.desc}</div></div>
+      </button>`;
+    }
+    document.getElementById('malegrid').innerHTML = MALE.map((m, i) => tile(m, i, MALE_PAL)).join('');
+    document.getElementById('femalegrid').innerHTML = FEMALE.map((m, i) => tile(m, i, FEM_PAL)).join('');
+    document.getElementById('sharedcards').innerHTML = SHARED.map(scard).join('');
+
+    const frame = document.getElementById('frame');
+    const screens = { home: document.getElementById('home'), male: document.getElementById('male'), female: document.getElementById('female') };
+    const tabs = [...document.querySelectorAll('.tab')];
+    const toastEl = document.getElementById('toast'); let toastT;
+    function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 1800); }
+    function setActive(name) { tabs.forEach(t => t.classList.toggle('active', t.dataset.go === name)); }
+
+    function nav(target) {
+      if (screens[target]) {
+        Object.values(screens).forEach(s => s.classList.add('hide'));
+        screens[target].classList.remove('hide');
+        frame.classList.remove('show');
+        setActive(target);
+        document.body.className = 'scene-' + target;
+        location.hash = target;
+      } else if (SRC[target]) {
+        if (frame.dataset.app !== target) { frame.src = SRC[target]; frame.dataset.app = target; }
+        Object.values(screens).forEach(s => s.classList.add('hide'));
+        frame.classList.add('show');
+        setActive(target === 'dev' ? 'male' : 'home');
+        location.hash = target;
+      }
+    }
+    document.addEventListener('click', (e) => {
+      const go = e.target.closest('[data-go]');
+      if (go) { nav(go.dataset.go); return; }
+      const soon = e.target.closest('[data-soon]');
+      if (soon) toast('「' + soon.dataset.soon + '」即将开放 · 想先做这个就跟我说');
     });
-    show((location.hash || '#home').slice(1) in SRC ? location.hash.slice(1) : 'home');
+    const start = (location.hash || '#home').slice(1);
+    nav(screens[start] || SRC[start] ? start : 'home');
   </script>
 </body>
 </html>
