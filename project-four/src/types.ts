@@ -67,15 +67,6 @@ export type AccountDomain = "work" | "life";   // 工作账户 / 生活储值卡
 export type AccountKind = "subscription" | "prepaid"; // 订阅型 / 预付余额型
 export type AccountCycle = "month" | "year";   // 订阅续费周期
 
-/** 余额变动一笔（可选的「记一笔」流水） */
-export interface BalanceLog {
-  id: string;
-  ts: number;
-  delta: number;        // +充值 / -消费
-  balanceAfter: number; // 这笔之后的余额
-  note?: string;
-}
-
 export interface Account {
   id: string;
   domain: AccountDomain;
@@ -98,7 +89,6 @@ export interface Account {
   url?: string;          // 控制台 / 官网链接（工作）
   phone?: string;        // 商家电话（生活）
   note?: string;
-  logs?: BalanceLog[];   // 「记一笔」历史（可选）
   createdAt: number;
   updatedAt: number;
 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { Account, AccountCycle, AccountDomain, AccountKind } from "../../types";
 import { useVault } from "../../lib/vault";
 import { Btn, TextField, TextArea, Select, Segmented, card, inputStyle, EmptyState } from "../../ui";
-import { IconPlus, IconSearch, IconGear, IconClose, IconEye, IconEyeOff, IconCopy, IconLink, IconCard, IconArrowRight, IconCheck } from "../../icons";
+import { IconPlus, IconSearch, IconGear, IconClose, IconEye, IconEyeOff, IconCopy, IconLink, IconCard, IconCheck } from "../../icons";
 import { uid } from "./shared";
 import { CATEGORIES, CURRENCIES, fmtMoney, daysUntil, dateTone, toneColor, accountAlerts, totalsByCurrency } from "../../lib/accounts";
 
@@ -22,7 +22,6 @@ export default function Accounts({ data, mut }: { data: import("../../types").De
   const [q, setQ] = useState("");
   const [edit, setEdit] = useState<Account | null>(null);
   const [shown, setShown] = useState<Set<string>>(new Set());
-  const [adjId, setAdjId] = useState<string | null>(null);
   const toggleShow = (k: string) => setShown((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const all = data.accounts ?? [];
@@ -36,19 +35,9 @@ export default function Accounts({ data, mut }: { data: import("../../types").De
   const save = (a: Account) => { mut((d) => { const i = d.accounts.findIndex((x) => x.id === a.id); if (i >= 0) d.accounts[i] = { ...a, updatedAt: Date.now() }; else d.accounts.unshift(a); }); setEdit(null); };
   const del = (id: string) => { mut((d) => { d.accounts = d.accounts.filter((x) => x.id !== id); }); setEdit(null); };
   const newAccount = () => setEdit({
-    id: uid("a"), domain, name: "", category: "", kind: domain === "work" ? "prepaid" : "prepaid",
+    id: uid("a"), domain, name: "", category: "", kind: "prepaid",
     currency: domain === "work" ? "$" : "¥", balance: undefined, balanceAt: Date.now(), createdAt: Date.now(), updatedAt: Date.now(),
   });
-
-  const applyAdjust = (a: Account, delta: number, note?: string) => {
-    mut((d) => {
-      const acc = d.accounts.find((x) => x.id === a.id); if (!acc) return;
-      const after = Math.round(((acc.balance ?? 0) + delta) * 100) / 100;
-      acc.balance = after; acc.balanceAt = Date.now(); acc.updatedAt = Date.now();
-      acc.logs = [{ id: uid("g"), ts: Date.now(), delta, balanceAfter: after, note: note?.trim() || undefined }, ...(acc.logs ?? [])].slice(0, 50);
-    });
-    setAdjId(null);
-  };
 
   return (
     <div>
@@ -99,7 +88,6 @@ export default function Accounts({ data, mut }: { data: import("../../types").De
             const expT = dateTone(expDays);
             const low = a.kind === "prepaid" && a.balance != null && a.lowBalance != null && a.balance <= a.lowBalance;
             const revealed = shown.has(a.id);
-            const isAdj = adjId === a.id;
             return (
               <div key={a.id} style={{ ...card, padding: "14px 16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
@@ -151,13 +139,6 @@ export default function Accounts({ data, mut }: { data: import("../../types").De
                 )}
 
                 {a.note && <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 9, lineHeight: 1.6 }}>{a.note}</div>}
-
-                {/* 记一笔 */}
-                <div style={{ marginTop: 12, borderTop: "0.5px solid var(--separator)", paddingTop: 10 }}>
-                  {isAdj
-                    ? <AdjustForm currency={a.currency} onCancel={() => setAdjId(null)} onApply={(delta, note) => applyAdjust(a, delta, note)} />
-                    : <button className="fv-tap" onClick={() => setAdjId(a.id)} style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "none", background: "transparent", color: "var(--accent)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}><IconArrowRight size={13} stroke="currentColor" />记一笔（充值 / 消费）</button>}
-                </div>
               </div>
             );
           })}
@@ -175,23 +156,6 @@ function InfoRow({ label, value, onCopy }: { label: string; value: string; onCop
       <span style={{ fontSize: 11.5, color: "var(--text-tertiary)", width: 64, flex: "none" }}>{label}</span>
       <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</span>
       <button className="fv-icnbtn" onClick={onCopy} title="复制" style={icnBtn}><IconCopy size={13} stroke="currentColor" /></button>
-    </div>
-  );
-}
-
-function AdjustForm({ currency, onApply, onCancel }: { currency: string; onApply: (delta: number, note?: string) => void; onCancel: () => void }) {
-  const [amt, setAmt] = useState("");
-  const [note, setNote] = useState("");
-  const v = parseFloat(amt);
-  const ok = !isNaN(v) && v > 0;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-      <span style={{ fontSize: 13, color: "var(--text-tertiary)" }}>{currency}</span>
-      <input autoFocus value={amt} onChange={(e) => setAmt(e.target.value)} inputMode="decimal" placeholder="金额" style={{ ...inputStyle, height: 32, width: 88, padding: "0 10px" }} />
-      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="备注（可选）" style={{ ...inputStyle, height: 32, flex: 1, minWidth: 80, padding: "0 10px" }} />
-      <button className="fv-tap" disabled={!ok} onClick={() => onApply(v, note)} title="充值 / 加" style={{ ...miniBtn, color: "var(--green)", background: "color-mix(in srgb, var(--green) 14%, transparent)", opacity: ok ? 1 : 0.4 }}>+ 充值</button>
-      <button className="fv-tap" disabled={!ok} onClick={() => onApply(-v, note)} title="消费 / 减" style={{ ...miniBtn, color: "var(--red)", background: "color-mix(in srgb, var(--red) 14%, transparent)", opacity: ok ? 1 : 0.4 }}>− 消费</button>
-      <button className="fv-icnbtn" onClick={onCancel} title="取消" style={icnBtn}><IconClose size={15} stroke="currentColor" /></button>
     </div>
   );
 }
@@ -259,22 +223,6 @@ function AccountEditor({ initial, isNew, onClose, onSave, onDelete }: { initial:
           <L label={work ? "密码 / API Key（打码保存，可复制）" : "密码 / 取餐码（打码保存）"}><TextField value={a.secret ?? ""} onChange={(e) => setA({ ...a, secret: e.target.value || undefined })} placeholder="可选，列表里默认打码" style={{ fontFamily: "ui-monospace, monospace" }} /></L>
           {work && a.kind === "prepaid" && <L label="有效期 / 到期"><input type="date" value={a.expireAt ?? ""} onChange={(e) => setA({ ...a, expireAt: e.target.value || undefined })} style={{ ...inputStyle, height: 36, padding: "0 12px" }} /></L>}
           <L label="备注"><TextArea value={a.note ?? ""} onChange={(e) => setA({ ...a, note: e.target.value || undefined })} placeholder="比如：哪张卡绑的、谁推荐的、注意事项" /></L>
-
-          {a.logs && a.logs.length > 0 && (
-            <div style={{ marginTop: 4 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 6 }}>最近变动</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {a.logs.slice(0, 6).map((g) => (
-                  <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                    <span style={{ color: "var(--text-tertiary)", width: 76, flex: "none" }}>{new Date(g.ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}</span>
-                    <span style={{ fontWeight: 600, color: g.delta >= 0 ? "var(--green)" : "var(--red)", width: 84, flex: "none" }}>{g.delta >= 0 ? "+" : "−"}{fmtMoney(Math.abs(g.delta), a.currency)}</span>
-                    <span style={{ flex: 1, minWidth: 0, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.note || ""}</span>
-                    <span style={{ color: "var(--text-tertiary)" }}>余 {fmtMoney(g.balanceAfter, a.currency)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "0.5px solid var(--separator)" }}>
           {!isNew && <Btn variant="danger" onClick={onDelete}>删除</Btn>}
@@ -298,4 +246,3 @@ function L({ label, children, flex }: { label: string; children: React.ReactNode
 }
 
 const icnBtn: React.CSSProperties = { width: 28, height: 28, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 7, background: "transparent", border: "none", cursor: "pointer", color: "var(--text-tertiary)" };
-const miniBtn: React.CSSProperties = { border: "none", borderRadius: 8, padding: "6px 11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
