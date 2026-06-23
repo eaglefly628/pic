@@ -78,3 +78,6 @@ export const IconArrowRight = ({ size = 15, stroke = "currentColor", width = 2.2
 export const IconBack = ({ size = 15, stroke = "currentColor", width = 2.1 }: P) => (
   <svg {...base(size, stroke, width)}><path d="m15 18-6-6 6-6" /></svg>
 );
+export const IconImport = ({ size = 16, stroke = "currentColor", width = 1.8 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M12 3v11" /><path d="m8 10 4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
+);

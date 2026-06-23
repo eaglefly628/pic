@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import type { DevData, DevNote } from "../../types";
 import { Btn, TextField, TextArea, card } from "../../ui";
-import { IconPlus, IconTrash, IconPin, IconSearch } from "../../icons";
+import { IconPlus, IconTrash, IconPin, IconSearch, IconImport } from "../../icons";
 import { Tag, uid, ACCENT_SOFT } from "./shared";
+import ImportModal from "./ImportModal";
+import type { ParsedNote } from "../../lib/import";
 
 type Mut = (fn: (d: DevData) => void) => void;
 const parseTags = (s: string) => s.split(/[,，\s]+/).map((x) => x.trim()).filter(Boolean);
@@ -14,6 +16,18 @@ export default function Notes({ data, mut }: { data: DevData; mut: Mut }) {
   const [q, setQ] = useState("");
   const [draft, setDraft] = useState<DevNote | null>(null);
   const [tagsText, setTagsText] = useState("");
+  const [showImport, setShowImport] = useState(false);
+
+  const onImport = (notes: ParsedNote[]) => {
+    const now = Date.now();
+    const mapped: DevNote[] = notes.map((n) => ({
+      id: uid("n"), title: n.title || "未命名笔记", body: n.body || "",
+      category: n.category, tags: n.tags && n.tags.length ? n.tags : undefined,
+      createdAt: n.createdAt || now, updatedAt: n.updatedAt || now,
+    }));
+    mut((d) => { d.notes.unshift(...mapped); });
+    if (mapped[0]) setSel(mapped[0].id);
+  };
 
   useEffect(() => {
     const n = data.notes.find((x) => x.id === sel) ?? null;
@@ -63,6 +77,7 @@ export default function Notes({ data, mut }: { data: DevData; mut: Mut }) {
             <IconSearch />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索笔记" style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 12.5, color: "var(--text-primary)" }} />
           </div>
+          <button className="fv-icnbtn" onClick={() => setShowImport(true)} title="导入笔记" style={{ width: 32, height: 32, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--fill-q)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-secondary)" }}><IconImport size={15} /></button>
           <button className="fv-icnbtn" onClick={create} title="新建笔记" style={{ width: 32, height: 32, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: ACCENT_SOFT, border: "none", cursor: "pointer", color: "var(--accent)" }}><IconPlus size={16} /></button>
         </div>
         <div style={{ flex: 1, overflowY: "auto" }}>
@@ -103,6 +118,8 @@ export default function Notes({ data, mut }: { data: DevData; mut: Mut }) {
           </>
         )}
       </div>
+
+      {showImport && <ImportModal onClose={() => setShowImport(false)} onImport={onImport} />}
     </div>
   );
 }
