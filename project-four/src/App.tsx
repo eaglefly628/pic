@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useVault } from "./lib/vault";
 import Lock from "./screens/Lock";
 import SettingsScreen from "./screens/SettingsScreen";
@@ -8,17 +8,29 @@ import Notes from "./screens/dev/Notes";
 import Snippets from "./screens/dev/Snippets";
 import Bookmarks from "./screens/dev/Bookmarks";
 import Life from "./screens/dev/Life";
-import { IconLock, IconTerminal } from "./icons";
+import Secrets from "./screens/dev/Secrets";
+import Calendar from "./screens/dev/Calendar";
+import CommandPalette from "./screens/dev/CommandPalette";
+import { IconLock, IconTerminal, IconSearch } from "./icons";
 
-type View = "overview" | "tasks" | "notes" | "snippets" | "links" | "life" | "settings";
+type View = "overview" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "secrets" | "settings";
 const TABS: { v: View; l: string }[] = [
-  { v: "overview", l: "概览" }, { v: "tasks", l: "任务" }, { v: "notes", l: "笔记" },
-  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "settings", l: "设置" },
+  { v: "overview", l: "概览" }, { v: "tasks", l: "任务" }, { v: "calendar", l: "日程" }, { v: "notes", l: "笔记" },
+  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "secrets", l: "密钥" }, { v: "settings", l: "设置" },
 ];
 
 export default function App() {
   const { status, toast, lock, data, update } = useVault();
   const [view, setView] = useState<View>("overview");
+  const [palette, setPalette] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); if (status === "unlocked") setPalette(true); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [status]);
 
   if (status === "loading") {
     return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)" }}>载入中…</div>;
@@ -34,6 +46,9 @@ export default function App() {
         </div>
         {TABS.map((t) => <Tab key={t.v} active={view === t.v} onClick={() => setView(t.v)}>{t.l}</Tab>)}
         <div style={{ flex: 1 }} />
+        <button onClick={() => setPalette(true)} className="fv-btn" style={{ ...lockBtn, marginRight: 8 }} title="搜索 (⌘K)">
+          <IconSearch size={14} stroke="currentColor" /> 搜索 <span style={{ fontSize: 10.5, color: "var(--text-tertiary)", border: "0.5px solid var(--separator)", borderRadius: 4, padding: "0 4px", marginLeft: 2 }}>⌘K</span>
+        </button>
         <button onClick={lock} className="fv-btn" style={lockBtn} title="立即锁定">
           <IconLock size={14} stroke="currentColor" /> 锁定
         </button>
@@ -43,13 +58,17 @@ export default function App() {
         <div style={{ maxWidth: 1080, margin: "0 auto", padding: view === "settings" ? 0 : "22px 26px 40px" }}>
           {view === "overview" && <Overview data={data} mut={update} goto={(t) => setView(t)} />}
           {view === "tasks" && <Tasks data={data} mut={update} />}
+          {view === "calendar" && <Calendar data={data} mut={update} />}
           {view === "notes" && <Notes data={data} mut={update} />}
           {view === "snippets" && <Snippets data={data} mut={update} />}
           {view === "links" && <Bookmarks data={data} mut={update} />}
           {view === "life" && <Life data={data} mut={update} />}
+          {view === "secrets" && <Secrets data={data} mut={update} />}
           {view === "settings" && <SettingsScreen />}
         </div>
       </main>
+
+      {palette && <CommandPalette data={data} onClose={() => setPalette(false)} onGo={(v) => setView(v as View)} />}
 
       {toast && (
         <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "var(--text-primary)", color: "var(--bg-content)", padding: "10px 18px", borderRadius: 11, fontSize: 13, fontWeight: 500, boxShadow: "var(--shadow)", zIndex: 100, animation: "fvFade .2s ease" }}>{toast}</div>

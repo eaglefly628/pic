@@ -44,5 +44,10 @@ export function sampleData(): DevData {
       { id: id("l"), title: "Can I use", url: "https://caniuse.com", category: "文档", createdAt: now },
       { id: id("l"), title: "Excalidraw 画图", url: "https://excalidraw.com", category: "工具", createdAt: now },
     ],
+    secrets: [
+      { id: id("k"), title: "OpenAI API", kind: "api", tags: ["AI"], entries: [{ label: "API Key", value: "sk-demo-xxxxxxxxxxxxxxxx", secret: true }, { label: "Org", value: "org-demo", secret: false }], createdAt: now, updatedAt: now },
+      { id: id("k"), title: "生产服务器", kind: "server", entries: [{ label: "Host", value: "10.0.0.12", secret: false }, { label: "User", value: "deploy", secret: false }, { label: "Password", value: "S3cr3t!demo", secret: true }, { label: "Port", value: "22", secret: false }], notes: "跳板机进，勿直连", createdAt: now, updatedAt: now },
+      { id: id("k"), title: "主数据库", kind: "db", entries: [{ label: "连接串", value: "postgres://app:pw@db.internal:5432/main", secret: true }], createdAt: now, updatedAt: now },
+    ],
   };
 }

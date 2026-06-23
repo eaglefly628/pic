@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { DevData, DevNote } from "../../types";
-import { Btn, TextField, TextArea, card } from "../../ui";
+import { Btn, TextField, TextArea, Segmented, card } from "../../ui";
 import { IconPlus, IconTrash, IconPin, IconSearch, IconImport } from "../../icons";
 import { Tag, uid, ACCENT_SOFT } from "./shared";
 import ImportModal from "./ImportModal";
+import { Markdown } from "./md";
 import type { ParsedNote } from "../../lib/import";
 
 type Mut = (fn: (d: DevData) => void) => void;
@@ -17,6 +18,7 @@ export default function Notes({ data, mut }: { data: DevData; mut: Mut }) {
   const [draft, setDraft] = useState<DevNote | null>(null);
   const [tagsText, setTagsText] = useState("");
   const [showImport, setShowImport] = useState(false);
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
 
   const onImport = (notes: ParsedNote[]) => {
     const now = Date.now();
@@ -110,11 +112,16 @@ export default function Notes({ data, mut }: { data: DevData; mut: Mut }) {
               <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
                 <TextField value={draft.category ?? ""} onChange={(e) => patch({ category: e.target.value || undefined })} placeholder="分类" style={{ width: 120, height: 30, fontSize: 12.5 }} />
                 <TextField value={tagsText} onChange={(e) => { setTagsText(e.target.value); patch({ tags: parseTags(e.target.value) }); }} placeholder="标签（逗号分隔）" style={{ flex: 1, height: 30, fontSize: 12.5 }} />
+                <div style={{ width: 124, flex: "none" }}><Segmented value={mode} onChange={(v) => setMode(v as "edit" | "preview")} options={[{ value: "edit", label: "编辑" }, { value: "preview", label: "预览" }]} /></div>
                 <button className="fv-tap" onClick={() => patch({ pinned: !draft.pinned })} title="置顶" style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 30, padding: "0 10px", borderRadius: 8, border: "0.5px solid var(--separator)", cursor: "pointer", background: draft.pinned ? ACCENT_SOFT : "var(--fill-q)", color: draft.pinned ? "var(--accent)" : "var(--text-secondary)", fontSize: 12, fontWeight: 600 }}><IconPin size={13} stroke="currentColor" />{draft.pinned ? "已置顶" : "置顶"}</button>
                 <button className="fv-icnbtn" onClick={del} title="删除笔记" style={{ width: 30, height: 30, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--fill-q)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--red)" }}><IconTrash size={14} stroke="currentColor" /></button>
               </div>
             </div>
-            <TextArea value={draft.body} onChange={(e) => patch({ body: e.target.value })} placeholder="开始记录…（支持多行，可粘贴 OneNote 内容）" style={{ flex: 1, border: "none", borderRadius: 0, background: "transparent", resize: "none", fontSize: 13.5, lineHeight: 1.7, padding: "14px 16px", height: "auto" }} />
+            {mode === "edit" ? (
+              <TextArea value={draft.body} onChange={(e) => patch({ body: e.target.value })} placeholder="开始记录…（支持 Markdown：# 标题、- 列表、**加粗**、`代码`、> 引用、```代码块```）" style={{ flex: 1, border: "none", borderRadius: 0, background: "transparent", resize: "none", fontSize: 13.5, lineHeight: 1.7, padding: "14px 16px", height: "auto" }} />
+            ) : (
+              <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px 16px" }}>{draft.body.trim() ? <Markdown text={draft.body} /> : <div style={{ color: "var(--text-tertiary)", fontSize: 13, paddingTop: 8 }}>（空）切到「编辑」开始写。</div>}</div>
+            )}
           </>
         )}
       </div>

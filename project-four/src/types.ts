@@ -44,6 +44,24 @@ export interface DevSettings {
   autoLockMin: number; // 闲置自动锁定（分钟），0 = 不自动锁
 }
 
+// 开发密钥库：API key / 服务器 / 数据库 / 环境变量
+export type SecretKind = "api" | "server" | "db" | "env" | "other";
+export interface SecretEntry {
+  label: string;
+  value: string;
+  secret?: boolean;   // 是否打码（默认值字段打码）
+}
+export interface DevSecret {
+  id: string;
+  title: string;
+  kind: SecretKind;
+  entries: SecretEntry[];
+  tags?: string[];
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** 解锁后内存中的完整数据 */
 export interface DevData {
   tasks: DevTask[];
@@ -52,6 +70,7 @@ export interface DevData {
   links: DevLink[];
   collections: CollectionDef[];   // 生活：自定义集合（数据格式由用户自己定）
   lifeItems: LifeItem[];          // 生活：各集合下的条目
+  secrets: DevSecret[];           // 开发密钥库
   settings: DevSettings;
   updatedAt: number;
 }

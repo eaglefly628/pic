@@ -38,6 +38,7 @@ export default function SettingsScreen() {
         <Row k="代码片段" v={`${data.snippets.length} 个`} />
         <Row k="书签" v={`${data.links.length} 个`} />
         <Row k="生活集合 / 条目" v={`${data.collections.length} 集合 · ${data.lifeItems.length} 条`} />
+        <Row k="密钥" v={`${data.secrets.length} 条`} />
         <Row k="存储位置" v="本机浏览器（IndexedDB，加密）" />
       </Section>
 
