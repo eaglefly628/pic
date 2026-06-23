@@ -4,9 +4,10 @@ import { card } from "../../ui";
 import { rise } from "../../lib/anim";
 import { IconPlus, IconList, IconCalendar, IconNote, IconCode, IconLink, IconArrowRight } from "../../icons";
 import { PRIORITY, fmtDue, dueColor, SectionTitle, uid, ACCENT_SOFT } from "./shared";
+import { accountAlerts, toneColor } from "../../lib/accounts";
 
 type Mut = (fn: (d: DevData) => void) => void;
-type Tab = "tasks" | "notes" | "snippets" | "links";
+type Tab = "tasks" | "notes" | "snippets" | "links" | "accounts";
 
 function greeting() {
   const h = new Date().getHours();
@@ -23,6 +24,7 @@ export default function Overview({ data, mut, goto }: { data: DevData; mut: Mut;
   const inProgress = [...data.tasks.filter((t) => t.status === "doing"), ...data.tasks.filter((t) => t.status === "todo")]
     .sort((a, b) => (a.due ? Date.parse(a.due) : Infinity) - (b.due ? Date.parse(b.due) : Infinity)).slice(0, 5);
   const recentNotes = [...data.notes].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
+  const alerts = accountAlerts(data.accounts ?? []);
 
   const quickAdd = () => {
     const t = quick.trim(); if (!t) return;
@@ -63,6 +65,21 @@ export default function Overview({ data, mut, goto }: { data: DevData; mut: Mut;
           </button>
         ))}
       </div>
+
+      {alerts.length > 0 && (
+        <div className="fv-rise" style={{ ...rise(150), ...card, padding: "16px 18px", marginBottom: 18 }}>
+          <SectionTitle note={<button onClick={() => goto("accounts")} style={linkBtn}>账户 →</button>}>💳 账户提醒 · 别忘了</SectionTitle>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {alerts.slice(0, 5).map((al, i) => (
+              <button key={i} onClick={() => goto("accounts")} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", width: "100%" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: toneColor(al.tone), flex: "none" }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{al.account.name}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: toneColor(al.tone), flex: "none" }}>{al.text}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="fv-rise" style={{ ...rise(180), display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 16 }}>
         {/* 待办 / 进行中 */}

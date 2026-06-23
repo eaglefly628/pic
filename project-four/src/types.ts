@@ -62,6 +62,47 @@ export interface DevSecret {
   updatedAt: number;
 }
 
+// ── 账户 · 余额：工作账户（订阅/预付额度）+ 生活储值卡 ──────────────
+export type AccountDomain = "work" | "life";   // 工作账户 / 生活储值卡
+export type AccountKind = "subscription" | "prepaid"; // 订阅型 / 预付余额型
+export type AccountCycle = "month" | "year";   // 订阅续费周期
+
+/** 余额变动一笔（可选的「记一笔」流水） */
+export interface BalanceLog {
+  id: string;
+  ts: number;
+  delta: number;        // +充值 / -消费
+  balanceAfter: number; // 这笔之后的余额
+  note?: string;
+}
+
+export interface Account {
+  id: string;
+  domain: AccountDomain;
+  name: string;          // Claude Code / 阿里云 / 那家川菜馆
+  category?: string;     // AI 模型 / 云服务 / 餐饮 …（自由文本，带建议）
+  kind: AccountKind;
+  currency: string;      // ¥ / $ / € …
+  balance?: number;      // 当前余额
+  balanceAt?: number;    // 余额更新时间
+  lowBalance?: number;   // 预付：低余额预警阈值
+  // 订阅型
+  cycle?: AccountCycle;  // 月 / 年
+  price?: number;        // 每期费用
+  renewAt?: string;      // YYYY-MM-DD 下次续费日
+  // 通用 / 生活卡
+  expireAt?: string;     // YYYY-MM-DD 有效期 / 到期日
+  // 账户信息
+  login?: string;        // 登录账号 / 卡号 / 绑定手机
+  secret?: string;       // 密码 / Key（打码 + 复制）
+  url?: string;          // 控制台 / 官网链接（工作）
+  phone?: string;        // 商家电话（生活）
+  note?: string;
+  logs?: BalanceLog[];   // 「记一笔」历史（可选）
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** 解锁后内存中的完整数据 */
 export interface DevData {
   tasks: DevTask[];
@@ -71,6 +112,7 @@ export interface DevData {
   collections: CollectionDef[];   // 生活：自定义集合（数据格式由用户自己定）
   lifeItems: LifeItem[];          // 生活：各集合下的条目
   secrets: DevSecret[];           // 开发密钥库
+  accounts: Account[];            // 账户 · 余额（工作账户 + 生活储值卡）
   settings: DevSettings;
   updatedAt: number;
 }

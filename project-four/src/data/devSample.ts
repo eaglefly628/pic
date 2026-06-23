@@ -49,5 +49,17 @@ export function sampleData(): DevData {
       { id: id("k"), title: "生产服务器", kind: "server", entries: [{ label: "Host", value: "10.0.0.12", secret: false }, { label: "User", value: "deploy", secret: false }, { label: "Password", value: "S3cr3t!demo", secret: true }, { label: "Port", value: "22", secret: false }], notes: "跳板机进，勿直连", createdAt: now, updatedAt: now },
       { id: id("k"), title: "主数据库", kind: "db", entries: [{ label: "连接串", value: "postgres://app:pw@db.internal:5432/main", secret: true }], createdAt: now, updatedAt: now },
     ],
+    accounts: [
+      // 工作账户：订阅 + 预付额度
+      { id: id("a"), domain: "work", name: "Claude Code", category: "AI 模型", kind: "subscription", currency: "$", cycle: "month", price: 100, renewAt: day(24), login: "you@example.com", url: "https://claude.ai/code", note: "Max 订阅，主力用它写代码", createdAt: now, updatedAt: now },
+      { id: id("a"), domain: "work", name: "DeepSeek", category: "AI 模型", kind: "prepaid", currency: "¥", balance: 12.4, balanceAt: now - 9 * 86400000, lowBalance: 20, login: "you@example.com", url: "https://platform.deepseek.com", note: "API 充值，余额快用完了", createdAt: now, updatedAt: now },
+      { id: id("a"), domain: "work", name: "阿里云", category: "云服务", kind: "prepaid", currency: "¥", balance: 326.5, balanceAt: now - 20 * 86400000, expireAt: day(9), login: "138****8888", url: "https://ecs.console.aliyun.com", note: "有张代金券快过期，记得用", createdAt: now, updatedAt: now },
+      { id: id("a"), domain: "work", name: "GitHub Copilot", category: "代码托管", kind: "subscription", currency: "$", cycle: "month", price: 10, renewAt: day(3), login: "your-handle", secret: "ghp_demoXXXXXXXXXXXXXXXX", url: "https://github.com", createdAt: now, updatedAt: now },
+      // 生活储值卡
+      { id: id("a"), domain: "life", name: "楼下川菜馆", category: "餐饮", kind: "prepaid", currency: "¥", balance: 380, balanceAt: now - 38 * 86400000, login: "138****8888", note: "充 500 送 50，菜还不错", createdAt: now, updatedAt: now },
+      { id: id("a"), domain: "life", name: "Tony 理发店", category: "美发美容", kind: "prepaid", currency: "¥", balance: 1200, balanceAt: now - 60 * 86400000, expireAt: day(300), note: "剪发卡，别一直不去", createdAt: now, updatedAt: now },
+      { id: id("a"), domain: "life", name: "小区门口洗车", category: "洗车养车", kind: "prepaid", currency: "¥", balance: 30, balanceAt: now - 15 * 86400000, lowBalance: 50, note: "一次 15，快不够了", createdAt: now, updatedAt: now },
+      { id: id("a"), domain: "life", name: "动岚健身", category: "健身", kind: "prepaid", currency: "¥", expireAt: day(18), login: "会员卡 8842", note: "年卡，快到期了考虑续不续", createdAt: now, updatedAt: now },
+    ],
   };
 }

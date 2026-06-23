@@ -29,11 +29,11 @@ export const useVault = () => {
 };
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
-const emptyData = (): DevData => ({ tasks: [], notes: [], snippets: [], links: [], collections: [], lifeItems: [], secrets: [], settings: { autoLockMin: 5 }, updatedAt: 0 });
+const emptyData = (): DevData => ({ tasks: [], notes: [], snippets: [], links: [], collections: [], lifeItems: [], secrets: [], accounts: [], settings: { autoLockMin: 5 }, updatedAt: 0 });
 function normalize(d: Partial<DevData>): DevData {
   return {
     tasks: d.tasks ?? [], notes: d.notes ?? [], snippets: d.snippets ?? [], links: d.links ?? [],
-    collections: d.collections ?? [], lifeItems: d.lifeItems ?? [], secrets: d.secrets ?? [],
+    collections: d.collections ?? [], lifeItems: d.lifeItems ?? [], secrets: d.secrets ?? [], accounts: d.accounts ?? [],
     settings: d.settings ?? { autoLockMin: 5 }, updatedAt: d.updatedAt ?? Date.now(),
   };
 }
