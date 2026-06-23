@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-君百家 · 家庭电子管理系统 — 统一入口
+我家里的一切 — 统一入口
 --------------------------------------------------------------------------
-一个端口、一个入口；顶部菜单进入「家庭理财 / 家庭影像」等应用。
-各应用仍是独立项目（project-one / project-two），此入口按路径加载它们的 dist：
+一个端口、一个入口；顶部菜单进入「家庭理财 / 家庭影像 / 家庭密码 / 开发世界」等应用。
+各应用仍是独立项目（project-one … project-four），此入口按路径加载它们的 dist：
 
     /            -> hub/index.html（入口页）
     /finance/*   -> project-one/dist（家庭理财）
     /gallery/*   -> project-two/dist（家庭影像）
     /vault/*     -> project-three/dist（家庭密码）
+    /dev/*       -> project-four/dist（男主的开发世界）
 
 直接运行：  python run.py     （或双击 start.bat）
 数据全部保存在本机，不联网、不上传。按 Ctrl+C 退出。
@@ -27,6 +28,7 @@ MOUNTS = {
     "/finance": (ROOT / "project-one" / "dist"),
     "/gallery": (ROOT / "project-two" / "dist"),
     "/vault": (ROOT / "project-three" / "dist"),
+    "/dev": (ROOT / "project-four" / "dist"),
 }
 PORT = 5180
 
@@ -55,7 +57,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         # 子应用根路径未带斜杠时重定向，确保相对资源解析正确
         bare = self.path.split("?")[0]
-        if bare in ("/finance", "/gallery", "/vault"):
+        if bare in ("/finance", "/gallery", "/vault", "/dev"):
             self.send_response(301)
             self.send_header("Location", bare + "/")
             self.end_headers()
@@ -92,9 +94,9 @@ def main() -> int:
         return 0
     with httpd:
         print("┌──────────────────────────────────────────────┐")
-        print("│  君百家 · 家庭电子管理系统                     │")
+        print("│  我家里的一切                                   │")
         print(f"│  已启动：{url:<36}│")
-        print("│  顶部菜单进入：理财 / 影像 / 密码              │")
+        print("│  顶部菜单进入：理财 / 影像 / 密码 / 开发       │")
         print("│  数据本地保存 · 按 Ctrl+C 退出                 │")
         print("└──────────────────────────────────────────────┘")
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

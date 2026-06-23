@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>君百家 · 家庭中心</title>
+<title>我家里的一切</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
@@ -56,11 +56,12 @@
 </head>
 <body>
   <div id="bar">
-    <div class="brand"><span class="logo">君</span>君百家 · 家庭中心</div>
+    <div class="brand"><span class="logo">家</span>我家里的一切</div>
     <button class="tab active" data-app="home">首页</button>
     <button class="tab" data-app="finance">家庭理财</button>
     <button class="tab" data-app="gallery">家庭影像</button>
     <button class="tab" data-app="vault">家庭密码</button>
+    <button class="tab" data-app="dev">开发世界</button>
     <span class="spacer"></span>
     <span class="hint">本地 · 私密 · 不上传</span>
   </div>
@@ -68,7 +69,7 @@
   <div id="stage">
     <div id="home">
       <div class="welcome">
-        <h1>欢迎回到君百家</h1>
+        <h1>我家里的一切</h1>
         <p>我们家的应用都在这里 · 选择一个进入</p>
       </div>
       <div class="cards">
@@ -87,6 +88,11 @@
           <h3>家庭密码</h3>
           <div class="desc">网站账号 · 银行卡 · 安全笔记 · 家庭信息 · 一个主密码 · AES‑256 本地加密</div>
         </button>
+        <button class="card" data-app="dev">
+          <div class="ico" style="background:linear-gradient(160deg,#1d1d1f,#5E5CE6)">👨‍💻</div>
+          <h3>男主的开发世界</h3>
+          <div class="desc">任务看板 · 笔记本 · 代码片段 · 书签 · 主密码加密的个人工作台</div>
+        </button>
         <div class="card disabled">
           <div class="ico" style="background:linear-gradient(160deg,#8E8E93,#aeaeb2)">＋</div>
           <h3>更多应用</h3>
@@ -102,7 +108,7 @@
     const frame = document.getElementById('frame');
     const home = document.getElementById('home');
     const tabs = [...document.querySelectorAll('.tab')];
-    const SRC = { finance: '/finance/', gallery: '/gallery/', vault: '/vault/' };
+    const SRC = { finance: '/finance/', gallery: '/gallery/', vault: '/vault/', dev: '/dev/' };
     function show(app) {
       tabs.forEach(t => t.classList.toggle('active', t.dataset.app === app));
       if (app === 'home') {
