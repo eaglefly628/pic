@@ -1,6 +1,6 @@
 // 公司 · 发票报销：类别、状态、汇总与提醒（纯逻辑）。
-import type { Invoice, ReimburseStatus, TaxFiling } from "../types";
-import { daysUntil, dateTone, type Tone } from "./accounts";
+import type { Invoice, ReimburseStatus } from "../types";
+import { daysUntil } from "./accounts";
 
 export const INVOICE_CATEGORIES = [
   "差旅交通", "餐饮", "办公用品", "住宿", "通讯", "市场推广", "软件订阅", "快递物流", "招待", "其他",
@@ -17,8 +17,6 @@ export const STATUS_META: Record<ReimburseStatus, { label: string; color: string
   paid: { label: "已到账", color: "var(--green)" },
 };
 export const STATUS_ORDER: ReimburseStatus[] = ["pending", "submitted", "paid"];
-
-export const TAX_CYCLE_LABEL: Record<TaxFiling["cycle"], string> = { month: "月度", quarter: "季度", year: "年度" };
 
 export interface InvoiceSummary {
   pending: Record<string, number>;    // 待报销金额（按币种）
@@ -52,22 +50,6 @@ export function joinMoney(m: Record<string, number>, fmt: (n: number, cur: strin
   const keys = Object.keys(m);
   if (keys.length === 0) return fmt(0, "¥");
   return keys.map((c) => fmt(m[c], c)).join("  ·  ");
-}
-
-export interface CompanyAlert { label: string; text: string; tone: Tone; sort: number; }
-
-/** 税务申报临近（10 天内或已逾期）。 */
-export function taxAlerts(filings: TaxFiling[]): CompanyAlert[] {
-  const out: CompanyAlert[] = [];
-  for (const f of filings) {
-    if (!f.nextDate) continue;
-    const days = daysUntil(f.nextDate);
-    if (days != null && days <= 10) {
-      const t = dateTone(days);
-      out.push({ label: f.name, text: days < 0 ? `逾期申报 ${-days} 天` : `申报 ${t.text}`, tone: days < 0 ? "over" : t.tone, sort: days });
-    }
-  }
-  return out.sort((a, b) => a.sort - b.sort);
 }
 
 /** 待报销压了太久（默认 14 天以上）。 */

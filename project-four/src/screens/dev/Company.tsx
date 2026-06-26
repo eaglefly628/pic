@@ -1,13 +1,13 @@
 import React, { useMemo, useRef, useState } from "react";
-import type { CompanyInfo, DevData, Invoice, ReimburseStatus, TaxFiling } from "../../types";
+import type { CompanyInfo, DevData, Invoice, ReimburseStatus } from "../../types";
 import { useVault } from "../../lib/vault";
 import { Btn, TextField, TextArea, Select, Segmented, card, inputStyle, EmptyState } from "../../ui";
 import { IconPlus, IconSearch, IconGear, IconClose, IconCopy, IconCheck, IconReceipt, IconBuilding, IconImport } from "../../icons";
 import { uid } from "./shared";
-import { fmtMoney, daysUntil, dateTone, toneColor, CURRENCIES, type Tone } from "../../lib/accounts";
+import { fmtMoney, toneColor, CURRENCIES, type Tone } from "../../lib/accounts";
 import {
-  INVOICE_CATEGORIES, INVOICE_EMOJI, STATUS_META, STATUS_ORDER, TAX_CYCLE_LABEL,
-  invoiceSummary, joinMoney, taxAlerts, stalePending,
+  INVOICE_CATEGORIES, INVOICE_EMOJI, STATUS_META, STATUS_ORDER,
+  invoiceSummary, joinMoney, stalePending,
 } from "../../lib/invoices";
 
 type Mut = (fn: (d: DevData) => void) => void;
@@ -43,9 +43,9 @@ export default function Company({ data, mut }: { data: DevData; mut: Mut }) {
     <div>
       <div style={{ marginBottom: 16 }}>
         <Segmented<View> value={view} onChange={setView} style={{ width: 280 }}
-          options={[{ value: "invoices", label: "发票报销" }, { value: "company", label: "公司 · 税务" }]} />
+          options={[{ value: "invoices", label: "发票报销" }, { value: "company", label: "公司资料" }]} />
       </div>
-      {view === "invoices" ? <Invoices data={data} mut={mut} /> : <CompanyTax data={data} mut={mut} />}
+      {view === "invoices" ? <Invoices data={data} mut={mut} /> : <CompanyProfile data={data} mut={mut} />}
     </div>
   );
 }
@@ -59,7 +59,6 @@ function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
 
   const all = data.invoices ?? [];
   const summary = useMemo(() => invoiceSummary(all), [all]);
-  const tax = useMemo(() => taxAlerts(data.taxFilings ?? []), [data.taxFilings]);
   const stale = useMemo(() => stalePending(all), [all]);
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: all.length, pending: 0, submitted: 0, paid: 0 };
@@ -117,11 +116,12 @@ function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
           <Stat label="已报销 · 待到账" value={joinMoney(summary.submitted, fmtMoney)} sub={`${summary.submittedCount} 张`} color="var(--accent)" />
           <div style={{ width: 1, height: 26, background: "var(--separator)" }} />
           <Stat label="本月开票" value={joinMoney(summary.month, fmtMoney)} sub={`${summary.monthCount} 张`} color="var(--text-primary)" />
-          {(tax.length > 0 || stale) && <div style={{ flex: 1 }} />}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {stale && <Chip tone="warn" label="待报销" text={`有 ${stale.count} 张压了 ${stale.oldestDays} 天`} />}
-            {tax.slice(0, 3).map((al, i) => <Chip key={i} tone={al.tone} label={al.label} text={al.text} />)}
-          </div>
+          {stale && <div style={{ flex: 1 }} />}
+          {stale && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <Chip tone="warn" label="待报销" text={`有 ${stale.count} 张压了 ${stale.oldestDays} 天`} />
+            </div>
+          )}
         </div>
       )}
 
@@ -248,22 +248,17 @@ function InvoiceEditor({ initial, isNew, onClose, onSave, onDelete }: { initial:
   );
 }
 
-// ── 公司资料 + 税务 ──────────────────────────────────────────
-function CompanyTax({ data, mut }: { data: DevData; mut: Mut }) {
+// ── 公司资料（基础信息）──────────────────────────────────────
+function CompanyProfile({ data, mut }: { data: DevData; mut: Mut }) {
   const { copy } = useVault();
   const info = data.company ?? {};
-  const filings = data.taxFilings ?? [];
   const [editInfo, setEditInfo] = useState(false);
-  const [editTax, setEditTax] = useState<TaxFiling | null>(null);
   const hasInfo = !!(info.name || info.taxId || info.legalPerson || info.address || info.bank || info.bankAccount || info.phone || info.note);
 
   const saveInfo = (c: CompanyInfo) => { mut((d) => { d.company = c; }); setEditInfo(false); };
-  const saveTax = (f: TaxFiling) => { mut((d) => { if (!d.taxFilings) d.taxFilings = []; const i = d.taxFilings.findIndex((x) => x.id === f.id); if (i >= 0) d.taxFilings[i] = f; else d.taxFilings.push(f); }); setEditTax(null); };
-  const delTax = (id: string) => { mut((d) => { d.taxFilings = (d.taxFilings ?? []).filter((x) => x.id !== id); }); setEditTax(null); };
-  const newTax = () => setEditTax({ id: uid("tax"), name: "", cycle: "month", nextDate: "" });
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: 16, alignItems: "start" }}>
+    <div style={{ maxWidth: 620 }}>
       {/* 公司资料 */}
       <div style={{ ...card, padding: "18px 20px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: hasInfo ? 16 : 0 }}>
@@ -291,36 +286,7 @@ function CompanyTax({ data, mut }: { data: DevData; mut: Mut }) {
         )}
       </div>
 
-      {/* 税务申报 */}
-      <div style={{ ...card, padding: "18px 20px" }}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>税务申报</div>
-          <div style={{ flex: 1 }} />
-          <button className="fv-tap" onClick={newTax} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "none", background: "transparent", color: "var(--accent)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}><IconPlus size={14} stroke="currentColor" />新增</button>
-        </div>
-        {filings.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", lineHeight: 1.7 }}>把要按时报的税记在这（增值税、企业所得税…），到点了首页和这里都会提醒。</div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {filings.map((f) => {
-              const days = daysUntil(f.nextDate);
-              const t = dateTone(days);
-              return (
-                <button key={f.id} onClick={() => setEditTax(f)} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9, border: "0.5px solid var(--separator)", background: "var(--fill-q)", cursor: "pointer", textAlign: "left", width: "100%" }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{f.name || "未命名"}</div>
-                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 1 }}>{TAX_CYCLE_LABEL[f.cycle]}申报{f.nextDate ? ` · 截止 ${f.nextDate}` : ""}</div>
-                  </div>
-                  {f.nextDate && <span style={{ fontSize: 11.5, fontWeight: 600, color: toneColor(t.tone), flex: "none" }}>{days != null && days < 0 ? `逾期 ${-days} 天` : t.text}</span>}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       {editInfo && <CompanyInfoEditor initial={info} onClose={() => setEditInfo(false)} onSave={saveInfo} />}
-      {editTax && <TaxEditor key={editTax.id} initial={editTax} isNew={!filings.some((x) => x.id === editTax.id)} onClose={() => setEditTax(null)} onSave={saveTax} onDelete={() => delTax(editTax.id)} />}
     </div>
   );
 }
@@ -342,25 +308,6 @@ function CompanyInfoEditor({ initial, onClose, onSave }: { initial: CompanyInfo;
       </Row>
       <L label="银行账号"><TextField value={c.bankAccount ?? ""} onChange={set("bankAccount")} placeholder="对公账号" style={{ fontFamily: "ui-monospace, monospace" }} /></L>
       <L label="备注"><TextArea value={c.note ?? ""} onChange={set("note")} placeholder="发票抬头要点、专管员、注意事项…" /></L>
-    </Modal>
-  );
-}
-
-function TaxEditor({ initial, isNew, onClose, onSave, onDelete }: { initial: TaxFiling; isNew: boolean; onClose: () => void; onSave: (f: TaxFiling) => void; onDelete: () => void }) {
-  const [f, setF] = useState<TaxFiling>(initial);
-  return (
-    <Modal title={isNew ? "新增申报事项" : "编辑申报事项"} width={460} onClose={onClose} footer={<>
-      {!isNew && <Btn variant="danger" onClick={onDelete}>删除</Btn>}
-      <div style={{ flex: 1 }} />
-      <Btn variant="ghost" onClick={onClose}>取消</Btn>
-      <Btn onClick={() => onSave({ ...f, name: f.name.trim() })} disabled={!f.name.trim()}><IconCheck size={15} stroke="#fff" />保存</Btn>
-    </>}>
-      <L label="税种 / 事项"><TextField value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="增值税 / 企业所得税 / 社保公积金" autoFocus /></L>
-      <Row>
-        <L label="申报周期" flex={1}><Select value={f.cycle} onChange={(e) => setF({ ...f, cycle: e.target.value as TaxFiling["cycle"] })} options={[{ value: "month", label: "月度" }, { value: "quarter", label: "季度" }, { value: "year", label: "年度" }]} /></L>
-        <L label="下次截止日" flex={1}><input type="date" value={f.nextDate ?? ""} onChange={(e) => setF({ ...f, nextDate: e.target.value || undefined })} style={{ ...inputStyle, height: 36, padding: "0 12px" }} /></L>
-      </Row>
-      <L label="备注"><TextArea value={f.note ?? ""} onChange={(e) => setF({ ...f, note: e.target.value || undefined })} placeholder="可选" /></L>
     </Modal>
   );
 }

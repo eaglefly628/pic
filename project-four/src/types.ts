@@ -104,7 +104,6 @@ export interface DevData {
   secrets: DevSecret[];           // 开发密钥库
   accounts: Account[];            // 账户 · 余额（工作账户 + 生活储值卡）
   company: CompanyInfo;           // 公司资料（单家）
-  taxFilings: TaxFiling[];        // 公司：税务申报事项 + 提醒
   invoices: Invoice[];            // 公司：发票 / 报销记录
   settings: DevSettings;
   updatedAt: number;
@@ -120,15 +119,6 @@ export interface CompanyInfo {
   bank?: string;         // 开户行
   bankAccount?: string;  // 银行账号
   phone?: string;        // 联系电话
-  note?: string;
-}
-
-/** 税务申报事项（增值税 / 企业所得税 …），按周期提醒 */
-export interface TaxFiling {
-  id: string;
-  name: string;                          // 增值税 / 企业所得税 / 个税 / 社保公积金
-  cycle: "month" | "quarter" | "year";   // 申报周期
-  nextDate?: string;                     // YYYY-MM-DD 下次申报截止
   note?: string;
 }
 

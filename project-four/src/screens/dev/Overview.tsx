@@ -5,7 +5,7 @@ import { rise } from "../../lib/anim";
 import { IconPlus, IconList, IconCalendar, IconNote, IconCode, IconLink, IconArrowRight } from "../../icons";
 import { PRIORITY, fmtDue, dueColor, SectionTitle, uid, ACCENT_SOFT } from "./shared";
 import { accountAlerts, toneColor } from "../../lib/accounts";
-import { taxAlerts, stalePending } from "../../lib/invoices";
+import { stalePending } from "../../lib/invoices";
 
 type Mut = (fn: (d: DevData) => void) => void;
 type Tab = "tasks" | "notes" | "snippets" | "links" | "accounts" | "company";
@@ -26,7 +26,6 @@ export default function Overview({ data, mut, goto }: { data: DevData; mut: Mut;
     .sort((a, b) => (a.due ? Date.parse(a.due) : Infinity) - (b.due ? Date.parse(b.due) : Infinity)).slice(0, 5);
   const recentNotes = [...data.notes].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
   const alerts = accountAlerts(data.accounts ?? []);
-  const taxDue = taxAlerts(data.taxFilings ?? []);
   const stale = stalePending(data.invoices ?? []);
 
   const quickAdd = () => {
@@ -84,25 +83,14 @@ export default function Overview({ data, mut, goto }: { data: DevData; mut: Mut;
         </div>
       )}
 
-      {(taxDue.length > 0 || stale) && (
+      {stale && (
         <div className="fv-rise" style={{ ...rise(165), ...card, padding: "16px 18px", marginBottom: 18 }}>
           <SectionTitle note={<button onClick={() => goto("company")} style={linkBtn}>公司 →</button>}>🧾 公司 · 别忘了</SectionTitle>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {stale && (
-              <button onClick={() => goto("company")} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", width: "100%" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--orange)", flex: "none" }} />
-                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text-primary)" }}>待报销发票</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--orange)", flex: "none" }}>{stale.count} 张压了 {stale.oldestDays} 天</span>
-              </button>
-            )}
-            {taxDue.slice(0, 4).map((al, i) => (
-              <button key={i} onClick={() => goto("company")} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", width: "100%" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: toneColor(al.tone), flex: "none" }} />
-                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{al.label}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: toneColor(al.tone), flex: "none" }}>{al.text}</span>
-              </button>
-            ))}
-          </div>
+          <button onClick={() => goto("company")} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", width: "100%" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--orange)", flex: "none" }} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text-primary)" }}>待报销发票</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--orange)", flex: "none" }}>{stale.count} 张压了 {stale.oldestDays} 天</span>
+          </button>
         </div>
       )}
 

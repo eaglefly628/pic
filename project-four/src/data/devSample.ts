@@ -71,11 +71,6 @@ export function sampleData(): DevData {
       phone: "010-8888 8888",
       note: "开票用公司全称；专管员王会计。",
     },
-    taxFilings: [
-      { id: id("tax"), name: "增值税", cycle: "month", nextDate: day(8) },
-      { id: id("tax"), name: "社保公积金", cycle: "month", nextDate: day(3) },
-      { id: id("tax"), name: "企业所得税", cycle: "quarter", nextDate: day(25) },
-    ],
     invoices: [
       { id: id("inv"), date: day(-1), amount: 88, currency: "¥", category: "差旅交通", purpose: "打车去机场", status: "pending", handler: "张三", createdAt: now, updatedAt: now },
       { id: id("inv"), date: day(-2), amount: 420, currency: "¥", category: "餐饮", purpose: "客户午餐（签约庆祝）", status: "pending", handler: "张三", seller: "海底捞", createdAt: now, updatedAt: now },
