@@ -10,14 +10,15 @@ import Bookmarks from "./screens/dev/Bookmarks";
 import Life from "./screens/dev/Life";
 import Secrets from "./screens/dev/Secrets";
 import Accounts from "./screens/dev/Accounts";
+import Company from "./screens/dev/Company";
 import Calendar from "./screens/dev/Calendar";
 import CommandPalette from "./screens/dev/CommandPalette";
 import { IconLock, IconTerminal, IconSearch } from "./icons";
 
-type View = "overview" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "secrets" | "accounts" | "settings";
+type View = "overview" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "accounts" | "company" | "secrets" | "settings";
 const TABS: { v: View; l: string }[] = [
   { v: "overview", l: "概览" }, { v: "tasks", l: "任务" }, { v: "calendar", l: "日程" }, { v: "notes", l: "笔记" },
-  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "accounts", l: "账户" }, { v: "secrets", l: "密钥" }, { v: "settings", l: "设置" },
+  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "accounts", l: "账户" }, { v: "company", l: "公司" }, { v: "secrets", l: "密钥" }, { v: "settings", l: "设置" },
 ];
 
 export default function App() {
@@ -65,6 +66,7 @@ export default function App() {
           {view === "links" && <Bookmarks data={data} mut={update} />}
           {view === "life" && <Life data={data} mut={update} />}
           {view === "accounts" && <Accounts data={data} mut={update} />}
+          {view === "company" && <Company data={data} mut={update} />}
           {view === "secrets" && <Secrets data={data} mut={update} />}
           {view === "settings" && <SettingsScreen />}
         </div>

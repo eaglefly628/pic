@@ -103,7 +103,54 @@ export interface DevData {
   lifeItems: LifeItem[];          // 生活：各集合下的条目
   secrets: DevSecret[];           // 开发密钥库
   accounts: Account[];            // 账户 · 余额（工作账户 + 生活储值卡）
+  company: CompanyInfo;           // 公司资料（单家）
+  taxFilings: TaxFiling[];        // 公司：税务申报事项 + 提醒
+  invoices: Invoice[];            // 公司：发票 / 报销记录
   settings: DevSettings;
+  updatedAt: number;
+}
+
+// ── 公司 · 发票报销 ───────────────────────────────────────────
+/** 公司基本资料（一家公司，自由填） */
+export interface CompanyInfo {
+  name?: string;         // 公司名称
+  taxId?: string;        // 统一社会信用代码 / 税号
+  legalPerson?: string;  // 法人
+  address?: string;      // 注册地址
+  bank?: string;         // 开户行
+  bankAccount?: string;  // 银行账号
+  phone?: string;        // 联系电话
+  note?: string;
+}
+
+/** 税务申报事项（增值税 / 企业所得税 …），按周期提醒 */
+export interface TaxFiling {
+  id: string;
+  name: string;                          // 增值税 / 企业所得税 / 个税 / 社保公积金
+  cycle: "month" | "quarter" | "year";   // 申报周期
+  nextDate?: string;                     // YYYY-MM-DD 下次申报截止
+  note?: string;
+}
+
+export type ReimburseStatus = "pending" | "submitted" | "paid"; // 待报销 / 已报销 / 已到账
+
+/** 一张发票 / 一笔报销记录 */
+export interface Invoice {
+  id: string;
+  date: string;            // YYYY-MM-DD 开票 / 消费日期
+  amount: number;          // 金额（含税）
+  currency: string;        // ¥ / $ …
+  category?: string;       // 差旅交通 / 餐饮 / 办公用品 …
+  purpose?: string;        // 用途 / 事由
+  status: ReimburseStatus; // 报销状态
+  handler?: string;        // 经手人
+  // 正式字段（选填）
+  invoiceNo?: string;      // 发票号码
+  seller?: string;         // 开票方 / 抬头
+  tax?: number;            // 税额
+  photo?: string;          // 发票照片（压缩后的 data URL，随保险库加密）
+  note?: string;
+  createdAt: number;
   updatedAt: number;
 }
 

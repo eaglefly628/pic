@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { DevData } from "../../types";
 import { card } from "../../ui";
 import { IconSearch } from "../../icons";
+import { INVOICE_EMOJI, STATUS_META } from "../../lib/invoices";
 
 interface Hit { icon: string; type: string; title: string; sub: string; view: string; url?: string; }
 
@@ -24,6 +25,7 @@ export default function CommandPalette({ data, onClose, onGo }: { data: DevData;
     out.push(...cap(data.lifeItems.filter((it) => has(it.title, it.tags?.join(" "), ...Object.values(it.values).map((v) => Array.isArray(v) ? v.join(" ") : String(v ?? "")))).map((it) => { const c = data.collections.find((x) => x.id === it.collectionId); return { icon: c?.emoji || "📦", type: c?.name || "生活", title: it.title, sub: c?.name || "生活", view: "life" }; })));
     out.push(...cap(data.secrets.filter((s) => has(s.title, s.tags?.join(" "), s.entries.map((e) => e.label).join(" "))).map((s) => ({ icon: "🔑", type: "密钥", title: s.title, sub: "密钥库", view: "secrets" }))));
     out.push(...cap((data.accounts ?? []).filter((a) => has(a.name, a.category, a.login, a.note)).map((a) => ({ icon: a.domain === "work" ? "💳" : "🧾", type: a.domain === "work" ? "账户" : "储值卡", title: a.name, sub: (a.category || "") + (a.balance != null ? `　余额 ${a.currency}${a.balance}` : ""), view: "accounts" }))));
+    out.push(...cap((data.invoices ?? []).filter((v) => has(v.purpose, v.category, v.seller, v.handler, v.invoiceNo, v.note)).map((v) => ({ icon: INVOICE_EMOJI[v.category ?? ""] ?? "🧾", type: "发票", title: v.purpose || v.category || "发票", sub: `${v.date}　${v.currency}${v.amount}　${STATUS_META[v.status].label}`, view: "company" }))));
     return out.slice(0, 24);
   }, [q, data]);
 
@@ -48,7 +50,7 @@ export default function CommandPalette({ data, onClose, onGo }: { data: DevData;
         }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: hits.length ? "0.5px solid var(--separator)" : "none" }}>
           <IconSearch size={17} />
-          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索任务 / 笔记 / 片段 / 书签 / 生活 / 账户 / 密钥…" style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 15, color: "var(--text-primary)" }} />
+          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索任务 / 笔记 / 片段 / 书签 / 生活 / 账户 / 发票 / 密钥…" style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 15, color: "var(--text-primary)" }} />
           <span style={{ fontSize: 11, color: "var(--text-tertiary)", border: "0.5px solid var(--separator)", borderRadius: 5, padding: "1px 5px" }}>Esc</span>
         </div>
         {hits.length > 0 && (

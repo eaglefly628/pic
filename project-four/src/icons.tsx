@@ -81,3 +81,9 @@ export const IconBack = ({ size = 15, stroke = "currentColor", width = 2.1 }: P)
 export const IconImport = ({ size = 16, stroke = "currentColor", width = 1.8 }: P) => (
   <svg {...base(size, stroke, width)}><path d="M12 3v11" /><path d="m8 10 4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
 );
+export const IconReceipt = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><path d="M6 2.5h12v19l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3z" /><path d="M9.5 8h5M9.5 12h5" /></svg>
+);
+export const IconBuilding = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 21v-3h6v3" /></svg>
+);

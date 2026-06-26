@@ -61,5 +61,28 @@ export function sampleData(): DevData {
       { id: id("a"), domain: "life", name: "小区门口洗车", category: "洗车养车", kind: "prepaid", currency: "¥", balance: 30, balanceAt: now - 15 * 86400000, lowBalance: 50, note: "一次 15，快不够了", createdAt: now, updatedAt: now },
       { id: id("a"), domain: "life", name: "动岚健身", category: "健身", kind: "prepaid", currency: "¥", expireAt: day(18), login: "会员卡 8842", note: "年卡，快到期了考虑续不续", createdAt: now, updatedAt: now },
     ],
+    company: {
+      name: "示例科技有限公司",
+      taxId: "91110108MA00EXAMPLE",
+      legalPerson: "张三",
+      address: "北京市海淀区中关村大街 1 号",
+      bank: "招商银行 北京中关村支行",
+      bankAccount: "1109 0812 3456 7890",
+      phone: "010-8888 8888",
+      note: "开票用公司全称；专管员王会计。",
+    },
+    taxFilings: [
+      { id: id("tax"), name: "增值税", cycle: "month", nextDate: day(8) },
+      { id: id("tax"), name: "社保公积金", cycle: "month", nextDate: day(3) },
+      { id: id("tax"), name: "企业所得税", cycle: "quarter", nextDate: day(25) },
+    ],
+    invoices: [
+      { id: id("inv"), date: day(-1), amount: 88, currency: "¥", category: "差旅交通", purpose: "打车去机场", status: "pending", handler: "张三", createdAt: now, updatedAt: now },
+      { id: id("inv"), date: day(-2), amount: 420, currency: "¥", category: "餐饮", purpose: "客户午餐（签约庆祝）", status: "pending", handler: "张三", seller: "海底捞", createdAt: now, updatedAt: now },
+      { id: id("inv"), date: day(-5), amount: 1299, currency: "¥", category: "办公用品", purpose: "显示器一台", status: "submitted", handler: "张三", seller: "京东", invoiceNo: "88990011", tax: 149.6, createdAt: now, updatedAt: now },
+      { id: id("inv"), date: day(-8), amount: 200, currency: "¥", category: "软件订阅", purpose: "团队协作工具月费", status: "paid", handler: "张三", seller: "某 SaaS", invoiceNo: "20260601", createdAt: now, updatedAt: now },
+      { id: id("inv"), date: day(-20), amount: 553, currency: "¥", category: "差旅交通", purpose: "上海出差高铁往返", status: "paid", handler: "李四", invoiceNo: "01234567", createdAt: now, updatedAt: now },
+      { id: id("inv"), date: day(-22), amount: 680, currency: "¥", category: "住宿", purpose: "出差酒店两晚", status: "pending", handler: "李四", createdAt: now, updatedAt: now },
+    ],
   };
 }
