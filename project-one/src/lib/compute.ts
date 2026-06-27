@@ -61,11 +61,11 @@ export function estimateAnnualInterest(ds: Dataset): number {
   return ds.accounts.reduce((s, a) => s + lb[a.id] * (a.rate ?? 0), 0);
 }
 
-/** 距今多少周/天（用于显示账户更新的新鲜度） */
-function weeksAgo(dateISO: string): { label: string; weeks: number; days: number } {
+/** 距今多少天（用于显示账户更新的新鲜度） */
+function freshness(dateISO: string): { label: string; days: number } {
   const days = Math.floor((Date.now() - new Date(dateISO + "T00:00:00").getTime()) / 86_400_000);
-  const weeks = Math.floor(days / 7);
-  return { label: weeks <= 0 ? "本周更新" : `${weeks} 周前`, weeks, days };
+  const label = days <= 0 ? "今天更新" : days === 1 ? "昨天更新" : `${days} 天前更新`;
+  return { label, days };
 }
 
 /** 某账户的历史序列（去掉无记录的点） */
@@ -244,7 +244,12 @@ export function buildView(ds: Dataset, ui: UIState) {
     const bal = latest[a.id];
     const pct = totalAssets ? (Math.abs(bal) / totalAssets) * 100 : 0;
     const upd = lastDate(ds.snapshots, a.id);
-    const wa = upd ? weeksAgo(upd) : null;
+    const wa = upd ? freshness(upd) : null;
+    // 本次余额 vs 上一次余额的差值
+    const series = accountSeries(ds, a.id);
+    const curr = series.length ? series[series.length - 1].v : null;
+    const prev = series.length >= 2 ? series[series.length - 2].v : null;
+    const delta = curr != null && prev != null ? curr - prev : null;
     return {
       id: a.id,
       name: a.name,
@@ -260,8 +265,12 @@ export function buildView(ds: Dataset, ui: UIState) {
       border: i === 0 ? "none" : "0.5px solid var(--separator)",
       updated: upd ?? "—",
       ago: wa ? wa.label : "无记录",
-      stale: wa ? wa.weeks >= 8 : true,
+      stale: wa ? wa.days >= 56 : true,
       overdue: wa ? wa.days > 30 : true, // 超过 1 个月未更新
+      delta,
+      deltaText: delta == null ? "首次" : delta === 0 ? "持平" : fmtSigned(delta),
+      deltaColor: delta == null || delta === 0 ? "var(--text-tertiary)" : delta > 0 ? "var(--green)" : "var(--red)",
+      prevDate: series.length >= 2 ? series[series.length - 2].date : null,
     };
   };
   const byAbs = (a: AccountMeta, b: AccountMeta) => Math.abs(latest[b.id]) - Math.abs(latest[a.id]);

@@ -83,7 +83,7 @@ function AccountRow({ acc, onOpen, showCat }: { acc: AccVM; onOpen: (id: string)
       </div>
       <div style={{ textAlign: "right", width: 112 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: acc.amountColor, fontVariantNumeric: "tabular-nums" }}>{acc.balance}</div>
-        <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{acc.pct} · 占比</div>
+        <div style={{ fontSize: 11, color: acc.deltaColor, fontVariantNumeric: "tabular-nums" }} title={acc.prevDate ? `较上次（${acc.prevDate}）` : "首次记录"}>较上次 {acc.deltaText}</div>
       </div>
       <span style={{ flex: "none" }}><IconChevron size={16} /></span>
       <span style={{ width: 62, flex: "none", display: "flex", justifyContent: "flex-end" }}>
