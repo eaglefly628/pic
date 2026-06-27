@@ -5,6 +5,20 @@ import { presetCollections } from "./lifeSample";
 let _n = 0;
 const id = (p: string) => p + "_" + (Date.now() + _n++).toString(36);
 const day = (offset: number) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toISOString().slice(0, 10); };
+const fakeInvoice = (label: string, color: string) =>
+  "data:image/svg+xml," + encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='320'>` +
+    `<rect width='240' height='320' fill='#ffffff'/>` +
+    `<rect width='240' height='46' fill='${color}'/>` +
+    `<text x='16' y='30' fill='#fff' font-family='Helvetica,Arial,sans-serif' font-size='17' font-weight='bold'>发 票</text>` +
+    `<text x='16' y='84' fill='#222' font-family='Helvetica,Arial,sans-serif' font-size='15' font-weight='bold'>${label}</text>` +
+    `<rect x='16' y='108' width='200' height='9' rx='4' fill='#eee'/>` +
+    `<rect x='16' y='130' width='168' height='9' rx='4' fill='#eee'/>` +
+    `<rect x='16' y='152' width='188' height='9' rx='4' fill='#eee'/>` +
+    `<rect x='16' y='174' width='150' height='9' rx='4' fill='#eee'/>` +
+    `<text x='16' y='298' fill='#888' font-family='Helvetica,Arial,sans-serif' font-size='12'>电子普通发票（示例）</text>` +
+    `</svg>`
+  );
 
 export function sampleData(): DevData {
   const now = Date.now();
@@ -72,12 +86,12 @@ export function sampleData(): DevData {
       note: "开票用公司全称；专管员王会计。",
     },
     invoices: [
-      { id: id("inv"), date: day(-1), amount: 88, currency: "¥", category: "差旅交通", purpose: "打车去机场", status: "pending", handler: "张三", createdAt: now, updatedAt: now },
-      { id: id("inv"), date: day(-2), amount: 420, currency: "¥", category: "餐饮", purpose: "客户午餐（签约庆祝）", status: "pending", handler: "张三", seller: "海底捞", createdAt: now, updatedAt: now },
-      { id: id("inv"), date: day(-5), amount: 1299, currency: "¥", category: "办公用品", purpose: "显示器一台", status: "submitted", handler: "张三", seller: "京东", invoiceNo: "88990011", tax: 149.6, createdAt: now, updatedAt: now },
-      { id: id("inv"), date: day(-8), amount: 200, currency: "¥", category: "软件订阅", purpose: "团队协作工具月费", status: "paid", handler: "张三", seller: "某 SaaS", invoiceNo: "20260601", createdAt: now, updatedAt: now },
-      { id: id("inv"), date: day(-20), amount: 553, currency: "¥", category: "差旅交通", purpose: "上海出差高铁往返", status: "paid", handler: "李四", invoiceNo: "01234567", createdAt: now, updatedAt: now },
-      { id: id("inv"), date: day(-22), amount: 680, currency: "¥", category: "住宿", purpose: "出差酒店两晚", status: "pending", handler: "李四", createdAt: now, updatedAt: now },
+      { id: id("inv"), date: day(-1), category: "差旅交通", note: "打车去机场", photo: fakeInvoice("差旅交通 · 打车", "#3b82f6"), createdAt: now, updatedAt: now },
+      { id: id("inv"), date: day(-3), category: "餐饮", note: "客户午餐", photo: fakeInvoice("餐饮 · 午餐", "#f59e0b"), createdAt: now, updatedAt: now },
+      { id: id("inv"), date: day(-6), category: "办公用品", note: "打印纸 / 文具", photo: fakeInvoice("办公用品", "#14b8a6"), createdAt: now, updatedAt: now },
+      { id: id("inv"), date: day(-20), category: "差旅交通", note: "高铁往返", photo: fakeInvoice("差旅交通 · 高铁", "#3b82f6"), createdAt: now, updatedAt: now },
+      { id: id("inv"), date: "2026-05-18", category: "住宿", note: "出差酒店两晚", photo: fakeInvoice("住宿 · 酒店", "#8b5cf6"), createdAt: now, updatedAt: now },
+      { id: id("inv"), date: "2026-05-27", category: "软件订阅", note: "协作工具月费", photo: fakeInvoice("软件订阅", "#22c55e"), createdAt: now, updatedAt: now },
     ],
   };
 }

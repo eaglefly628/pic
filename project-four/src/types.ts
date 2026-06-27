@@ -122,24 +122,13 @@ export interface CompanyInfo {
   note?: string;
 }
 
-export type ReimburseStatus = "pending" | "submitted" | "paid"; // 待报销 / 已报销 / 已到账
-
-/** 一张发票 / 一笔报销记录 */
+/** 一张发票：核心是图片，按月份归档、按类别归类 */
 export interface Invoice {
   id: string;
-  date: string;            // YYYY-MM-DD 开票 / 消费日期
-  amount: number;          // 金额（含税）
-  currency: string;        // ¥ / $ …
-  category?: string;       // 差旅交通 / 餐饮 / 办公用品 …
-  purpose?: string;        // 用途 / 事由
-  status: ReimburseStatus; // 报销状态
-  handler?: string;        // 经手人
-  // 正式字段（选填）
-  invoiceNo?: string;      // 发票号码
-  seller?: string;         // 开票方 / 抬头
-  tax?: number;            // 税额
-  photo?: string;          // 发票照片（压缩后的 data URL，随保险库加密）
-  note?: string;
+  date: string;       // YYYY-MM-DD 归属日期（默认上传当天），用于按月归档
+  photo?: string;     // 发票图片（压缩后的 data URL，随保险库加密）—— 核心
+  category?: string;  // 归类：差旅交通 / 餐饮 / 办公用品 …
+  note?: string;      // 备注 / 简短标题（选填）
   createdAt: number;
   updatedAt: number;
 }

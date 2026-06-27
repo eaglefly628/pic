@@ -1,23 +1,20 @@
 import React, { useMemo, useRef, useState } from "react";
-import type { CompanyInfo, DevData, Invoice, ReimburseStatus } from "../../types";
+import type { CompanyInfo, DevData, Invoice } from "../../types";
 import { useVault } from "../../lib/vault";
-import { Btn, TextField, TextArea, Select, Segmented, card, inputStyle, EmptyState } from "../../ui";
-import { IconPlus, IconSearch, IconGear, IconClose, IconCopy, IconCheck, IconReceipt, IconBuilding, IconImport } from "../../icons";
+import { Btn, TextField, TextArea, Segmented, card, inputStyle, EmptyState } from "../../ui";
+import { IconPlus, IconGear, IconClose, IconCopy, IconCheck, IconReceipt, IconBuilding, IconImport } from "../../icons";
 import { uid } from "./shared";
-import { fmtMoney, toneColor, CURRENCIES, type Tone } from "../../lib/accounts";
-import {
-  INVOICE_CATEGORIES, INVOICE_EMOJI, STATUS_META, STATUS_ORDER,
-  invoiceSummary, joinMoney, stalePending,
-} from "../../lib/invoices";
+import { INVOICE_CATEGORIES, INVOICE_EMOJI, groupByMonth, type MonthGroup } from "../../lib/invoices";
 
 type Mut = (fn: (d: DevData) => void) => void;
 type View = "invoices" | "company";
 
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const fmtDate = (s?: string) => { if (!s) return "—"; const p = s.split("-"); return p.length === 3 ? `${+p[1]}/${+p[2]}` : s; };
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** 读图 + 压缩成 jpeg data URL（长边 ≤ 1400），失败则退回原图。 */
-async function fileToDataURL(file: File, max = 1400, quality = 0.82): Promise<string> {
+/** 读图 + 压缩成 jpeg data URL（长边 ≤ 1600），失败则退回原图。 */
+async function fileToDataURL(file: File, max = 1600, quality = 0.85): Promise<string> {
   const raw = await new Promise<string>((res, rej) => {
     const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = () => rej(new Error("read")); r.readAsDataURL(file);
   });
@@ -25,7 +22,7 @@ async function fileToDataURL(file: File, max = 1400, quality = 0.82): Promise<st
     const img = new Image();
     img.onload = () => {
       const scale = Math.min(1, max / Math.max(img.width, img.height));
-      if (scale >= 1 && file.size < 400_000) return res(raw);
+      if (scale >= 1 && file.size < 500_000) return res(raw);
       const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
       const c = document.createElement("canvas"); c.width = w; c.height = h;
       const ctx = c.getContext("2d"); if (!ctx) return res(raw);
@@ -37,125 +34,116 @@ async function fileToDataURL(file: File, max = 1400, quality = 0.82): Promise<st
   });
 }
 
+function triggerDownload(dataUrl: string, filename: string) {
+  const a = document.createElement("a"); a.href = dataUrl; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
 export default function Company({ data, mut }: { data: DevData; mut: Mut }) {
   const [view, setView] = useState<View>("invoices");
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <Segmented<View> value={view} onChange={setView} style={{ width: 280 }}
-          options={[{ value: "invoices", label: "发票报销" }, { value: "company", label: "公司资料" }]} />
+        <Segmented<View> value={view} onChange={setView} style={{ width: 260 }}
+          options={[{ value: "invoices", label: "发票" }, { value: "company", label: "公司资料" }]} />
       </div>
       {view === "invoices" ? <Invoices data={data} mut={mut} /> : <CompanyProfile data={data} mut={mut} />}
     </div>
   );
 }
 
-// ── 发票 / 报销清单 ──────────────────────────────────────────
+// ── 发票：上传 → 归类 → 按月归档 / 月底导出 ──────────────────────
 function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
-  const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<ReimburseStatus | "all">("all");
+  const [cat, setCat] = useState<string>("");          // "" = 全部
   const [edit, setEdit] = useState<Invoice | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const all = data.invoices ?? [];
-  const summary = useMemo(() => invoiceSummary(all), [all]);
-  const stale = useMemo(() => stalePending(all), [all]);
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: all.length, pending: 0, submitted: 0, paid: 0 };
-    for (const v of all) c[v.status]++;
-    return c;
+  const cats = useMemo(() => {
+    const present = new Set(all.map((v) => v.category || "").filter(Boolean));
+    return [...INVOICE_CATEGORIES.filter((c) => present.has(c)), ...[...present].filter((c) => !INVOICE_CATEGORIES.includes(c))];
   }, [all]);
+  const filtered = cat ? all.filter((v) => (v.category || "") === cat) : all;
+  const groups = useMemo(() => groupByMonth(filtered), [filtered]);
 
-  const ql = q.trim().toLowerCase();
-  const list = all
-    .filter((v) => filter === "all" || v.status === filter)
-    .filter((v) => !ql || `${v.purpose ?? ""} ${v.category ?? ""} ${v.seller ?? ""} ${v.handler ?? ""} ${v.invoiceNo ?? ""} ${v.note ?? ""}`.toLowerCase().includes(ql))
-    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.createdAt - a.createdAt);
-
-  const save = (v: Invoice) => { mut((d) => { if (!d.invoices) d.invoices = []; const i = d.invoices.findIndex((x) => x.id === v.id); if (i >= 0) d.invoices[i] = { ...v, updatedAt: Date.now() }; else d.invoices.unshift(v); }); setEdit(null); };
+  const addFiles = async (files: FileList | null) => {
+    if (!files || !files.length) return;
+    setBusy(true);
+    const photos = await Promise.all(Array.from(files).map((f) => fileToDataURL(f).catch(() => undefined)));
+    mut((d) => {
+      if (!d.invoices) d.invoices = [];
+      const now = Date.now();
+      photos.forEach((p, i) => { if (!p) return; d.invoices.unshift({ id: uid("inv"), date: todayStr(), photo: p, category: cat || undefined, createdAt: now + i, updatedAt: now + i }); });
+    });
+    setBusy(false);
+  };
+  const save = (v: Invoice) => { mut((d) => { const i = (d.invoices ?? []).findIndex((x) => x.id === v.id); if (i >= 0) d.invoices[i] = { ...v, updatedAt: Date.now() }; }); setEdit(null); };
   const del = (id: string) => { mut((d) => { d.invoices = (d.invoices ?? []).filter((x) => x.id !== id); }); setEdit(null); };
-  const cycleStatus = (v: Invoice) => mut((d) => {
-    const cur = (d.invoices ?? []).find((x) => x.id === v.id); if (!cur) return;
-    cur.status = STATUS_ORDER[(STATUS_ORDER.indexOf(cur.status) + 1) % STATUS_ORDER.length];
-    cur.updatedAt = Date.now();
-  });
-  const newInvoice = () => setEdit({ id: uid("inv"), date: todayStr(), amount: 0, currency: "¥", category: "", purpose: "", status: "pending", createdAt: Date.now(), updatedAt: Date.now() });
 
-  const FILTERS: { v: ReimburseStatus | "all"; label: string }[] = [
-    { v: "all", label: "全部" }, { v: "pending", label: "待报销" }, { v: "submitted", label: "已报销" }, { v: "paid", label: "已到账" },
-  ];
+  const exportMonth = async (g: MonthGroup) => {
+    for (let i = 0; i < g.items.length; i++) {
+      const v = g.items[i]; if (!v.photo) continue;
+      const ext = v.photo.startsWith("data:image/png") ? "png" : v.photo.startsWith("data:image/svg") ? "svg" : "jpg";
+      triggerDownload(v.photo, `${g.ym}_${v.category || "未归类"}_${String(i + 1).padStart(2, "0")}.${ext}`);
+      await sleep(220);
+    }
+  };
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 6 }}>
-          {FILTERS.map((f) => {
-            const active = filter === f.v;
-            const col = f.v === "all" ? "var(--text-primary)" : STATUS_META[f.v].color;
-            return (
-              <button key={f.v} className="fv-tap" onClick={() => setFilter(f.v)} style={{
-                border: "0.5px solid " + (active ? "transparent" : "var(--separator)"), cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                padding: "7px 12px", borderRadius: 9, whiteSpace: "nowrap",
-                color: active ? (f.v === "all" ? "var(--bg-elevated)" : "#fff") : "var(--text-secondary)",
-                background: active ? (f.v === "all" ? "var(--text-primary)" : col) : "var(--bg-elevated)",
-              }}>{f.label}<span style={{ marginLeft: 6, opacity: 0.7, fontVariantNumeric: "tabular-nums" }}>{counts[f.v]}</span></button>
-            );
-          })}
+      {/* 类别筛选（也是上传时的默认归类）+ 上传 */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+          <CatChip active={cat === ""} onClick={() => setCat("")}>全部</CatChip>
+          {cats.map((c) => <CatChip key={c} active={cat === c} onClick={() => setCat(c)}>{(INVOICE_EMOJI[c] ?? "🧾") + " " + c}</CatChip>)}
         </div>
-        <div style={{ flex: 1, minWidth: 160, display: "flex", alignItems: "center", gap: 6, height: 36, padding: "0 12px", borderRadius: 10, background: "var(--fill-q)", border: "0.5px solid var(--separator)" }}>
-          <IconSearch /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索用途 / 类别 / 经手人 / 发票号" style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 13, color: "var(--text-primary)" }} />
-        </div>
-        <Btn onClick={newInvoice}><IconPlus size={15} />记一张发票</Btn>
+        <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { addFiles(e.target.files); e.currentTarget.value = ""; }} />
+        <Btn onClick={() => fileRef.current?.click()} disabled={busy}>{busy ? "上传中…" : <><IconImport size={15} stroke="#fff" />上传发票</>}</Btn>
       </div>
 
-      {/* 一眼看到：待报销 / 待到账 / 本月 + 提醒 */}
-      {all.length > 0 && (
-        <div style={{ ...card, padding: "13px 16px", marginBottom: 14, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 18 }}>
-          <Stat label="待报销" value={joinMoney(summary.pending, fmtMoney)} sub={`${summary.pendingCount} 张`} color="var(--orange)" />
-          <div style={{ width: 1, height: 26, background: "var(--separator)" }} />
-          <Stat label="已报销 · 待到账" value={joinMoney(summary.submitted, fmtMoney)} sub={`${summary.submittedCount} 张`} color="var(--accent)" />
-          <div style={{ width: 1, height: 26, background: "var(--separator)" }} />
-          <Stat label="本月开票" value={joinMoney(summary.month, fmtMoney)} sub={`${summary.monthCount} 张`} color="var(--text-primary)" />
-          {stale && <div style={{ flex: 1 }} />}
-          {stale && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <Chip tone="warn" label="待报销" text={`有 ${stale.count} 张压了 ${stale.oldestDays} 天`} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {list.length === 0 ? (
+      {all.length === 0 ? (
         <EmptyState icon={<IconReceipt size={26} stroke="var(--text-tertiary)" />}
-          title={q || filter !== "all" ? "没有符合的发票" : "还没有发票记录"}
-          text={q || filter !== "all" ? undefined : "把每天每次报销的发票记在这：金额、用途、经手人、报销到哪一步，能贴张发票照片就更省心。"}
-          action={!q && filter === "all" && <Btn onClick={newInvoice}><IconPlus size={15} />记一张发票</Btn>} />
+          title="还没有发票"
+          text="把发票拍照或截图传上来，选个类别归好。到月底按月一键导出，交给会计就行——不用在这填金额、记账。"
+          action={<Btn onClick={() => fileRef.current?.click()}><IconImport size={15} stroke="#fff" />上传发票</Btn>} />
+      ) : filtered.length === 0 ? (
+        <EmptyState icon={<IconReceipt size={26} stroke="var(--text-tertiary)" />} title={`「${cat}」下还没有发票`} text="换个类别看看，或上传后归到这一类。" />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {list.map((v) => {
-            const sm = STATUS_META[v.status];
-            return (
-              <div key={v.id} className="fv-card-int" style={{ ...card, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12 }}>
-                {v.photo
-                  ? <button onClick={() => setLightbox(v.photo!)} title="查看发票" style={{ padding: 0, border: "none", background: "none", cursor: "zoom-in", flex: "none" }}><img src={v.photo} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover", display: "block", border: "0.5px solid var(--separator)" }} /></button>
-                  : <span style={{ width: 40, height: 40, borderRadius: 8, background: "var(--fill-q)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flex: "none" }}>{INVOICE_EMOJI[v.category ?? ""] ?? "🧾"}</span>}
-                <div style={{ width: 50, flex: "none", fontSize: 12.5, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{fmtDate(v.date)}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.purpose || v.category || "（未填用途）"}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {[v.category, v.handler && `经手 ${v.handler}`, v.seller, v.invoiceNo && `No.${v.invoiceNo}`].filter(Boolean).join("  ·  ") || "—"}
-                  </div>
-                </div>
-                <div style={{ fontSize: 15.5, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", flex: "none" }}>{fmtMoney(v.amount, v.currency)}</div>
-                <button className="fv-tap" onClick={() => cycleStatus(v)} title="点一下切换：待报销 → 已报销 → 已到账" style={{ flex: "none", border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 700, color: sm.color, background: `color-mix(in srgb, ${sm.color} 14%, transparent)`, padding: "5px 0", borderRadius: 7, width: 62, textAlign: "center" }}>{sm.label}</button>
-                <button className="fv-icnbtn" onClick={() => setEdit(v)} title="编辑" style={icnBtn}><IconGear size={14} stroke="currentColor" /></button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          {groups.map((g) => (
+            <div key={g.ym}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-primary)" }}>{g.label}</div>
+                <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{g.items.length} 张</div>
+                <div style={{ flex: 1 }} />
+                <button className="fv-tap" onClick={() => exportMonth(g)} title="把本月发票图片一张张下载下来" style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "0.5px solid var(--separator)", background: "var(--bg-elevated)", color: "var(--text-secondary)", fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 8, cursor: "pointer" }}>
+                  <span style={{ display: "inline-flex", transform: "rotate(180deg)" }}><IconImport size={13} stroke="currentColor" /></span>导出本月
+                </button>
               </div>
-            );
-          })}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))", gap: 12 }}>
+                {g.items.map((v) => (
+                  <div key={v.id} className="fv-card-int" style={{ ...card, overflow: "hidden", cursor: "pointer" }} onClick={() => setEdit(v)}>
+                    <div style={{ position: "relative", aspectRatio: "3 / 4", background: "var(--fill-q)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {v.photo
+                        ? <img src={v.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onClick={(e) => { e.stopPropagation(); setLightbox(v.photo!); }} />
+                        : <span style={{ fontSize: 34 }}>{INVOICE_EMOJI[v.category ?? ""] ?? "🧾"}</span>}
+                      <span style={{ position: "absolute", left: 8, top: 8, fontSize: 10.5, fontWeight: 600, color: "#fff", background: "rgba(0,0,0,0.52)", padding: "2px 7px", borderRadius: 6 }}>{v.category ? (INVOICE_EMOJI[v.category] ?? "🧾") + " " + v.category : "未归类"}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px" }}>
+                      <span style={{ fontSize: 11.5, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", flex: "none" }}>{fmtDate(v.date)}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "right" }}>{v.note || ""}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {edit && <InvoiceEditor key={edit.id} initial={edit} isNew={!all.some((x) => x.id === edit.id)} onClose={() => setEdit(null)} onSave={save} onDelete={() => del(edit.id)} />}
+      {edit && <InvoiceEditor key={edit.id} initial={edit} onClose={() => setEdit(null)} onSave={save} onDelete={() => del(edit.id)} />}
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, zIndex: 95, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30, cursor: "zoom-out", animation: "fvFade .15s ease" }}>
           <img src={lightbox} alt="发票" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 10, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }} />
@@ -165,107 +153,62 @@ function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
   );
 }
 
-function Stat({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+function CatChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <div>
-      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 3 }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <span style={{ fontSize: 19, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{value}</span>
-        <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>{sub}</span>
-      </div>
-    </div>
-  );
-}
-function Chip({ tone, label, text }: { tone: Tone; label: string; text: string }) {
-  const c = toneColor(tone);
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 600, color: c, background: `color-mix(in srgb, ${c} 12%, transparent)`, padding: "3px 9px", borderRadius: 7 }}>
-      <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{label}</span>{text}
-    </span>
+    <button className="fv-tap" onClick={onClick} style={{ border: "0.5px solid " + (active ? "transparent" : "var(--separator)"), cursor: "pointer", fontSize: 12.5, fontWeight: 600, padding: "7px 12px", borderRadius: 9, whiteSpace: "nowrap", color: active ? "var(--bg-elevated)" : "var(--text-secondary)", background: active ? "var(--text-primary)" : "var(--bg-elevated)" }}>{children}</button>
   );
 }
 
-function InvoiceEditor({ initial, isNew, onClose, onSave, onDelete }: { initial: Invoice; isNew: boolean; onClose: () => void; onSave: (v: Invoice) => void; onDelete: () => void }) {
+function InvoiceEditor({ initial, onClose, onSave, onDelete }: { initial: Invoice; onClose: () => void; onSave: (v: Invoice) => void; onDelete: () => void }) {
   const [v, setV] = useState<Invoice>(initial);
-  const [amountStr, setAmountStr] = useState(initial.amount ? String(initial.amount) : "");
-  const [taxStr, setTaxStr] = useState(initial.tax != null ? String(initial.tax) : "");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const num = (s: string): number | undefined => { const n = parseFloat(s); return isNaN(n) ? undefined : n; };
-  const amount = num(amountStr);
-
-  const onPick = async (f?: File) => {
-    if (!f) return;
-    setBusy(true);
-    try { const url = await fileToDataURL(f); setV((p) => ({ ...p, photo: url })); } catch { /* ignore */ }
-    setBusy(false);
-  };
-  const submit = () => onSave({ ...v, amount: amount ?? 0, tax: num(taxStr), purpose: v.purpose?.trim() || undefined });
+  const replace = async (f?: File) => { if (!f) return; setBusy(true); try { const url = await fileToDataURL(f); setV((p) => ({ ...p, photo: url })); } catch { /* ignore */ } setBusy(false); };
 
   return (
-    <Modal title={isNew ? "记一张发票" : "编辑发票"} onClose={onClose} footer={<>
-      {!isNew && <Btn variant="danger" onClick={onDelete}>删除</Btn>}
+    <Modal title="发票" width={460} onClose={onClose} footer={<>
+      <Btn variant="danger" onClick={onDelete}>删除</Btn>
       <div style={{ flex: 1 }} />
       <Btn variant="ghost" onClick={onClose}>取消</Btn>
-      <Btn onClick={submit} disabled={!amount || amount <= 0}><IconCheck size={15} stroke="#fff" />保存</Btn>
+      <Btn onClick={() => onSave({ ...v, note: v.note?.trim() || undefined })}><IconCheck size={15} stroke="#fff" />保存</Btn>
     </>}>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+        {v.photo
+          ? <img src={v.photo} alt="发票" style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 10, border: "0.5px solid var(--separator)", display: "block" }} />
+          : <div style={{ width: "100%", height: 180, borderRadius: 10, background: "var(--fill-q)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40 }}>{INVOICE_EMOJI[v.category ?? ""] ?? "🧾"}</div>}
+      </div>
+      <div style={{ textAlign: "center", marginBottom: 14 }}>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { replace(e.target.files?.[0]); e.currentTarget.value = ""; }} />
+        <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ border: "none", background: "transparent", color: "var(--accent)", fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer" }}>{busy ? "处理中…" : v.photo ? "替换照片" : "上传照片"}</button>
+      </div>
       <Row>
-        <L label="日期" flex={1}><input type="date" value={v.date} onChange={(e) => setV({ ...v, date: e.target.value })} style={{ ...inputStyle, height: 36, padding: "0 12px" }} /></L>
-        <L label="金额（含税）" flex={1}><TextField value={amountStr} onChange={(e) => setAmountStr(e.target.value)} inputMode="decimal" placeholder="如 420" autoFocus /></L>
-        <L label="币种" flex={0.7}><Select value={v.currency} onChange={(e) => setV({ ...v, currency: e.target.value })} options={CURRENCIES.map((c) => ({ value: c, label: c }))} /></L>
-      </Row>
-      <Row>
-        <L label="类别" flex={1}>
-          <input list="inv-cats" value={v.category ?? ""} onChange={(e) => setV({ ...v, category: e.target.value })} placeholder="选择或输入" style={{ ...inputStyle, height: 36, padding: "0 12px" }} />
+        <L label="类别（归类）" flex={1.4}>
+          <input list="inv-cats" value={v.category ?? ""} onChange={(e) => setV({ ...v, category: e.target.value || undefined })} placeholder="选择或输入" style={{ ...inputStyle, height: 36, padding: "0 12px" }} />
           <datalist id="inv-cats">{INVOICE_CATEGORIES.map((c) => <option key={c} value={c} />)}</datalist>
         </L>
-        <L label="报销状态" flex={1.3}><Segmented<ReimburseStatus> value={v.status} onChange={(s) => setV({ ...v, status: s })} options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_META[s].label }))} /></L>
+        <L label="日期" flex={1}><input type="date" value={v.date} onChange={(e) => setV({ ...v, date: e.target.value })} style={{ ...inputStyle, height: 36, padding: "0 12px" }} /></L>
       </Row>
-      <L label="用途 / 事由"><TextField value={v.purpose ?? ""} onChange={(e) => setV({ ...v, purpose: e.target.value })} placeholder="比如：客户午餐、出差高铁、买打印纸" /></L>
-      <Row>
-        <L label="经手人" flex={1}><TextField value={v.handler ?? ""} onChange={(e) => setV({ ...v, handler: e.target.value || undefined })} placeholder="谁垫付 / 谁报销" /></L>
-        <L label="发票号（选填）" flex={1}><TextField value={v.invoiceNo ?? ""} onChange={(e) => setV({ ...v, invoiceNo: e.target.value || undefined })} placeholder="可不填" /></L>
-      </Row>
-      <Row>
-        <L label="开票方 / 抬头（选填）" flex={1}><TextField value={v.seller ?? ""} onChange={(e) => setV({ ...v, seller: e.target.value || undefined })} placeholder="可不填" /></L>
-        <L label="税额（选填）" flex={1}><TextField value={taxStr} onChange={(e) => setTaxStr(e.target.value)} inputMode="decimal" placeholder="可不填" /></L>
-      </Row>
-      <L label="发票照片 / 截图（自动压缩，随保险库加密存本机）">
-        {v.photo ? (
-          <div style={{ position: "relative", display: "inline-block" }}>
-            <img src={v.photo} alt="发票" style={{ maxWidth: 200, maxHeight: 200, borderRadius: 10, border: "0.5px solid var(--separator)", display: "block" }} />
-            <button onClick={() => setV({ ...v, photo: undefined })} title="移除照片" style={{ position: "absolute", top: -9, right: -9, width: 24, height: 24, borderRadius: "50%", background: "var(--text-primary)", color: "var(--bg-elevated)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "var(--shadow)" }}><IconClose size={13} stroke="currentColor" /></button>
-          </div>
-        ) : (
-          <button onClick={() => fileRef.current?.click()} disabled={busy} className="fv-btn" style={{ display: "inline-flex", alignItems: "center", gap: 7, border: "0.5px dashed var(--separator)", background: "var(--fill-q)", color: "var(--text-secondary)", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer" }}>
-            {busy ? "处理中…" : <><IconImport size={15} stroke="currentColor" />上传发票照片</>}
-          </button>
-        )}
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { onPick(e.target.files?.[0]); e.currentTarget.value = ""; }} />
-      </L>
-      <L label="备注"><TextArea value={v.note ?? ""} onChange={(e) => setV({ ...v, note: e.target.value || undefined })} placeholder="附加说明，可不填" /></L>
+      <L label="备注（选填）"><TextField value={v.note ?? ""} onChange={(e) => setV({ ...v, note: e.target.value })} placeholder="比如：高铁票、客户晚餐…方便以后找" /></L>
     </Modal>
   );
 }
 
-// ── 公司资料（基础信息）──────────────────────────────────────
+// ── 公司资料（一次填好放着）─────────────────────────────────────
 function CompanyProfile({ data, mut }: { data: DevData; mut: Mut }) {
   const { copy } = useVault();
   const info = data.company ?? {};
   const [editInfo, setEditInfo] = useState(false);
   const hasInfo = !!(info.name || info.taxId || info.legalPerson || info.address || info.bank || info.bankAccount || info.phone || info.note);
-
   const saveInfo = (c: CompanyInfo) => { mut((d) => { d.company = c; }); setEditInfo(false); };
 
   return (
     <div style={{ maxWidth: 620 }}>
-      {/* 公司资料 */}
       <div style={{ ...card, padding: "18px 20px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: hasInfo ? 16 : 0 }}>
           <span style={{ width: 34, height: 34, borderRadius: 9, background: "color-mix(in srgb, var(--accent) 14%, transparent)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconBuilding size={18} stroke="var(--accent)" /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{info.name || "公司资料"}</div>
-            <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 1 }}>{hasInfo ? "税号、开户行等都收在这" : "还没填"}</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 1 }}>{hasInfo ? "一次填好放着 · 税号、开户行都收在这" : "还没填"}</div>
           </div>
           <button className="fv-icnbtn" onClick={() => setEditInfo(true)} title="编辑" style={icnBtn}><IconGear size={15} stroke="currentColor" /></button>
         </div>
@@ -285,7 +228,6 @@ function CompanyProfile({ data, mut }: { data: DevData; mut: Mut }) {
           </div>
         )}
       </div>
-
       {editInfo && <CompanyInfoEditor initial={info} onClose={() => setEditInfo(false)} onSave={saveInfo} />}
     </div>
   );
