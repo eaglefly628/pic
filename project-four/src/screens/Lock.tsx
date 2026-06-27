@@ -84,7 +84,7 @@ export default function Lock() {
         </form>
 
         <div style={{ marginTop: 16, textAlign: "center" }}>
-          <input ref={fileRef} type="file" accept=".vault,.json,application/json" style={{ display: "none" }}
+          <input ref={fileRef} type="file" style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); e.currentTarget.value = ""; }} />
           <button onClick={() => fileRef.current?.click()} style={linkBtn}>
             {isSetup ? "已有保险库？从文件导入" : "导入其它保险库文件"}

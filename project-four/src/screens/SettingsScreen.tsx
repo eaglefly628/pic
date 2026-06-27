@@ -58,7 +58,7 @@ export default function SettingsScreen() {
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Btn variant="soft" onClick={exportVault}>导出加密文件</Btn>
-          <input ref={fileRef} type="file" accept=".vault,.json,application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); e.currentTarget.value = ""; }} />
+          <input ref={fileRef} type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); e.currentTarget.value = ""; }} />
           <Btn variant="ghost" onClick={() => fileRef.current?.click()}>导入（替换本机）</Btn>
         </div>
       </Section>
