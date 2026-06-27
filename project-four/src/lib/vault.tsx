@@ -120,7 +120,9 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     const d = new Date();
     a.href = url;
     a.download = `devworld-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}.vault`;
+    document.body.appendChild(a);   // Safari 需要锚点在 DOM 里才会触发下载
     a.click();
+    a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, []);
 
