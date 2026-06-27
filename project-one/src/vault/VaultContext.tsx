@@ -37,10 +37,6 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const blobRef = useRef<VaultBlob | null>(null);
   const lastActivity = useRef<number>(Date.now());
 
-  useEffect(() => {
-    setStatus(hasVault() ? "locked" : "onboard");
-  }, []);
-
   const create = useCallback(async (pw: string) => {
     const initial = initialVaultData();
     const { blob, keys } = await createVault(pw, initial);
@@ -70,6 +66,25 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       return false; // 密码错误
     }
   }, []);
+
+  // 初始化：大厅（hub）已解锁则拿大厅主密码自动开锁 / 首次初始化；否则回落到本应用自己的锁屏
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const housePw = sessionStorage.getItem("home.key");
+      if (housePw) {
+        if (hasVault()) {
+          const ok = await unlock(housePw);
+          if (ok || cancelled) return;          // 与大厅密码一致 → 直接进；不一致 → 回落到自己的锁
+        } else {
+          await create(housePw);
+          return;
+        }
+      }
+      if (!cancelled) setStatus(hasVault() ? "locked" : "onboard");
+    })();
+    return () => { cancelled = true; };
+  }, [create, unlock]);
 
   const lock = useCallback(() => {
     keysRef.current = null;
