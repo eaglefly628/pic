@@ -105,6 +105,25 @@
   #gate .gnote { font-size: 11px; color: var(--text3); text-align: center; line-height: 1.6; max-width: 280px; }
   .lockbtn { border: none; background: rgba(0,0,0,0.05); cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text2); padding: 6px 12px; border-radius: 9px; display: none; align-items: center; gap: 5px; }
   .lockbtn.show { display: inline-flex; }
+  .barbtn { border: none; background: rgba(0,0,0,0.05); cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text2); padding: 6px 12px; border-radius: 9px; display: inline-flex; align-items: center; gap: 5px; }
+  /* 设置 · 数据 */
+  #settings { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.32); backdrop-filter: blur(3px); }
+  #settings.show { display: flex; }
+  #settings .scard2 { width: 470px; max-width: 92%; max-height: 86%; overflow: auto; background: #fff; border-radius: 18px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(20,20,40,0.4); }
+  #settings h3 { font-size: 17px; }
+  #settings .ssub { font-size: 12px; color: var(--text2); margin: 4px 0 16px; }
+  #settings .sec { border-top: 0.5px solid var(--sep); padding: 15px 0; }
+  #settings .sec:first-of-type { border-top: none; padding-top: 0; }
+  #settings .seclabel { font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 10px; }
+  #settings input.tin { width: 100%; height: 38px; padding: 0 12px; font-size: 14px; border-radius: 10px; border: 0.5px solid var(--sep); background: #f5f5f7; outline: none; }
+  #settings .row2 { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  #settings .pbtn { border: none; border-radius: 10px; padding: 9px 15px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  #settings .pbtn.primary { background: var(--accent); color: #fff; }
+  #settings .pbtn.soft { background: rgba(0,0,0,0.05); color: var(--text); }
+  #settings .pbtn.ghost { background: transparent; color: var(--text2); border: 0.5px solid var(--sep); }
+  #settings .pbtn:disabled { opacity: 0.55; cursor: default; }
+  #settings .shint { font-size: 11px; color: var(--text3); margin-top: 9px; line-height: 1.6; }
+  #settings .sclose { float: right; border: none; background: transparent; font-size: 17px; cursor: pointer; color: var(--text3); line-height: 1; }
 </style>
 </head>
 <body class="scene-home">
@@ -116,7 +135,8 @@
       <input id="gpw2" type="password" placeholder="再次输入" autocomplete="new-password" style="display:none" />
       <div class="gerr" id="gerr"></div>
       <button class="gbtn" id="gbtn">解锁</button>
-      <div class="gnote">一个主密码，管全家所有世界。本地加密、只存这台机器，忘了找不回。</div>
+      <button id="gcancel" style="border:none;background:transparent;color:var(--text2);font-size:12.5px;cursor:pointer">取消</button>
+      <div class="gnote">「家庭理财」的主密码。本地加密、只存这台机器，忘了找不回。其它世界进去不用密码。</div>
     </div>
   </div>
   <div id="bar">
@@ -126,6 +146,7 @@
     <button class="tab" data-go="female">女主</button>
     <span class="spacer"></span>
     <span class="hint">本地 · 私密 · 不上传</span>
+    <button class="barbtn" id="setbtn">⚙ 设置</button>
     <button class="lockbtn" id="lockbtn">🔒 锁定</button>
   </div>
 
@@ -175,6 +196,28 @@
     </div>
 
     <iframe id="frame" title="app"></iframe>
+  </div>
+  <div id="settings">
+    <div class="scard2">
+      <button class="sclose" id="sclose">✕</button>
+      <h3>设置 · 数据</h3>
+      <div class="ssub">用户、设置、备份都收在大厅这一处。</div>
+      <div class="sec">
+        <div class="seclabel">用户资料</div>
+        <input class="tin" id="uname" placeholder="你的称呼（如 eaglefly）" />
+        <div class="row2" style="margin-top:10px"><button class="pbtn primary" id="usave">保存</button><span class="shint" id="umsg" style="margin-top:0"></span></div>
+      </div>
+      <div class="sec">
+        <div class="seclabel">整屋备份 · 一个文件，含所有世界 + 设置</div>
+        <div class="row2">
+          <button class="pbtn soft" id="bkexport">导出全部</button>
+          <button class="pbtn ghost" id="bkimport">从备份恢复…</button>
+          <input type="file" id="bkfile" style="display:none" />
+        </div>
+        <div class="shint">导出的是<b>一个文件</b>，覆盖全家所有世界的数据和设置。恢复会用所选文件<b>替换</b>本机当前全部数据，完成后自动刷新。</div>
+        <div class="shint" id="bkmsg" style="color:var(--accent)"></div>
+      </div>
+    </div>
   </div>
   <div id="toast"></div>
 
@@ -253,6 +296,7 @@
     function setActive(name) { tabs.forEach(t => t.classList.toggle('active', t.dataset.go === name)); }
 
     function nav(target) {
+      if (target === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; setTimeout(() => gpw.focus(), 50); return; }
       if (screens[target]) {
         Object.values(screens).forEach(s => s.classList.add('hide'));
         screens[target].classList.remove('hide');
@@ -302,13 +346,13 @@
     const hasLock = () => localStorage.getItem(LKEY) != null;
     function renderGate() {
       const onboard = !hasLock();
-      gtitle.textContent = onboard ? '创建主密码' : '解锁我家里的一切';
-      gsub.textContent = onboard ? '设一个主密码，管全家所有世界' : '输入主密码，进入全家的世界';
+      gtitle.textContent = onboard ? '设置「家庭理财」主密码' : '解锁「家庭理财」';
+      gsub.textContent = onboard ? '设一个主密码，保护财务数据' : '输入主密码，进入家庭理财';
       gpw2.style.display = onboard ? 'block' : 'none';
       gbtn.textContent = onboard ? '创建' : '解锁';
       gpw.value = ''; gpw2.value = ''; gerr.textContent = '';
     }
-    function openHouse(pw) { sessionStorage.setItem(SKEY, pw); gate.style.display = 'none'; lockbtn.classList.add('show'); }
+    function openHouse(pw) { sessionStorage.setItem(SKEY, pw); gate.style.display = 'none'; lockbtn.classList.add('show'); const p = pendingApp; pendingApp = null; if (p) nav(p); }
     async function submitGate() {
       const pw = gpw.value;
       if (!hasLock()) {
@@ -324,18 +368,118 @@
       sessionStorage.removeItem(SKEY);
       frame.src = 'about:blank'; frame.dataset.app = ''; frame.classList.remove('show');
       Object.values(screens).forEach(s => s.classList.add('hide')); screens.home.classList.remove('hide'); setActive('home'); location.hash = 'home';
-      lockbtn.classList.remove('show'); renderGate(); gate.style.display = 'flex'; gpw.focus();
+      lockbtn.classList.remove('show'); gate.style.display = 'none';
     }
     gbtn.addEventListener('click', submitGate);
     gpw.addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (!hasLock()) gpw2.focus(); else submitGate(); } });
     gpw2.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGate(); });
     lockbtn.addEventListener('click', lockHouse);
 
-    const unlocked = !!sessionStorage.getItem(SKEY);
-    if (unlocked) { gate.style.display = 'none'; lockbtn.classList.add('show'); }
-    else { renderGate(); gate.style.display = 'flex'; setTimeout(() => gpw.focus(), 50); }
+    let pendingApp = null;
+    if (sessionStorage.getItem(SKEY)) lockbtn.classList.add('show');
+    gate.style.display = 'none';   // 大厅开放；只有进「家庭理财」才弹密码
+    const gcancel = document.getElementById('gcancel');
+    gcancel.addEventListener('click', () => { pendingApp = null; gate.style.display = 'none'; if (frame.dataset.app !== 'finance') nav('home'); });
+    gpw.addEventListener('keydown', (e) => { if (e.key === 'Escape') gcancel.click(); });
+
+    // ===== 设置 · 数据（用户资料 + 整屋备份）=====
+    const settings = document.getElementById('settings'), setbtn = document.getElementById('setbtn'), sclose = document.getElementById('sclose');
+    const uname = document.getElementById('uname'), usave = document.getElementById('usave'), umsg = document.getElementById('umsg');
+    const bkexport = document.getElementById('bkexport'), bkimport = document.getElementById('bkimport'), bkfile = document.getElementById('bkfile'), bkmsg = document.getElementById('bkmsg');
+    const UKEY = 'home.user';
+    function openSettings() { try { uname.value = (JSON.parse(localStorage.getItem(UKEY) || '{}').name) || ''; } catch (e) { uname.value = ''; } umsg.textContent = ''; bkmsg.textContent = ''; settings.classList.add('show'); }
+    setbtn.addEventListener('click', openSettings);
+    sclose.addEventListener('click', () => settings.classList.remove('show'));
+    settings.addEventListener('click', (e) => { if (e.target === settings) settings.classList.remove('show'); });
+    usave.addEventListener('click', () => { localStorage.setItem(UKEY, JSON.stringify({ name: uname.value.trim() })); umsg.textContent = '已保存'; setTimeout(() => umsg.textContent = '', 1500); });
+
+    // 二进制安全的值编解码（兼容 Blob / ArrayBuffer / 类型化数组）
+    function abToB64(buf) { const u = new Uint8Array(buf); let s = ''; const C = 0x8000; for (let i = 0; i < u.length; i += C) s += String.fromCharCode.apply(null, u.subarray(i, i + C)); return btoa(s); }
+    function b64ToBytes(s) { const bin = atob(s); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+    async function encV(v) {
+      if (v instanceof Blob) return { __t: 'blob', type: v.type, b64: abToB64(await v.arrayBuffer()) };
+      if (v instanceof ArrayBuffer) return { __t: 'ab', b64: abToB64(v) };
+      if (ArrayBuffer.isView(v)) return { __t: 'view', ctor: v.constructor.name, b64: abToB64(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength)) };
+      if (Array.isArray(v)) { const a = []; for (const x of v) a.push(await encV(x)); return a; }
+      if (v && typeof v === 'object') { const o = {}; for (const k of Object.keys(v)) o[k] = await encV(v[k]); return o; }
+      return v;
+    }
+    function decV(v) {
+      if (v && typeof v === 'object') {
+        if (v.__t === 'blob') return new Blob([b64ToBytes(v.b64)], { type: v.type });
+        if (v.__t === 'ab') return b64ToBytes(v.b64).buffer;
+        if (v.__t === 'view') { const buf = b64ToBytes(v.b64).buffer; const Ctor = self[v.ctor] || Uint8Array; return new Ctor(buf); }
+        if (Array.isArray(v)) return v.map(decV);
+        const o = {}; for (const k of Object.keys(v)) o[k] = decV(v[k]); return o;
+      }
+      return v;
+    }
+    const idbReq = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    async function dumpDB(name) {
+      const db = await new Promise((res, rej) => { const r = indexedDB.open(name); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+      const names = [...db.objectStoreNames], stores = [];
+      if (names.length) {
+        const tx = db.transaction(names, 'readonly');
+        for (const sn of names) {
+          const os = tx.objectStore(sn);
+          const recs = await idbReq(os.getAll());
+          const keys = os.keyPath ? null : await idbReq(os.getAllKeys());
+          stores.push({ name: sn, keyPath: os.keyPath, autoIncrement: os.autoIncrement, recs: await encV(recs), keys });
+        }
+      }
+      const ver = db.version; db.close();
+      return { name, version: ver, stores };
+    }
+    async function restoreDB(d) {
+      await new Promise((res) => { const r = indexedDB.deleteDatabase(d.name); r.onsuccess = r.onerror = r.onblocked = () => res(); });
+      const db = await new Promise((res, rej) => {
+        const r = indexedDB.open(d.name, d.version || 1);
+        r.onupgradeneeded = () => { const db = r.result; for (const s of d.stores) if (!db.objectStoreNames.contains(s.name)) db.createObjectStore(s.name, { keyPath: s.keyPath == null ? undefined : s.keyPath, autoIncrement: !!s.autoIncrement }); };
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      });
+      for (const s of d.stores) {
+        if (!db.objectStoreNames.contains(s.name)) continue;
+        const recs = decV(s.recs), tx = db.transaction(s.name, 'readwrite'), os = tx.objectStore(s.name);
+        recs.forEach((rec, i) => { if (s.keyPath != null) os.put(rec); else os.put(rec, s.keys[i]); });
+        await new Promise((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); });
+      }
+      db.close();
+    }
+    async function exportAll() {
+      bkexport.disabled = true; bkmsg.textContent = '正在打包…';
+      try {
+        const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); }
+        let dbs = []; try { dbs = (await indexedDB.databases()) || []; } catch (e) { dbs = []; }
+        const idb = []; for (const info of dbs) if (info.name) idb.push(await dumpDB(info.name));
+        const bundle = { __home_backup: 1, v: 1, origin: location.origin, localStorage: ls, indexedDB: idb };
+        const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        const dt = new Date(); a.download = `我家里的一切-备份-${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, '0')}${String(dt.getDate()).padStart(2, '0')}.home`;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        bkmsg.textContent = '已导出一个文件（含所有世界 + 设置）。';
+      } catch (e) { bkmsg.textContent = '导出出错：' + (e && e.message || e); }
+      bkexport.disabled = false;
+    }
+    async function importAll(file) {
+      let bundle; try { bundle = JSON.parse(await file.text()); } catch (e) { bkmsg.textContent = '文件无法识别'; return; }
+      if (!bundle || !bundle.__home_backup) { bkmsg.textContent = '不是本系统的备份文件'; return; }
+      if (!confirm('从备份恢复会用所选文件【替换】本机当前全部数据，确定继续？')) return;
+      bkmsg.textContent = '正在恢复…';
+      try {
+        localStorage.clear();
+        for (const k of Object.keys(bundle.localStorage || {})) localStorage.setItem(k, bundle.localStorage[k]);
+        for (const d of (bundle.indexedDB || [])) await restoreDB(d);
+        sessionStorage.removeItem(SKEY);
+        bkmsg.textContent = '恢复完成，正在刷新…';
+        setTimeout(() => location.reload(), 700);
+      } catch (e) { bkmsg.textContent = '恢复出错：' + (e && e.message || e); }
+    }
+    bkexport.addEventListener('click', exportAll);
+    bkimport.addEventListener('click', () => bkfile.click());
+    bkfile.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importAll(f); e.target.value = ''; });
+
     const start = (location.hash || '#home').slice(1);
-    nav((unlocked && (screens[start] || SRC[start])) ? start : 'home');
+    nav(screens[start] || SRC[start] ? start : 'home');
   </script>
 </body>
 </html>
