@@ -13,7 +13,7 @@ import Accounts from "./screens/dev/Accounts";
 import Company from "./screens/dev/Company";
 import Calendar from "./screens/dev/Calendar";
 import CommandPalette from "./screens/dev/CommandPalette";
-import { IconLock, IconTerminal, IconSearch } from "./icons";
+import { IconTerminal, IconSearch } from "./icons";
 
 type View = "overview" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "accounts" | "company" | "secrets" | "settings";
 const TABS: { v: View; l: string }[] = [
@@ -22,7 +22,7 @@ const TABS: { v: View; l: string }[] = [
 ];
 
 export default function App() {
-  const { status, toast, lock, data, update } = useVault();
+  const { status, toast, data, update } = useVault();
   const [view, setView] = useState<View>("overview");
   const [palette, setPalette] = useState(false);
 
@@ -50,9 +50,6 @@ export default function App() {
         <div style={{ flex: 1 }} />
         <button onClick={() => setPalette(true)} className="fv-btn" style={{ ...lockBtn, marginRight: 8 }} title="搜索 (⌘K)">
           <IconSearch size={14} stroke="currentColor" /> 搜索 <span style={{ fontSize: 10.5, color: "var(--text-tertiary)", border: "0.5px solid var(--separator)", borderRadius: 4, padding: "0 4px", marginLeft: 2 }}>⌘K</span>
-        </button>
-        <button onClick={lock} className="fv-btn" style={lockBtn} title="立即锁定">
-          <IconLock size={14} stroke="currentColor" /> 锁定
         </button>
       </header>
 

@@ -39,6 +39,9 @@ function normalize(d: Partial<DevData>): DevData {
   };
 }
 
+// 开发世界不再单独设密码：固定内部口令自动解锁/初始化（备份统一在大厅做）
+const AUTO_PW = "dev-world::no-password";
+
 export function VaultProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
   const [data, setData] = useState<DevData>(emptyData());
@@ -49,13 +52,6 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const iterRef = useRef<number>(0);
   const clipTimer = useRef<number | null>(null);
   const toastTimer = useRef<number | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      await store.requestPersist();
-      setStatus((await store.hasVault()) ? "locked" : "setup");
-    })();
-  }, []);
 
   const persist = useCallback(async (next: DevData) => {
     if (!keyRef.current || !saltRef.current) return;
@@ -85,6 +81,21 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
   }, []);
+
+  // 开发世界不上锁：固定内部口令自动开 / 初始化；旧库若是别的密码则回落到锁屏（不抹数据）
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await store.requestPersist();
+      if (await store.hasVault()) {
+        const ok = await unlock(AUTO_PW);
+        if (!ok && !cancelled) setStatus("locked");
+      } else {
+        await setup(AUTO_PW);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [setup, unlock]);
 
   const lock = useCallback(() => {
     keyRef.current = null; saltRef.current = null; iterRef.current = 0;
@@ -147,17 +158,6 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       if (clipTimer.current) clearTimeout(clipTimer.current);
     }).catch(() => { setToast("复制失败"); setTimeout(() => setToast(null), 1500); });
   }, []);
-
-  // 闲置自动锁定
-  useEffect(() => {
-    if (status !== "unlocked" || !data.settings.autoLockMin) return;
-    let timer: number;
-    const reset = () => { clearTimeout(timer); timer = window.setTimeout(lock, data.settings.autoLockMin * 60_000); };
-    const evts = ["mousemove", "keydown", "click", "scroll", "touchstart"];
-    evts.forEach((e) => window.addEventListener(e, reset, { passive: true }));
-    reset();
-    return () => { clearTimeout(timer); evts.forEach((e) => window.removeEventListener(e, reset)); };
-  }, [status, data.settings.autoLockMin, lock]);
 
   return (
     <C.Provider value={{ status, data, setup, unlock, lock, update, changeMaster, updateSettings, exportVault, importVault, copy, toast }}>

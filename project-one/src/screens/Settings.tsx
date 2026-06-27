@@ -1,16 +1,15 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { useTheme } from "../lib/theme";
 import { passwordStrength } from "../lib/crypto";
-import { clearVault, exportBlobString, importBlobString, listBackups, addBackup, restoreBackup, deleteBackup } from "../lib/storage";
+import { clearVault, listBackups, addBackup, restoreBackup, deleteBackup } from "../lib/storage";
 import { hasPwBox, createPwBox, unlockPwBox, changePwBoxPassword, clearPwBox, pwSession } from "../vault/pwStore";
 import { Btn, Field, Select, TextField, card } from "../ui";
-import { IconDownload, IconUpload, IconCheck } from "../icons";
+import { IconDownload, IconCheck } from "../icons";
 
 export default function Settings() {
   const { data, update, changePassword, lock, reload } = useVault();
   const { theme, toggle } = useTheme();
-  const importRef = useRef<HTMLInputElement>(null);
 
   const [pw, setPw] = useState(""); const [pw2, setPw2] = useState(""); const [pwMsg, setPwMsg] = useState("");
   const [vname, setVname] = useState(data?.dataset.vaultName ?? "");
@@ -70,27 +69,6 @@ export default function Settings() {
     await changePassword(pw);
     setPw(""); setPw2(""); setPwMsg("ok");
     setTimeout(() => setPwMsg(""), 2500);
-  };
-
-  const exportBackup = () => {
-    const s = exportBlobString();
-    if (!s) return;
-    const blob = new Blob([s], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `familyvault-backup-${new Date().toISOString().slice(0, 10)}.vault`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  const onImportFile = async (file: File) => {
-    const text = await file.text();
-    if (importBlobString(text)) {
-      alert("备份已导入。请用该备份对应的主密码重新解锁。");
-      reload();
-    } else {
-      alert("文件无效，导入失败。");
-    }
   };
 
   const resetAll = () => {
@@ -204,14 +182,11 @@ export default function Settings() {
         )}
       </Section>
 
-      {/* 备份 */}
-      <Section title="导出 / 导入备份文件">
-        <Row label="导出加密备份" hint="导出 .vault 文件（仍为加密，需主密码解锁）"><Btn variant="ghost" onClick={exportBackup}><IconDownload />导出</Btn></Row>
-        <Row label="从备份恢复" hint="导入 .vault 文件后用对应主密码解锁">
-          <Btn variant="ghost" onClick={() => importRef.current?.click()}><IconUpload />导入</Btn>
-          <input ref={importRef} type="file" accept=".vault,.json,.txt" style={{ display: "none" }}
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) onImportFile(f); e.target.value = ""; }} />
-        </Row>
+      {/* 整屋备份在大厅做 */}
+      <Section title="备份">
+        <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+          导出/导入<strong>整屋一份</strong>的备份在<strong>大厅「设置 · 数据」</strong>里统一进行（一个文件含全家所有世界）。上面的「程序内备份」是本机的快速还原点，仍可随时用。
+        </div>
       </Section>
 
       {/* 危险区 */}
