@@ -1,7 +1,8 @@
 import React, { useRef, useState } from "react";
 import type { View } from "../lib/compute";
 import type { RangeKey } from "../lib/compute";
-import { card, Segmented } from "../ui";
+import { Btn, TextField, card, Segmented } from "../ui";
+import { useVault } from "../vault/VaultContext";
 import { fmt } from "../lib/format";
 import { useCountUp, rise, reduceMotion } from "../lib/anim";
 
@@ -22,9 +23,18 @@ function greetingEmoji() {
   return "🌆";
 }
 export default function Dashboard({ view, onOpen, range, setRange }: { view: View; onOpen: (id: string) => void; range: RangeKey; setRange: (r: RangeKey) => void }) {
+  const { update } = useVault();
+  const [editKey, setEditKey] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   const today = new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" });
   const t = view.totals;
   const netAnim = useCountUp(t.netRaw);
+  const saveNote = () => {
+    if (!editKey) return;
+    const text = draft.trim();
+    update((d) => { if (!d.dataset.monthNotes) d.dataset.monthNotes = {}; if (text) d.dataset.monthNotes[editKey] = text; else delete d.dataset.monthNotes[editKey]; });
+    setEditKey(null);
+  };
   return (
     <div style={{ padding: "28px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
@@ -72,15 +82,37 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>
             每月变化量<span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 8 }}>近 12 期净资产变化</span>
           </div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 104 }}>
-            {view.monthlyChanges.map((c, i) => (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 0 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: c.up ? "var(--green)" : "var(--red)", whiteSpace: "nowrap" }}>{c.text}</div>
-                <div className="fv-grow" style={{ animationDelay: `${i * 40}ms`, width: "58%", maxWidth: 30, height: Math.max(4, c.ratio * 56), borderRadius: 4, background: c.up ? "var(--green)" : "var(--red)" }} />
-                <div style={{ fontSize: 10, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{c.label}</div>
-              </div>
-            ))}
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, minHeight: 134 }}>
+            {view.monthlyChanges.map((c, i) => {
+              const editing = editKey === c.key;
+              return (
+                <div key={c.key} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
+                  {c.note ? (
+                    <button onClick={() => { setEditKey(c.key); setDraft(c.note); }} title={c.note}
+                      style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0, maxWidth: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                      <span style={{ fontSize: 9.5, lineHeight: 1.25, color: editing ? "var(--accent)" : "var(--text-secondary)", maxWidth: "100%", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", textAlign: "center", wordBreak: "break-all" }}>{c.note}</span>
+                      <span style={{ fontSize: 9, lineHeight: 1, color: editing ? "var(--accent)" : "var(--text-tertiary)" }}>▾</span>
+                    </button>
+                  ) : (
+                    <button onClick={() => { setEditKey(c.key); setDraft(""); }} title="标主要原因"
+                      style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0, fontSize: 11, lineHeight: 1, color: editing ? "var(--accent)" : "var(--text-tertiary)", opacity: editing ? 1 : 0.35 }}>＋</button>
+                  )}
+                  <div style={{ fontSize: 10, fontWeight: 600, color: c.up ? "var(--green)" : "var(--red)", whiteSpace: "nowrap" }}>{c.text}</div>
+                  <div className="fv-grow" style={{ animationDelay: `${i * 40}ms`, width: "58%", maxWidth: 30, height: Math.max(4, c.ratio * 56), borderRadius: 4, background: editing ? "var(--accent)" : (c.up ? "var(--green)" : "var(--red)") }} />
+                  <div style={{ fontSize: 10, color: editing ? "var(--accent)" : "var(--text-tertiary)", fontWeight: editing ? 600 : 400, whiteSpace: "nowrap" }}>{c.label}</div>
+                </div>
+              );
+            })}
           </div>
+          {editKey && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, paddingTop: 14, borderTop: "0.5px solid var(--separator)" }}>
+              <span style={{ fontSize: 12.5, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>「{view.monthlyChanges.find((c) => c.key === editKey)?.label ?? ""}」主要原因</span>
+              <TextField value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus placeholder="手动输入，如：发年终奖 / 股市回调 / 买房首付"
+                onKeyDown={(e) => { if (e.key === "Enter") saveNote(); if (e.key === "Escape") setEditKey(null); }} style={{ flex: 1 }} />
+              <Btn onClick={saveNote}>保存</Btn>
+              <Btn variant="ghost" onClick={() => setEditKey(null)}>取消</Btn>
+            </div>
+          )}
         </div>
       )}
 

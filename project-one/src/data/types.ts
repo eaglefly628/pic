@@ -35,4 +35,6 @@ export interface Dataset {
   snapshots: Snapshot[];
   /** 是否为真实数据（true）或示例数据（false） */
   real?: boolean;
+  /** 「每月变化量」备注：YYYY-MM -> 该月主要原因 */
+  monthNotes?: Record<string, string>;
 }
