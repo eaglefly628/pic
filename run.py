@@ -16,10 +16,12 @@
 数据全部保存在本机，不联网、不上传。按 Ctrl+C 退出。
 """
 import http.server
+import json
 import mimetypes
 import socketserver
 import threading
-import webbrowser
+import time
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -50,6 +52,42 @@ def resolve(path: str):
     return None
 
 
+def _get_json(url, timeout=10):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+def fetch_gold(rng="3mo"):
+    """黄金价格 + 走势（无需 API key，本机代取，避免浏览器跨域）。"""
+    out = {"ok": False}
+    try:  # 金价 + 历史：Yahoo 国际现货金期货 GC=F
+        y = _get_json("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=%s&interval=1d" % rng)
+        res = y["chart"]["result"][0]
+        meta = res.get("meta", {})
+        ts = res.get("timestamp") or []
+        closes = (res.get("indicators", {}).get("quote") or [{}])[0].get("close") or []
+        hist = [{"t": ts[i] * 1000, "usd": closes[i]} for i in range(min(len(ts), len(closes))) if closes[i] is not None]
+        out.update({"usdPerOz": meta.get("regularMarketPrice") or (hist[-1]["usd"] if hist else None),
+                    "prevClose": meta.get("chartPreviousClose"), "history": hist, "src": "yahoo"})
+    except Exception:
+        try:  # 降级：只取现价
+            g = _get_json("https://api.gold-api.com/price/XAU")
+            out.update({"usdPerOz": g.get("price"), "prevClose": None, "history": [], "src": "gold-api"})
+        except Exception:
+            return {"ok": False, "error": "金价获取失败（需联网）"}
+    out["usdCny"] = None  # 美元兑人民币（两个免费源，谁通用谁）
+    for url in ("https://api.frankfurter.app/latest?from=USD&to=CNY", "https://open.er-api.com/v6/latest/USD"):
+        try:
+            out["usdCny"] = _get_json(url)["rates"]["CNY"]
+            break
+        except Exception:
+            continue
+    out["ok"] = out.get("usdPerOz") is not None
+    out["asOf"] = int(time.time() * 1000)
+    return out
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
@@ -61,6 +99,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(301)
             self.send_header("Location", bare + "/")
             self.end_headers()
+            return
+        if bare == "/api/gold":
+            from urllib.parse import urlparse, parse_qs
+            rng = (parse_qs(urlparse(self.path).query).get("range") or ["3mo"])[0]
+            if rng not in ("1mo", "3mo", "6mo", "1y"):
+                rng = "3mo"
+            try:
+                body = json.dumps(fetch_gold(rng)).encode("utf-8")
+            except Exception as e:
+                body = json.dumps({"ok": False, "error": str(e)}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
             return
         target = resolve(self.path)
         if not target:
