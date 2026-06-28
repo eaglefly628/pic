@@ -295,6 +295,12 @@
     function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 1800); }
     function setActive(name) { tabs.forEach(t => t.classList.toggle('active', t.dataset.go === name)); }
 
+    // 用 location.replace 加载子应用：不往浏览器历史里塞条目，避免误触“后退”把 iframe 退回上一个应用
+    function loadFrame(url) {
+      try { if (frame.contentWindow) frame.contentWindow.location.replace(url); else frame.src = url; }
+      catch (e) { frame.src = url; }
+    }
+
     function nav(target) {
       if (target === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; setTimeout(() => gpw.focus(), 50); return; }
       if (screens[target]) {
@@ -303,13 +309,13 @@
         frame.classList.remove('show');
         setActive(target);
         document.body.className = 'scene-' + target;
-        location.hash = target;
+        history.replaceState(null, '', '#' + target);
       } else if (SRC[target]) {
-        if (frame.dataset.app !== target) { frame.src = SRC[target]; frame.dataset.app = target; }
+        if (frame.dataset.app !== target) { loadFrame(SRC[target]); frame.dataset.app = target; }
         Object.values(screens).forEach(s => s.classList.add('hide'));
         frame.classList.add('show');
         setActive(target === 'dev' ? 'male' : 'home');
-        location.hash = target;
+        history.replaceState(null, '', '#' + target);
       }
     }
     document.addEventListener('click', (e) => {
@@ -366,8 +372,8 @@
     }
     function lockHouse() {
       sessionStorage.removeItem(SKEY);
-      frame.src = 'about:blank'; frame.dataset.app = ''; frame.classList.remove('show');
-      Object.values(screens).forEach(s => s.classList.add('hide')); screens.home.classList.remove('hide'); setActive('home'); location.hash = 'home';
+      loadFrame('about:blank'); frame.dataset.app = ''; frame.classList.remove('show');
+      Object.values(screens).forEach(s => s.classList.add('hide')); screens.home.classList.remove('hide'); setActive('home'); history.replaceState(null, '', '#home');
       lockbtn.classList.remove('show'); gate.style.display = 'none';
     }
     gbtn.addEventListener('click', submitGate);
