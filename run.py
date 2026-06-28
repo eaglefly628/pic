@@ -119,11 +119,40 @@ def disk_scan():
                 b = int(kb) * 1024
             except ValueError:
                 continue
-            items.append({"path": path, "label": os.path.basename(path) or path, "bytes": b})
+            items.append({"path": path, "label": os.path.basename(path) or path, "bytes": b, "isDir": os.path.isdir(path) and not os.path.islink(path)})
     except Exception as e:
         return {"ok": False, "error": "扫描失败：" + str(e)}
     items.sort(key=lambda x: -x["bytes"])
     return {"ok": True, "home": HOME, "items": items[:20], "asOf": int(time.time() * 1000)}
+
+def disk_ls(path):
+    """列出某文件夹下一层（文件+子目录）及各自占用，用于逐层下钻。只读、限用户目录内。"""
+    rp = os.path.realpath(_exp(path))
+    if rp != HOME and not rp.startswith(HOME + os.sep):
+        return {"ok": False, "error": "只能浏览用户目录内"}
+    if not os.path.isdir(rp):
+        return {"ok": False, "error": "不是文件夹或不存在"}
+    try:
+        out = subprocess.run(["du", "-k", "-a", "-d", "1", rp], capture_output=True, text=True, timeout=600)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    items = []
+    for line in out.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 2:
+            continue
+        kb, full = parts
+        if full == rp or os.path.dirname(full) != rp:
+            continue
+        try:
+            b = int(kb) * 1024
+        except ValueError:
+            continue
+        items.append({"path": full, "label": os.path.basename(full), "bytes": b, "isDir": os.path.isdir(full) and not os.path.islink(full)})
+    if not items and out.stderr.strip():
+        return {"ok": False, "error": "读取受限（可能需要在 系统设置→隐私→完全磁盘访问 授权）"}
+    items.sort(key=lambda x: -x["bytes"])
+    return {"ok": True, "path": rp, "parent": os.path.dirname(rp), "home": HOME, "items": items}
 
 CLEAN_TARGETS = [
     {"id": "user-caches", "label": "用户缓存（各 App）", "desc": "~/Library/Caches，会自动重建", "paths": ["~/Library/Caches"], "contents": True},
@@ -245,6 +274,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send_json(disk_scan())
         if bare == "/api/disk/targets":
             return self._send_json(disk_targets())
+        if bare == "/api/disk/ls":
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            return self._send_json(disk_ls((q.get("path") or [""])[0]))
         target = resolve(self.path)
         if not target:
             self.send_error(404)

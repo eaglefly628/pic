@@ -1,22 +1,37 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Btn, card } from "../../ui";
 import { IconRefresh, IconTrash } from "../../icons";
 
-type ScanItem = { path: string; label: string; bytes: number };
+type Item = { path: string; label: string; bytes: number; isDir: boolean };
 type Target = { id: string; label: string; desc: string; bytes: number; exists: boolean; permanentOnly: boolean };
 
 const fmtB = (b: number) =>
   b >= 1e9 ? (b / 1073741824).toFixed(2) + " GB" : b >= 1e6 ? Math.round(b / 1048576) + " MB" : b >= 1e3 ? Math.round(b / 1024) + " KB" : b + " B";
 
 export default function Disk() {
-  const [scan, setScan] = useState<{ items: ScanItem[]; home?: string } | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [scanErr, setScanErr] = useState("");
+  // 逐层浏览
+  const [home, setHome] = useState("");
+  const [path, setPath] = useState("");
+  const [entries, setEntries] = useState<Item[] | null>(null);
+  const [exLoading, setExLoading] = useState(false);
+  const [exErr, setExErr] = useState("");
+  const [exMsg, setExMsg] = useState("");
+  const [perm, setPerm] = useState(false);
+  // 安全清理
   const [targets, setTargets] = useState<Target[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState("");
-  const [custom, setCustom] = useState("");
-  const [perm, setPerm] = useState(false);
+  const [cleanMsg, setCleanMsg] = useState("");
+
+  const open = useCallback(async (p?: string) => {
+    setExLoading(true); setExErr(""); setExMsg("");
+    try {
+      const url = p ? "/api/disk/ls?path=" + encodeURIComponent(p) : "/api/disk/scan";
+      const d = await fetch(url).then((r) => r.json());
+      if (!d.ok) setExErr(d.error || "读取失败");
+      else { if (d.home) setHome(d.home); setPath(d.path || d.home || ""); setEntries(d.items || []); }
+    } catch { setExErr("连不上本机服务——这个功能需要通过 run.py 从 http://localhost:5180 进入。"); }
+    finally { setExLoading(false); }
+  }, []);
 
   const loadTargets = useCallback(async () => {
     try { const d = await fetch("/api/disk/targets").then((r) => r.json()); setTargets(d.ok ? d.targets : []); }
@@ -24,63 +39,98 @@ export default function Disk() {
   }, []);
   useEffect(() => { loadTargets(); }, [loadTargets]);
 
-  const doScan = async () => {
-    setScanning(true); setScanErr("");
+  const removeItem = async (it: Item) => {
+    const verb = perm ? "永久删除" : "移到废纸篓";
+    if (!confirm(`确定要${verb}吗？\n${it.label}\n${it.path}\n\n${perm ? "⚠️ 永久删除，不可恢复！" : "会移到废纸篓，可恢复。"}`)) return;
+    setExMsg("处理中…");
     try {
-      const d = await fetch("/api/disk/scan").then((r) => r.json());
-      if (d.ok) setScan({ items: d.items, home: d.home }); else setScanErr(d.error || "扫描失败");
-    } catch { setScanErr("连不上本机服务——这个功能需要通过 run.py 从 http://localhost:5180 进入。"); }
-    finally { setScanning(false); }
+      const d = await fetch("/api/disk/clean", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: it.path, contents: false, mode: perm ? "delete" : "trash" }) }).then((r) => r.json());
+      if (d.ok) { setExMsg(`已${d.mode === "delete" ? "删除" : "移到废纸篓"}「${it.label}」，释放约 ${fmtB(d.freed)}`); open(path); loadTargets(); }
+      else setExMsg("没成功：" + (d.error || ""));
+    } catch { setExMsg("连不上本机服务"); }
   };
 
-  const clean = async (spec: { id?: string; path?: string; contents?: boolean }, label: string, permanent: boolean) => {
-    const verb = permanent ? "永久删除" : "移到废纸篓";
-    if (!confirm(`确定要${verb}「${label}」吗？\n${permanent ? "⚠️ 不可恢复！" : "可在废纸篓里恢复。"}`)) return;
-    setBusy(spec.id || "custom"); setMsg("");
+  const cleanTarget = async (t: Target) => {
+    const permanent = !!t.permanentOnly;
+    if (!confirm(`确定要${permanent ? "永久删除" : "移到废纸篓"}「${t.label}」吗？\n${permanent ? "⚠️ 不可恢复！" : "可在废纸篓里恢复。"}`)) return;
+    setBusy(t.id); setCleanMsg("");
     try {
-      const d = await fetch("/api/disk/clean", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...spec, mode: permanent ? "delete" : "trash" }) }).then((r) => r.json());
-      if (d.ok) { setMsg(`已${d.mode === "delete" ? "删除" : "移到废纸篓"} ${d.count} 项，释放约 ${fmtB(d.freed)}` + (d.errors?.length ? `（${d.errors.length} 项跳过）` : "")); loadTargets(); }
-      else setMsg("没成功：" + (d.error || ""));
-    } catch { setMsg("连不上本机服务"); }
+      const d = await fetch("/api/disk/clean", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, mode: permanent ? "delete" : "trash" }) }).then((r) => r.json());
+      if (d.ok) { setCleanMsg(`已${d.mode === "delete" ? "删除" : "移到废纸篓"} ${d.count} 项，释放约 ${fmtB(d.freed)}`); loadTargets(); if (entries) open(path); }
+      else setCleanMsg("没成功：" + (d.error || ""));
+    } catch { setCleanMsg("连不上本机服务"); }
     finally { setBusy(null); }
   };
 
-  const maxScan = Math.max(1, ...(scan?.items || []).map((i) => i.bytes));
+  const crumbs = useMemo(() => {
+    if (!home || !path) return [] as { label: string; path: string }[];
+    const out = [{ label: "~", path: home }];
+    if (path !== home && path.startsWith(home)) {
+      let cur = home;
+      for (const s of path.slice(home.length).split("/").filter(Boolean)) { cur += "/" + s; out.push({ label: s, path: cur }); }
+    }
+    return out;
+  }, [home, path]);
+
+  const maxB = Math.max(1, ...(entries || []).map((e) => e.bytes));
 
   return (
     <div style={{ maxWidth: 760 }}>
       <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginBottom: 16, lineHeight: 1.7 }}>
-        磁盘清理 · 由<strong>本机 run.py</strong> 执行扫描与清理（只在你本机、不联网）。清理<strong>默认移到废纸篓</strong>，可恢复；删除前都会让你确认。
+        磁盘清理 · 由<strong>本机 run.py</strong> 执行（只在你本机、不联网）。点文件夹可<strong>逐层钻进去</strong>看占用，每一项都能删——默认<strong>移到废纸篓</strong>、删前确认。
       </div>
 
-      {/* 扫描 */}
+      {/* 逐层浏览 + 删除 */}
       <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: scan ? 14 : 0 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>谁在吃硬盘</div>
-            <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 2 }}>扫描用户目录、按占用排序{scan?.home ? ` · ${scan.home}` : ""}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: entries ? 12 : 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>谁在吃硬盘 · 逐层钻取</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 2 }}>{entries ? "点文件夹进入下一层；每项可删" : "扫描用户目录、按占用从大到小"}</div>
           </div>
-          <Btn onClick={doScan} disabled={scanning}><IconRefresh size={14} stroke="#fff" />{scanning ? "扫描中…（可能要等一会儿）" : "扫描"}</Btn>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: perm ? "var(--red)" : "var(--text-secondary)", cursor: "pointer", whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={perm} onChange={(e) => setPerm(e.target.checked)} />永久删除
+          </label>
+          <Btn onClick={() => open()} disabled={exLoading}><IconRefresh size={14} stroke="#fff" />{exLoading ? "读取中…" : entries ? "重新扫描" : "扫描"}</Btn>
         </div>
-        {scanErr && <div style={{ fontSize: 12.5, color: "var(--orange)", marginTop: 12 }}>{scanErr}</div>}
-        {scan && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {scan.items.map((it) => (
-              <div key={it.path} style={{ display: "flex", alignItems: "center", gap: 10 }} title={it.path}>
+
+        {entries && (
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2, marginBottom: 10, fontSize: 12.5 }}>
+            {crumbs.map((c, i) => (
+              <span key={c.path} style={{ display: "inline-flex", alignItems: "center" }}>
+                {i > 0 && <span style={{ color: "var(--text-tertiary)", margin: "0 2px" }}>/</span>}
+                <button onClick={() => open(c.path)} className="fv-tap" style={{ border: "none", background: "transparent", cursor: "pointer", color: i === crumbs.length - 1 ? "var(--text-primary)" : "var(--accent)", fontWeight: i === crumbs.length - 1 ? 600 : 500, padding: "2px 4px", fontSize: 12.5, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.label}</button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {exErr && <div style={{ fontSize: 12.5, color: "var(--orange)", marginTop: 8 }}>{exErr}</div>}
+        {entries && entries.length === 0 && !exErr && <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", padding: "10px 0" }}>这个文件夹是空的。</div>}
+
+        {entries && entries.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {entries.map((it) => (
+              <div key={it.path} className="fv-row" onClick={() => it.isDir && open(it.path)}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 8px", borderRadius: 8, cursor: it.isDir ? "pointer" : "default" }} title={it.path}>
+                <span style={{ fontSize: 14, flex: "none", width: 18, textAlign: "center" }}>{it.isDir ? "📁" : "📄"}</span>
                 <span style={{ width: 150, flex: "none", fontSize: 12.5, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</span>
-                <div style={{ flex: 1, height: 8, borderRadius: 4, background: "var(--fill-q)", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${Math.max(2, (it.bytes / maxScan) * 100)}%`, background: "var(--accent)", borderRadius: 4 }} />
+                <div style={{ flex: 1, minWidth: 30, height: 7, borderRadius: 4, background: "var(--fill-q)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${Math.max(2, (it.bytes / maxB) * 100)}%`, background: it.isDir ? "var(--accent)" : "var(--text-tertiary)", borderRadius: 4 }} />
                 </div>
-                <span style={{ width: 72, flex: "none", textAlign: "right", fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{fmtB(it.bytes)}</span>
+                <span style={{ width: 70, flex: "none", textAlign: "right", fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{fmtB(it.bytes)}</span>
+                <span style={{ width: 12, flex: "none", color: "var(--text-tertiary)", fontSize: 13 }}>{it.isDir ? "›" : ""}</span>
+                <button className="fv-icnbtn" onClick={(e) => { e.stopPropagation(); removeItem(it); }} title={perm ? "永久删除" : "移到废纸篓"}
+                  style={{ width: 28, height: 28, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 7, background: "transparent", border: "none", cursor: "pointer", color: perm ? "var(--red)" : "var(--text-tertiary)" }}><IconTrash size={14} stroke="currentColor" /></button>
               </div>
             ))}
           </div>
         )}
+        {exMsg && <div style={{ fontSize: 12.5, color: "var(--accent)", marginTop: 10 }}>{exMsg}</div>}
       </div>
 
       {/* 安全清理 */}
-      <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>安全清理</div>
+      <div style={{ ...card, padding: "16px 18px" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>安全清理 · 一键</div>
         <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12 }}>公认的垃圾（缓存 / 日志 / 开发缓存 / 废纸篓），清掉不影响使用。</div>
         {targets === null ? (
           <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", padding: "8px 0" }}>读取中…（需通过 run.py 进入）</div>
@@ -93,31 +143,12 @@ export default function Disk() {
                   <div style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.desc}</div>
                 </div>
                 <span style={{ width: 72, textAlign: "right", fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{t.exists ? fmtB(t.bytes) : "—"}</span>
-                <Btn variant={t.permanentOnly ? "danger" : "soft"} onClick={() => clean({ id: t.id }, t.label, !!t.permanentOnly)} disabled={!t.exists || t.bytes === 0 || busy === t.id}>{busy === t.id ? "清理中…" : t.permanentOnly ? "清空" : "清理"}</Btn>
+                <Btn variant={t.permanentOnly ? "danger" : "soft"} onClick={() => cleanTarget(t)} disabled={!t.exists || t.bytes === 0 || busy === t.id}>{busy === t.id ? "清理中…" : t.permanentOnly ? "清空" : "清理"}</Btn>
               </div>
             ))}
           </div>
         )}
-        {msg && <div style={{ fontSize: 12.5, color: "var(--accent)", marginTop: 12 }}>{msg}</div>}
-      </div>
-
-      {/* 高级 / 自定义 */}
-      <div style={{ ...card, padding: "16px 18px" }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>高级 · 自定义路径</div>
-        <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.7 }}>
-          自己指定一个<strong>用户目录下</strong>的文件夹来清。关键目录（系统 / 文稿 / 下载 / 桌面 / 图片 等）会被自动拒绝。
-        </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="如 ~/Library/Caches/SomeApp 或 /Users/你/某个缓存夹"
-            style={{ flex: 1, minWidth: 220, height: 36, padding: "0 12px", fontSize: 13, borderRadius: 10, border: "0.5px solid var(--separator)", background: "var(--fill-q)", color: "var(--text-primary)", fontFamily: "ui-monospace, monospace" }} />
-          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: perm ? "var(--red)" : "var(--text-secondary)", cursor: "pointer", whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={perm} onChange={(e) => setPerm(e.target.checked)} />永久删除
-          </label>
-          <Btn variant={perm ? "danger" : "ghost"} disabled={!custom.trim() || busy === "custom"} onClick={() => clean({ path: custom.trim() }, custom.trim(), perm)}>
-            <IconTrash size={14} stroke="currentColor" />{busy === "custom" ? "清理中…" : "清理此路径"}
-          </Btn>
-        </div>
-        {perm && <div style={{ fontSize: 11.5, color: "var(--red)", marginTop: 10 }}>⚠️ 永久删除不可恢复，请确认路径无误。</div>}
+        {cleanMsg && <div style={{ fontSize: 12.5, color: "var(--accent)", marginTop: 12 }}>{cleanMsg}</div>}
       </div>
     </div>
   );
