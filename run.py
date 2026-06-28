@@ -103,56 +103,61 @@ def _du_bytes(path):
     except Exception:
         return 0
 
-def disk_scan():
-    """home 下一层各项，按占用从大到小。"""
-    items = []
+def _disk_df():
+    """整机根卷的 总量 / 已用 / 可用（df -k /，macOS 与 Linux 列位相同）。"""
     try:
-        out = subprocess.run(["du", "-k", "-d", "1", HOME], capture_output=True, text=True, timeout=900)
-        for line in out.stdout.splitlines():
-            parts = line.split("\t")
-            if len(parts) != 2:
-                continue
-            kb, path = parts
-            if path == HOME:
-                continue
-            try:
-                b = int(kb) * 1024
-            except ValueError:
-                continue
-            items.append({"path": path, "label": os.path.basename(path) or path, "bytes": b, "isDir": os.path.isdir(path) and not os.path.islink(path)})
-    except Exception as e:
-        return {"ok": False, "error": "扫描失败：" + str(e)}
-    items.sort(key=lambda x: -x["bytes"])
-    return {"ok": True, "home": HOME, "items": items[:20], "asOf": int(time.time() * 1000)}
+        out = subprocess.run(["df", "-k", "/"], capture_output=True, text=True, timeout=15)
+        f = out.stdout.strip().splitlines()[1].split()
+        return {"total": int(f[1]) * 1024, "used": int(f[2]) * 1024, "free": int(f[3]) * 1024}
+    except Exception:
+        return None
+
+def disk_scan():
+    """默认入口：用户目录(home)下一层。复用 disk_ls 以保证与逐层下钻完全一致
+    （含 home 里散落的文件、total 取 du 自身行的真实总量），避免「总量对不上」。"""
+    r = disk_ls(HOME)
+    if isinstance(r, dict) and r.get("ok"):
+        r["asOf"] = int(time.time() * 1000)
+    return r
 
 def disk_ls(path):
     """列出某文件夹下一层（文件+子目录）及各自占用，用于逐层下钻。只读、限用户目录内。"""
-    rp = os.path.realpath(_exp(path))
-    if rp != HOME and not rp.startswith(HOME + os.sep):
-        return {"ok": False, "error": "只能浏览用户目录内"}
+    rp = os.path.realpath(_exp(path)) if path else "/"
     if not os.path.isdir(rp):
         return {"ok": False, "error": "不是文件夹或不存在"}
+    partial = False
     try:
-        out = subprocess.run(["du", "-k", "-a", "-d", "1", rp], capture_output=True, text=True, timeout=600)
+        out = subprocess.run(["du", "-k", "-a", "-d", "1", rp], capture_output=True, text=True, timeout=1800)
+        stdout, stderr = out.stdout, out.stderr
+    except subprocess.TimeoutExpired as e:  # 整机/超大目录可能超时——尽量用已拿到的部分结果
+        stdout = (e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else e.stdout) or ""
+        stderr = (e.stderr.decode("utf-8", "replace") if isinstance(e.stderr, bytes) else e.stderr) or ""
+        partial = True
     except Exception as e:
         return {"ok": False, "error": str(e)}
-    items = []
-    for line in out.stdout.splitlines():
+    items, total = [], 0
+    for line in stdout.splitlines():
         parts = line.split("\t")
         if len(parts) != 2:
             continue
         kb, full = parts
-        if full == rp or os.path.dirname(full) != rp:
-            continue
         try:
             b = int(kb) * 1024
         except ValueError:
             continue
+        if full == rp:
+            total = b
+            continue
+        if os.path.dirname(full) != rp:
+            continue
         items.append({"path": full, "label": os.path.basename(full), "bytes": b, "isDir": os.path.isdir(full) and not os.path.islink(full)})
-    if not items and out.stderr.strip():
+    if not items and stderr.strip():
         return {"ok": False, "error": "读取受限（可能需要在 系统设置→隐私→完全磁盘访问 授权）"}
     items.sort(key=lambda x: -x["bytes"])
-    return {"ok": True, "path": rp, "parent": os.path.dirname(rp), "home": HOME, "items": items}
+    return {"ok": True, "path": rp, "parent": os.path.dirname(rp), "home": HOME,
+            "items": items, "total": total or sum(i["bytes"] for i in items),
+            "scanned": sum(i["bytes"] for i in items), "disk": _disk_df(),
+            "partial": partial, "denied": bool(stderr.strip())}
 
 CLEAN_TARGETS = [
     {"id": "user-caches", "label": "用户缓存（各 App）", "desc": "~/Library/Caches，会自动重建", "paths": ["~/Library/Caches"], "contents": True},

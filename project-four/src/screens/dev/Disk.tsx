@@ -4,6 +4,7 @@ import { IconRefresh, IconTrash } from "../../icons";
 
 type Item = { path: string; label: string; bytes: number; isDir: boolean };
 type Target = { id: string; label: string; desc: string; bytes: number; exists: boolean; permanentOnly: boolean };
+type Disk = { total: number; used: number; free: number };
 
 const fmtB = (b: number) =>
   b >= 1e9 ? (b / 1073741824).toFixed(2) + " GB" : b >= 1e6 ? Math.round(b / 1048576) + " MB" : b >= 1e3 ? Math.round(b / 1024) + " KB" : b + " B";
@@ -13,6 +14,11 @@ export default function Disk() {
   const [home, setHome] = useState("");
   const [path, setPath] = useState("");
   const [entries, setEntries] = useState<Item[] | null>(null);
+  const [total, setTotal] = useState(0);       // 本层 du 真实总量（自身行）
+  const [scanned, setScanned] = useState(0);   // 可见项之和
+  const [disk, setDisk] = useState<Disk | null>(null);
+  const [partial, setPartial] = useState(false);
+  const [denied, setDenied] = useState(false);
   const [exLoading, setExLoading] = useState(false);
   const [exErr, setExErr] = useState("");
   const [exMsg, setExMsg] = useState("");
@@ -28,7 +34,16 @@ export default function Disk() {
       const url = p ? "/api/disk/ls?path=" + encodeURIComponent(p) : "/api/disk/scan";
       const d = await fetch(url).then((r) => r.json());
       if (!d.ok) setExErr(d.error || "读取失败");
-      else { if (d.home) setHome(d.home); setPath(d.path || d.home || ""); setEntries(d.items || []); }
+      else {
+        if (d.home) setHome(d.home);
+        setPath(d.path || d.home || "");
+        setEntries(d.items || []);
+        setTotal(d.total || 0);
+        setScanned(d.scanned ?? (d.items || []).reduce((s: number, i: Item) => s + i.bytes, 0));
+        setDisk(d.disk || null);
+        setPartial(!!d.partial);
+        setDenied(!!d.denied);
+      }
     } catch { setExErr("连不上本机服务——这个功能需要通过 run.py 从 http://localhost:5180 进入。"); }
     finally { setExLoading(false); }
   }, []);
@@ -39,7 +54,10 @@ export default function Disk() {
   }, []);
   useEffect(() => { loadTargets(); }, [loadTargets]);
 
+  const inHome = (p: string) => !!home && (p === home || p.startsWith(home + "/"));
+
   const removeItem = async (it: Item) => {
+    if (!inHome(it.path)) return;
     const verb = perm ? "永久删除" : "移到废纸篓";
     if (!confirm(`确定要${verb}吗？\n${it.label}\n${it.path}\n\n${perm ? "⚠️ 永久删除，不可恢复！" : "会移到废纸篓，可恢复。"}`)) return;
     setExMsg("处理中…");
@@ -62,35 +80,58 @@ export default function Disk() {
     finally { setBusy(null); }
   };
 
+  // 绝对路径面包屑：整机(/) → … → 当前；命中用户目录时标注 ~
   const crumbs = useMemo(() => {
-    if (!home || !path) return [] as { label: string; path: string }[];
-    const out = [{ label: "~", path: home }];
-    if (path !== home && path.startsWith(home)) {
-      let cur = home;
-      for (const s of path.slice(home.length).split("/").filter(Boolean)) { cur += "/" + s; out.push({ label: s, path: cur }); }
+    if (!path) return [] as { label: string; path: string }[];
+    const out = [{ label: "整机", path: "/" }];
+    let cur = "";
+    for (const s of path.split("/").filter(Boolean)) {
+      cur += "/" + s;
+      out.push({ label: home && cur === home ? "~ 用户目录" : s, path: cur });
     }
     return out;
   }, [home, path]);
 
   const maxB = Math.max(1, ...(entries || []).map((e) => e.bytes));
+  const usedPct = disk && disk.total ? Math.min(100, (disk.used / disk.total) * 100) : 0;
 
   return (
     <div style={{ maxWidth: 760 }}>
       <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginBottom: 16, lineHeight: 1.7 }}>
-        磁盘清理 · 由<strong>本机 run.py</strong> 执行（只在你本机、不联网）。点文件夹可<strong>逐层钻进去</strong>看占用，每一项都能删——默认<strong>移到废纸篓</strong>、删前确认。
+        磁盘清理 · 由<strong>本机 run.py</strong> 执行（只在你本机、不联网）。可<strong>扫描整机</strong>或用户目录，点文件夹<strong>逐层钻进去</strong>看占用。
+        删除只对<strong>用户目录（~）</strong>开放——系统区域只读、带🔒；默认<strong>移到废纸篓</strong>、删前确认。
       </div>
+
+      {/* 磁盘总览（df 真实数据） */}
+      {disk && (
+        <div style={{ ...card, padding: "14px 18px", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>磁盘总量</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+              已用 <strong style={{ color: "var(--text-primary)" }}>{fmtB(disk.used)}</strong> / 共 {fmtB(disk.total)} · 可用 {fmtB(disk.free)}
+            </div>
+          </div>
+          <div style={{ height: 10, borderRadius: 6, background: "var(--fill-q)", overflow: "hidden", display: "flex" }}>
+            <div style={{ width: `${usedPct}%`, background: "linear-gradient(90deg, var(--accent), var(--accent2))", borderRadius: 6 }} />
+          </div>
+        </div>
+      )}
 
       {/* 逐层浏览 + 删除 */}
       <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: entries ? 12 : 0 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: entries ? 12 : 0, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>谁在吃硬盘 · 逐层钻取</div>
-            <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 2 }}>{entries ? "点文件夹进入下一层；每项可删" : "扫描用户目录、按占用从大到小"}</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 2 }}>{entries ? "点文件夹进入下一层；用户目录里每项可删" : "先扫描用户目录或整机，按占用从大到小排列"}</div>
           </div>
           <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: perm ? "var(--red)" : "var(--text-secondary)", cursor: "pointer", whiteSpace: "nowrap" }}>
             <input type="checkbox" checked={perm} onChange={(e) => setPerm(e.target.checked)} />永久删除
           </label>
-          <Btn onClick={() => open()} disabled={exLoading}><IconRefresh size={14} stroke="#fff" />{exLoading ? "读取中…" : entries ? "重新扫描" : "扫描"}</Btn>
+          <div style={{ display: "flex", gap: 6 }}>
+            <Btn variant="soft" onClick={() => open()} disabled={exLoading}>用户目录</Btn>
+            <Btn variant="soft" onClick={() => open("/")} disabled={exLoading}>整机</Btn>
+            <Btn onClick={() => open(path || undefined)} disabled={exLoading}><IconRefresh size={14} stroke="#fff" />{exLoading ? "扫描中…" : "刷新"}</Btn>
+          </div>
         </div>
 
         {entries && (
@@ -104,25 +145,48 @@ export default function Disk() {
           </div>
         )}
 
+        {/* 本层合计 + 对账说明 */}
+        {entries && entries.length > 0 && (
+          <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 10, lineHeight: 1.6, paddingBottom: 8, borderBottom: "0.5px solid var(--separator)" }}>
+            本层合计 <strong style={{ color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{fmtB(total)}</strong>
+            {scanned > 0 && Math.abs(scanned - total) > total * 0.02 && <span>（可见 {fmtB(scanned)}）</span>}
+            {partial && <span style={{ color: "var(--orange)" }}> · 目录太大未扫完，仅部分结果</span>}
+            {denied && <span> · 含无权限目录</span>}
+            {path === "/" && disk && (
+              <div style={{ marginTop: 4 }}>
+                扫描合计通常<strong>小于上面的「已用」</strong>：系统保护目录（需在 系统设置→隐私→<strong>完全磁盘访问</strong> 给浏览器/终端授权才能数全）、
+                APFS <strong>快照</strong>与<strong>可清除空间</strong>（系统数据）无法被逐文件统计——这部分差额是正常的。
+              </div>
+            )}
+          </div>
+        )}
+
         {exErr && <div style={{ fontSize: 12.5, color: "var(--orange)", marginTop: 8 }}>{exErr}</div>}
         {entries && entries.length === 0 && !exErr && <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", padding: "10px 0" }}>这个文件夹是空的。</div>}
 
         {entries && entries.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {entries.map((it) => (
-              <div key={it.path} className="fv-row" onClick={() => it.isDir && open(it.path)}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 8px", borderRadius: 8, cursor: it.isDir ? "pointer" : "default" }} title={it.path}>
-                <span style={{ fontSize: 14, flex: "none", width: 18, textAlign: "center" }}>{it.isDir ? "📁" : "📄"}</span>
-                <span style={{ width: 150, flex: "none", fontSize: 12.5, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</span>
-                <div style={{ flex: 1, minWidth: 30, height: 7, borderRadius: 4, background: "var(--fill-q)", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${Math.max(2, (it.bytes / maxB) * 100)}%`, background: it.isDir ? "var(--accent)" : "var(--text-tertiary)", borderRadius: 4 }} />
+            {entries.map((it) => {
+              const canDel = inHome(it.path);
+              return (
+                <div key={it.path} className="fv-row" onClick={() => it.isDir && open(it.path)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 8px", borderRadius: 8, cursor: it.isDir ? "pointer" : "default" }} title={it.path}>
+                  <span style={{ fontSize: 14, flex: "none", width: 18, textAlign: "center" }}>{it.isDir ? "📁" : "📄"}</span>
+                  <span style={{ width: 150, flex: "none", fontSize: 12.5, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</span>
+                  <div style={{ flex: 1, minWidth: 30, height: 7, borderRadius: 4, background: "var(--fill-q)", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${Math.max(2, (it.bytes / maxB) * 100)}%`, background: it.isDir ? "var(--accent)" : "var(--text-tertiary)", borderRadius: 4 }} />
+                  </div>
+                  <span style={{ width: 70, flex: "none", textAlign: "right", fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{fmtB(it.bytes)}</span>
+                  <span style={{ width: 12, flex: "none", color: "var(--text-tertiary)", fontSize: 13 }}>{it.isDir ? "›" : ""}</span>
+                  {canDel ? (
+                    <button className="fv-icnbtn" onClick={(e) => { e.stopPropagation(); removeItem(it); }} title={perm ? "永久删除" : "移到废纸篓"}
+                      style={{ width: 28, height: 28, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 7, background: "transparent", border: "none", cursor: "pointer", color: perm ? "var(--red)" : "var(--text-tertiary)" }}><IconTrash size={14} stroke="currentColor" /></button>
+                  ) : (
+                    <span title="系统区域 · 只读（只能删用户目录 ~ 里的东西）" style={{ width: 28, height: 28, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--text-tertiary)", opacity: 0.5 }}>🔒</span>
+                  )}
                 </div>
-                <span style={{ width: 70, flex: "none", textAlign: "right", fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{fmtB(it.bytes)}</span>
-                <span style={{ width: 12, flex: "none", color: "var(--text-tertiary)", fontSize: 13 }}>{it.isDir ? "›" : ""}</span>
-                <button className="fv-icnbtn" onClick={(e) => { e.stopPropagation(); removeItem(it); }} title={perm ? "永久删除" : "移到废纸篓"}
-                  style={{ width: 28, height: 28, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 7, background: "transparent", border: "none", cursor: "pointer", color: perm ? "var(--red)" : "var(--text-tertiary)" }}><IconTrash size={14} stroke="currentColor" /></button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         {exMsg && <div style={{ fontSize: 12.5, color: "var(--accent)", marginTop: 10 }}>{exMsg}</div>}
