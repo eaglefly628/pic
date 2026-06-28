@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { parseWorkbook, type ParseResult } from "../lib/parseExcel";
 import { exportDatasetToExcel } from "../lib/exportExcel";
-import { Btn, Field, TextField, card } from "../ui";
+import { Btn, Field, Select, TextField, card } from "../ui";
 import { IconImport, IconCheck, IconDownload } from "../icons";
 
 export default function ImportData() {
@@ -13,6 +13,7 @@ export default function ImportData() {
   const [err, setErr] = useState("");
   const [fileName, setFileName] = useState("");
   const [done, setDone] = useState(false);
+  const [expMonths, setExpMonths] = useState(12);
 
   const onFile = async (file: File) => {
     setErr(""); setResult(null); setDone(false); setFileName(file.name);
@@ -39,9 +40,13 @@ export default function ImportData() {
       <div style={{ ...card, padding: "20px 26px", marginBottom: 18, display: "flex", alignItems: "center", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>导出 Excel（仅主账户）</div>
-          <div style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>当前 {accCount} 个账户 · {snapCount} 条快照。导出为「净资产历史 + 账户」两张表，可再次导入。</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>当前 {accCount} 个账户 · {snapCount} 条快照。导出「净资产历史 + 账户」两张表，<strong>首行冻结</strong>，可再次导入。</div>
         </div>
-        <Btn onClick={() => data && exportDatasetToExcel(data.dataset)}><IconDownload />导出 Excel</Btn>
+        <div style={{ width: 132 }}>
+          <Select value={String(expMonths)} onChange={(e) => setExpMonths(Number(e.target.value))}
+            options={[{ value: "6", label: "近 6 个月" }, { value: "12", label: "近 12 个月" }, { value: "24", label: "近 24 个月" }, { value: "0", label: "全部历史" }]} />
+        </div>
+        <Btn onClick={() => data && exportDatasetToExcel(data.dataset, expMonths)}><IconDownload />导出 Excel</Btn>
       </div>
 
       <div style={{ ...card, padding: "24px 26px" }}>
