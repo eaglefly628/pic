@@ -85,7 +85,7 @@ def main() -> int:
     if not HUB.is_file():
         print("✗ 缺少 hub/index.html")
         return 1
-    url = f"http://127.0.0.1:{PORT}/"
+    url = f"http://localhost:{PORT}/"   # 用 localhost：WebAuthn / Touch ID 不接受 IP 地址
     try:
         httpd = Server(("127.0.0.1", PORT), Handler)
     except OSError:

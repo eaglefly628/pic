@@ -135,6 +135,7 @@
       <input id="gpw2" type="password" placeholder="再次输入" autocomplete="new-password" style="display:none" />
       <div class="gerr" id="gerr"></div>
       <button class="gbtn" id="gbtn">解锁</button>
+      <button id="gbio" style="display:none;width:100%;height:40px;border:0.5px solid var(--accent);border-radius:11px;background:rgba(0,122,255,0.08);color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">🔑 用 Touch ID 解锁</button>
       <button id="gcancel" style="border:none;background:transparent;color:var(--text2);font-size:12.5px;cursor:pointer">取消</button>
       <div class="gnote">「家庭理财」的主密码。本地加密、只存这台机器，忘了找不回。其它世界进去不用密码。</div>
     </div>
@@ -206,6 +207,11 @@
         <div class="seclabel">用户资料</div>
         <input class="tin" id="uname" placeholder="你的称呼（如 eaglefly）" />
         <div class="row2" style="margin-top:10px"><button class="pbtn primary" id="usave">保存</button><span class="shint" id="umsg" style="margin-top:0"></span></div>
+      </div>
+      <div class="sec">
+        <div class="seclabel">Touch ID 快速解锁（仅家庭理财）</div>
+        <div id="biobox" class="row2"></div>
+        <div class="shint" id="biomsg"></div>
       </div>
       <div class="sec">
         <div class="seclabel">整屋备份 · 一个文件，含所有世界 + 设置</div>
@@ -302,7 +308,7 @@
     }
 
     function nav(target) {
-      if (target === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; setTimeout(() => gpw.focus(), 50); return; }
+      if (target === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; refreshGateBio(); setTimeout(() => gpw.focus(), 50); return; }
       if (screens[target]) {
         Object.values(screens).forEach(s => s.classList.add('hide'));
         screens[target].classList.remove('hide');
@@ -393,7 +399,7 @@
     const uname = document.getElementById('uname'), usave = document.getElementById('usave'), umsg = document.getElementById('umsg');
     const bkexport = document.getElementById('bkexport'), bkimport = document.getElementById('bkimport'), bkfile = document.getElementById('bkfile'), bkmsg = document.getElementById('bkmsg');
     const UKEY = 'home.user';
-    function openSettings() { try { uname.value = (JSON.parse(localStorage.getItem(UKEY) || '{}').name) || ''; } catch (e) { uname.value = ''; } umsg.textContent = ''; bkmsg.textContent = ''; settings.classList.add('show'); }
+    function openSettings() { try { uname.value = (JSON.parse(localStorage.getItem(UKEY) || '{}').name) || ''; } catch (e) { uname.value = ''; } umsg.textContent = ''; bkmsg.textContent = ''; refreshBioBox(); settings.classList.add('show'); }
     setbtn.addEventListener('click', openSettings);
     sclose.addEventListener('click', () => settings.classList.remove('show'));
     settings.addEventListener('click', (e) => { if (e.target === settings) settings.classList.remove('show'); });
@@ -454,7 +460,7 @@
     async function exportAll() {
       bkexport.disabled = true; bkmsg.textContent = '正在打包…';
       try {
-        const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); }
+        const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k === 'home.bio') continue; ls[k] = localStorage.getItem(k); }   // home.bio 与本机 Touch ID 绑定，不随备份迁移
         let dbs = []; try { dbs = (await indexedDB.databases()) || []; } catch (e) { dbs = []; }
         const idb = []; for (const info of dbs) if (info.name) idb.push(await dumpDB(info.name));
         const bundle = { __home_backup: 1, v: 1, origin: location.origin, localStorage: ls, indexedDB: idb };
@@ -483,6 +489,76 @@
     bkexport.addEventListener('click', exportAll);
     bkimport.addEventListener('click', () => bkfile.click());
     bkfile.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importAll(f); e.target.value = ''; });
+
+    // ===== Touch ID（WebAuthn PRF）解锁家庭理财 =====
+    const BIOKEY = 'home.bio';
+    const gbio = document.getElementById('gbio'), biobox = document.getElementById('biobox'), biomsg = document.getElementById('biomsg');
+    const hasBio = () => localStorage.getItem(BIOKEY) != null;
+    async function bioAvail() { try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch (e) { return false; } }
+    async function bioPrf(credId, salt) {
+      const assn = await navigator.credentials.get({ publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        allowCredentials: [{ type: 'public-key', id: credId }],
+        userVerification: 'required', timeout: 60000,
+        extensions: { prf: { eval: { first: salt } } },
+      } });
+      const r = assn.getClientExtensionResults();
+      if (!r.prf || !r.prf.results || !r.prf.results.first) throw new Error('该浏览器不支持 PRF');
+      return new Uint8Array(r.prf.results.first);
+    }
+    const bioKey = (secret) => crypto.subtle.importKey('raw', secret, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+    async function bioEnable(pw) {
+      const salt = crypto.getRandomValues(new Uint8Array(32));
+      const cred = await navigator.credentials.create({ publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rp: { name: '我家里的一切' },
+        user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'home', displayName: '家庭主密码' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+        timeout: 60000,
+        extensions: { prf: { eval: { first: salt } } },
+      } });
+      const ext = cred.getClientExtensionResults();
+      if (!ext.prf || !ext.prf.enabled) throw new Error('此浏览器不支持安全的 Touch ID 解锁（PRF）');
+      let secret = ext.prf.results && ext.prf.results.first ? new Uint8Array(ext.prf.results.first) : null;
+      if (!secret) secret = await bioPrf(cred.rawId, salt);
+      const key = await bioKey(secret);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(pw));
+      localStorage.setItem(BIOKEY, JSON.stringify({ credId: b64(cred.rawId), salt: b64(salt), iv: b64(iv), ct: b64(ct) }));
+    }
+    async function bioUnlockPw() {
+      const o = JSON.parse(localStorage.getItem(BIOKEY));
+      const secret = await bioPrf(unb64(o.credId), unb64(o.salt));
+      const key = await bioKey(secret);
+      return dec.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, key, unb64(o.ct)));
+    }
+    async function refreshGateBio() { try { gbio.style.display = (hasBio() && await bioAvail()) ? 'block' : 'none'; } catch (e) { gbio.style.display = 'none'; } }
+    gbio.addEventListener('click', async () => {
+      gerr.textContent = ''; gbio.disabled = true;
+      try { const pw = await bioUnlockPw(); openHouse(pw); }
+      catch (e) { gerr.textContent = 'Touch ID 解锁失败，请用主密码'; }
+      gbio.disabled = false;
+    });
+    async function refreshBioBox() {
+      if (!biobox) return;
+      const avail = await bioAvail();
+      if (!avail) { biobox.innerHTML = '<span class="shint" style="margin-top:0">此设备/浏览器不支持（需 Mac + Chrome / 新版 Safari，且用 http://localhost:5180 访问）</span>'; return; }
+      if (hasBio()) {
+        biobox.innerHTML = '<button class="pbtn ghost" id="biooff">关闭 Touch ID</button><span class="shint" style="margin-top:0;color:var(--accent)">已启用：解锁家庭理财时可用 Touch ID</span>';
+        document.getElementById('biooff').addEventListener('click', () => { localStorage.removeItem(BIOKEY); biomsg.textContent = '已关闭'; refreshBioBox(); refreshGateBio(); });
+      } else {
+        biobox.innerHTML = '<button class="pbtn soft" id="bioon">启用 Touch ID</button><span class="shint" style="margin-top:0">需先解锁过「家庭理财」再启用</span>';
+        document.getElementById('bioon').addEventListener('click', async () => {
+          const pw = sessionStorage.getItem(SKEY);
+          if (!pw) { biomsg.textContent = '请先进入并解锁「家庭理财」一次，再来启用'; return; }
+          biomsg.textContent = '请按 Touch ID…'; const b = document.getElementById('bioon'); b.disabled = true;
+          try { await bioEnable(pw); biomsg.textContent = '已启用 Touch ID'; refreshBioBox(); refreshGateBio(); }
+          catch (e) { biomsg.textContent = '启用失败：' + (e && e.message || e); b.disabled = false; }
+        });
+      }
+    }
+    refreshGateBio();
 
     const start = (location.hash || '#home').slice(1);
     nav(screens[start] || SRC[start] ? start : 'home');
