@@ -478,8 +478,10 @@
       if (!confirm('从备份恢复会用所选文件【替换】本机当前全部数据，确定继续？')) return;
       bkmsg.textContent = '正在恢复…';
       try {
+        const keepBio = localStorage.getItem('home.bio');   // Touch ID 凭据与本机绑定、不在备份里——恢复时别把它冲掉
         localStorage.clear();
         for (const k of Object.keys(bundle.localStorage || {})) localStorage.setItem(k, bundle.localStorage[k]);
+        if (keepBio != null && localStorage.getItem('home.bio') == null) localStorage.setItem('home.bio', keepBio);
         for (const d of (bundle.indexedDB || [])) await restoreDB(d);
         sessionStorage.removeItem(SKEY);
         bkmsg.textContent = '恢复完成，正在刷新…';
@@ -533,11 +535,28 @@
       const key = await bioKey(secret);
       return dec.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, key, unb64(o.ct)));
     }
-    async function refreshGateBio() { try { gbio.style.display = (hasBio() && await bioAvail()) ? 'block' : 'none'; } catch (e) { gbio.style.display = 'none'; } }
+    // 只要这台机器上启用过(有凭据)就显示按钮——bioAvail() 偶尔误报 false，别因此把按钮藏掉；
+    // 真不行就在点击时给出明确原因，而不是让按钮神秘消失。
+    function refreshGateBio() {
+      gbio.style.display = hasBio() ? 'block' : 'none';
+      if (hasBio() && location.hostname && location.hostname !== 'localhost')
+        gerr.textContent = '提示：用 http://localhost:5180 打开才认得 Touch ID（当前是 ' + location.hostname + '）';
+    }
     gbio.addEventListener('click', async () => {
       gerr.textContent = ''; gbio.disabled = true;
       try { const pw = await bioUnlockPw(); openHouse(pw); }
-      catch (e) { gerr.textContent = 'Touch ID 解锁失败，请用主密码'; }
+      catch (e) {
+        const n = (e && e.name) || '', m = (e && e.message) || String(e);
+        let msg;
+        if (n === 'NotAllowedError') msg = 'Touch ID 已取消或超时，再按一次，或用主密码';
+        else if (/PRF/i.test(m)) msg = '这台浏览器不支持 PRF，请用主密码（建议 Mac + Chrome）';
+        else if (n === 'NotFoundError' || n === 'InvalidStateError') msg = '没找到本机的 Touch ID 凭据——可能换了浏览器/地址或恢复过备份。请用主密码进去后到「设置」重新启用。';
+        else if (n === 'OperationError' || /decrypt/i.test(m)) msg = 'Touch ID 验证不匹配（多半是换了机器），请用主密码';
+        else if (n === 'SecurityError') msg = '安全限制：请用 http://localhost:5180 打开';
+        else msg = 'Touch ID 解锁失败（' + (n || m) + '），请用主密码';
+        gerr.textContent = msg;
+        try { console.warn('[Touch ID] unlock failed:', n, m); } catch (_) {}
+      }
       gbio.disabled = false;
     });
     async function refreshBioBox() {
