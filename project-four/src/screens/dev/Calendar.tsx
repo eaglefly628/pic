@@ -30,8 +30,10 @@ export default function Calendar({ data, mut }: { data: DevData; mut: Mut }) {
   const selTasks = (byDay.get(sel) ?? []).slice().sort((a, b) => (a.status === "done" ? 1 : 0) - (b.status === "done" ? 1 : 0));
   const upcoming = data.tasks.filter((t) => t.due && t.status !== "done" && t.due >= TODAY).sort((a, b) => a.due!.localeCompare(b.due!)).slice(0, 8);
   const overdue = data.tasks.filter((t) => t.due && t.status !== "done" && t.due < TODAY).sort((a, b) => a.due!.localeCompare(b.due!));
+  const undated = data.tasks.filter((t) => !t.due && t.status !== "done");
 
   const toggle = (id: string) => mut((d) => { const t = d.tasks.find((x) => x.id === id); if (t) { t.status = t.status === "done" ? "todo" : "done"; t.updatedAt = Date.now(); } });
+  const schedule = (id: string) => mut((d) => { const t = d.tasks.find((x) => x.id === id); if (t) { t.due = sel; t.updatedAt = Date.now(); } });
   const quickAdd = () => { const t = quick.trim(); if (!t) return; mut((d) => { d.tasks.unshift({ id: uid("t"), title: t, status: "todo", priority: "med", due: sel, createdAt: Date.now(), updatedAt: Date.now() }); }); setQuick(""); };
   const go = (delta: number) => setCursor((c) => { const d = new Date(c.y, c.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
 
@@ -87,6 +89,22 @@ export default function Calendar({ data, mut }: { data: DevData; mut: Mut }) {
           <div style={{ ...card, padding: "15px 17px" }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--red)", marginBottom: 8 }}>逾期 {overdue.length}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{overdue.slice(0, 6).map((t) => <Line key={t.id} t={t} onToggle={() => toggle(t.id)} showDue />)}</div>
+          </div>
+        )}
+
+        {undated.length > 0 && (
+          <div style={{ ...card, padding: "15px 17px" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>未排期 {undated.length}</div>
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 8 }}>「任务」里没填日期的，点「排到这天」放到 {sel === TODAY ? "今天" : sel}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {undated.slice(0, 8).map((t) => (
+                <div key={t.id} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 6px", borderRadius: 7 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", flex: "none", background: PRIORITY[t.priority].color }} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</span>
+                  <button className="fv-tap" onClick={() => schedule(t.id)} title={`排到 ${sel}`} style={{ flex: "none", fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 12%, transparent)", border: "none", borderRadius: 7, padding: "4px 9px", cursor: "pointer" }}>排到这天</button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

@@ -2,22 +2,24 @@ import React, { useMemo, useRef, useState } from "react";
 import type { CompanyInfo, DevData, Invoice } from "../../types";
 import { useVault } from "../../lib/vault";
 import { Btn, TextField, TextArea, Segmented, card, inputStyle, EmptyState } from "../../ui";
-import { IconPlus, IconGear, IconClose, IconCopy, IconCheck, IconReceipt, IconBuilding, IconImport } from "../../icons";
+import { IconPlus, IconGear, IconClose, IconCopy, IconCheck, IconReceipt, IconBuilding, IconImport, IconTrash } from "../../icons";
 import { uid } from "./shared";
 import { INVOICE_CATEGORIES, INVOICE_EMOJI, groupByMonth, type MonthGroup } from "../../lib/invoices";
+import { zipStore, dataUrlToBytes, isPdf } from "../../lib/zip";
 
 type Mut = (fn: (d: DevData) => void) => void;
 type View = "invoices" | "company";
 
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const fmtDate = (s?: string) => { if (!s) return "—"; const p = s.split("-"); return p.length === 3 ? `${+p[1]}/${+p[2]}` : s; };
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** 读图 + 压缩成 jpeg data URL（长边 ≤ 1600），失败则退回原图。 */
 async function fileToDataURL(file: File, max = 1600, quality = 0.85): Promise<string> {
   const raw = await new Promise<string>((res, rej) => {
     const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = () => rej(new Error("read")); r.readAsDataURL(file);
   });
+  // PDF（及任何非图片）原样保存，不走 canvas——canvas 加载不了 PDF。
+  if (file.type === "application/pdf" || !file.type.startsWith("image/")) return raw;
   return await new Promise<string>((res) => {
     const img = new Image();
     img.onload = () => {
@@ -32,11 +34,6 @@ async function fileToDataURL(file: File, max = 1600, quality = 0.85): Promise<st
     img.onerror = () => res(raw);
     img.src = raw;
   });
-}
-
-function triggerDownload(dataUrl: string, filename: string) {
-  const a = document.createElement("a"); a.href = dataUrl; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
 }
 
 export default function Company({ data, mut }: { data: DevData; mut: Mut }) {
@@ -82,13 +79,23 @@ function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
   const save = (v: Invoice) => { mut((d) => { const i = (d.invoices ?? []).findIndex((x) => x.id === v.id); if (i >= 0) d.invoices[i] = { ...v, updatedAt: Date.now() }; }); setEdit(null); };
   const del = (id: string) => { mut((d) => { d.invoices = (d.invoices ?? []).filter((x) => x.id !== id); }); setEdit(null); };
 
-  const exportMonth = async (g: MonthGroup) => {
-    for (let i = 0; i < g.items.length; i++) {
-      const v = g.items[i]; if (!v.photo) continue;
-      const ext = v.photo.startsWith("data:image/png") ? "png" : v.photo.startsWith("data:image/svg") ? "svg" : "jpg";
-      triggerDownload(v.photo, `${g.ym}_${v.category || "未归类"}_${String(i + 1).padStart(2, "0")}.${ext}`);
-      await sleep(220);
-    }
+  // 打包本月所有发票成一个 zip，一次下载（图片 + PDF 都行）。
+  const exportMonth = (g: MonthGroup) => {
+    const safe = (s: string) => s.replace(/[\\/:*?"<>|\n]/g, "_").trim();
+    const files: { name: string; data: Uint8Array }[] = [];
+    g.items.forEach((v, i) => {
+      if (!v.photo) return;
+      const { bytes, ext } = dataUrlToBytes(v.photo);
+      const cat = safe(v.category || "未归类");
+      const tail = safe(v.note || "").slice(0, 16);
+      files.push({ name: `${g.ym}_${String(i + 1).padStart(2, "0")}_${cat}${tail ? "_" + tail : ""}.${ext}`, data: bytes });
+    });
+    if (!files.length) return;
+    const blob = new Blob([zipStore(files) as BlobPart], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `发票_${g.ym}_${files.length}张.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
@@ -99,14 +106,14 @@ function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
           <CatChip active={cat === ""} onClick={() => setCat("")}>全部</CatChip>
           {cats.map((c) => <CatChip key={c} active={cat === c} onClick={() => setCat(c)}>{(INVOICE_EMOJI[c] ?? "🧾") + " " + c}</CatChip>)}
         </div>
-        <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { addFiles(e.target.files); e.currentTarget.value = ""; }} />
+        <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={(e) => { addFiles(e.target.files); e.currentTarget.value = ""; }} />
         <Btn onClick={() => fileRef.current?.click()} disabled={busy}>{busy ? "上传中…" : <><IconImport size={15} stroke="#fff" />上传发票</>}</Btn>
       </div>
 
       {all.length === 0 ? (
         <EmptyState icon={<IconReceipt size={26} stroke="var(--text-tertiary)" />}
           title="还没有发票"
-          text="把发票拍照或截图传上来，选个类别归好。到月底按月一键导出，交给会计就行——不用在这填金额、记账。"
+          text="把发票拍照、截图或 PDF 传上来，选个类别归好。到月底按月打包成 zip 一键导出，交给会计就行——不用在这填金额、记账。"
           action={<Btn onClick={() => fileRef.current?.click()}><IconImport size={15} stroke="#fff" />上传发票</Btn>} />
       ) : filtered.length === 0 ? (
         <EmptyState icon={<IconReceipt size={26} stroke="var(--text-tertiary)" />} title={`「${cat}」下还没有发票`} text="换个类别看看，或上传后归到这一类。" />
@@ -118,8 +125,8 @@ function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
                 <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-primary)" }}>{g.label}</div>
                 <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{g.items.length} 张</div>
                 <div style={{ flex: 1 }} />
-                <button className="fv-tap" onClick={() => exportMonth(g)} title="把本月发票图片一张张下载下来" style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "0.5px solid var(--separator)", background: "var(--bg-elevated)", color: "var(--text-secondary)", fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 8, cursor: "pointer" }}>
-                  <span style={{ display: "inline-flex", transform: "rotate(180deg)" }}><IconImport size={13} stroke="currentColor" /></span>导出本月
+                <button className="fv-tap" onClick={() => exportMonth(g)} title="把本月发票打包成 zip 一次下载（图片 + PDF）" style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "0.5px solid var(--separator)", background: "var(--bg-elevated)", color: "var(--text-secondary)", fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 8, cursor: "pointer" }}>
+                  <span style={{ display: "inline-flex", transform: "rotate(180deg)" }}><IconImport size={13} stroke="currentColor" /></span>打包导出本月
                 </button>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))", gap: 12 }}>
@@ -127,9 +134,16 @@ function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
                   <div key={v.id} className="fv-card-int" style={{ ...card, overflow: "hidden", cursor: "pointer" }} onClick={() => setEdit(v)}>
                     <div style={{ position: "relative", aspectRatio: "3 / 4", background: "var(--fill-q)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {v.photo
-                        ? <img src={v.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onClick={(e) => { e.stopPropagation(); setLightbox(v.photo!); }} />
+                        ? (isPdf(v.photo)
+                            ? <div onClick={(e) => { e.stopPropagation(); setLightbox(v.photo!); }} style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, cursor: "zoom-in" }}>
+                                <span style={{ fontSize: 34 }}>📄</span>
+                                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: ".06em" }}>PDF</span>
+                              </div>
+                            : <img src={v.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onClick={(e) => { e.stopPropagation(); setLightbox(v.photo!); }} />)
                         : <span style={{ fontSize: 34 }}>{INVOICE_EMOJI[v.category ?? ""] ?? "🧾"}</span>}
                       <span style={{ position: "absolute", left: 8, top: 8, fontSize: 10.5, fontWeight: 600, color: "#fff", background: "rgba(0,0,0,0.52)", padding: "2px 7px", borderRadius: 6 }}>{v.category ? (INVOICE_EMOJI[v.category] ?? "🧾") + " " + v.category : "未归类"}</span>
+                      <button className="fv-tap" title="删除这张" onClick={(e) => { e.stopPropagation(); if (confirm("删除这张发票？")) del(v.id); }}
+                        style={{ position: "absolute", right: 6, top: 6, width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 7, background: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff" }}><IconTrash size={13} stroke="currentColor" /></button>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px" }}>
                       <span style={{ fontSize: 11.5, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", flex: "none" }}>{fmtDate(v.date)}</span>
@@ -145,8 +159,10 @@ function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
 
       {edit && <InvoiceEditor key={edit.id} initial={edit} onClose={() => setEdit(null)} onSave={save} onDelete={() => del(edit.id)} />}
       {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, zIndex: 95, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30, cursor: "zoom-out", animation: "fvFade .15s ease" }}>
-          <img src={lightbox} alt="发票" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 10, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }} />
+        <div onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, zIndex: 95, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30, cursor: isPdf(lightbox) ? "default" : "zoom-out", animation: "fvFade .15s ease" }}>
+          {isPdf(lightbox)
+            ? <iframe src={lightbox} title="发票 PDF" onClick={(e) => e.stopPropagation()} style={{ width: "min(900px, 92vw)", height: "90vh", border: "none", borderRadius: 10, background: "#fff", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }} />
+            : <img src={lightbox} alt="发票" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 10, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }} />}
         </div>
       )}
     </div>
@@ -174,12 +190,14 @@ function InvoiceEditor({ initial, onClose, onSave, onDelete }: { initial: Invoic
     </>}>
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
         {v.photo
-          ? <img src={v.photo} alt="发票" style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 10, border: "0.5px solid var(--separator)", display: "block" }} />
+          ? (isPdf(v.photo)
+              ? <iframe src={v.photo} title="发票 PDF" style={{ width: "100%", height: 360, border: "0.5px solid var(--separator)", borderRadius: 10, background: "#fff" }} />
+              : <img src={v.photo} alt="发票" style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 10, border: "0.5px solid var(--separator)", display: "block" }} />)
           : <div style={{ width: "100%", height: 180, borderRadius: 10, background: "var(--fill-q)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40 }}>{INVOICE_EMOJI[v.category ?? ""] ?? "🧾"}</div>}
       </div>
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { replace(e.target.files?.[0]); e.currentTarget.value = ""; }} />
-        <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ border: "none", background: "transparent", color: "var(--accent)", fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer" }}>{busy ? "处理中…" : v.photo ? "替换照片" : "上传照片"}</button>
+        <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={(e) => { replace(e.target.files?.[0]); e.currentTarget.value = ""; }} />
+        <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ border: "none", background: "transparent", color: "var(--accent)", fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer" }}>{busy ? "处理中…" : v.photo ? "替换文件（图片 / PDF）" : "上传文件（图片 / PDF）"}</button>
       </div>
       <Row>
         <L label="类别（归类）" flex={1.4}>

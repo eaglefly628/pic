@@ -52,12 +52,20 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const iterRef = useRef<number>(0);
   const clipTimer = useRef<number | null>(null);
   const toastTimer = useRef<number | null>(null);
+  // 始终指向「最新已落盘」的数据 + 串行队列：避免并发/快速的 update 各自基于旧闭包克隆，
+  // 互相覆盖（典型症状：删了笔记/发票又自己回来，因为某个慢一拍的保存把旧副本写了回去）。
+  const dataRef = useRef<DevData>(data);
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  // setup/unlock/lock 走 setData，这里把 ref 同步到最新；update 路径在 persist 里也会即时更新 ref。
+  useEffect(() => { dataRef.current = data; }, [data]);
 
   const persist = useCallback(async (next: DevData) => {
     if (!keyRef.current || !saltRef.current) return;
     next.updatedAt = Date.now();
     const file = await sealWithKey(keyRef.current, saltRef.current, iterRef.current, next);
     await store.saveVaultFile(file);
+    dataRef.current = next;   // 让队列里的下一个 update 立刻看到最新数据，不必等 React 重渲染
     setData({ ...next });
   }, []);
 
@@ -102,25 +110,30 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     setData(emptyData()); setStatus("locked");
   }, []);
 
-  const update = useCallback(async (mut: (d: DevData) => void) => {
-    const next = clone(data);
-    mut(next);
-    await persist(next);
-  }, [data, persist]);
+  // 串行执行：每个 update 等上一个落盘后，再从「最新数据」克隆，保证改动叠加而非互相覆盖。
+  const update = useCallback((mut: (d: DevData) => void) => {
+    const run = queueRef.current.then(async () => {
+      const next = clone(dataRef.current);
+      mut(next);
+      await persist(next);
+    });
+    queueRef.current = run.catch(() => { /* 单个失败不卡死整条队列 */ });
+    return run;
+  }, [persist]);
 
   const updateSettings = useCallback(async (s: Partial<DevSettings>) => {
-    await persist({ ...data, settings: { ...data.settings, ...s } });
-  }, [data, persist]);
+    await update((d) => { d.settings = { ...d.settings, ...s }; });
+  }, [update]);
 
   const changeMaster = useCallback(async (oldPw: string, newPw: string): Promise<boolean> => {
     const file = await store.loadVaultFile();
     if (!file) return false;
     try { await openVault(oldPw, file); } catch { return false; }
-    const { file: nf, key, salt, iter } = await createVault(newPw, data);
+    const { file: nf, key, salt, iter } = await createVault(newPw, dataRef.current);
     await store.saveVaultFile(nf);
     keyRef.current = key; saltRef.current = salt; iterRef.current = iter;
     return true;
-  }, [data]);
+  }, []);
 
   const exportVault = useCallback(async () => {
     const file = await store.loadVaultFile();
