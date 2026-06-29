@@ -93,5 +93,11 @@ export function sampleData(): DevData {
       { id: id("inv"), date: "2026-05-18", category: "住宿", note: "出差酒店两晚", photo: fakeInvoice("住宿 · 酒店", "#8b5cf6"), createdAt: now, updatedAt: now },
       { id: id("inv"), date: "2026-05-27", category: "软件订阅", note: "协作工具月费", photo: fakeInvoice("软件订阅", "#22c55e"), createdAt: now, updatedAt: now },
     ],
+    bets: [
+      { id: id("bet"), sport: "football", league: "fifa.world", match: "阿根廷 vs 法国", pick: "阿根廷", odds: 2.35, stake: 500, currency: "¥", status: "pending", eventDate: day(1), note: "决赛，赌梅西", createdAt: now, updatedAt: now },
+      { id: id("bet"), sport: "football", league: "fifa.world", match: "巴西 vs 克罗地亚", pick: "巴西 -0.5", odds: 1.80, stake: 300, currency: "¥", status: "won", eventDate: day(-3), createdAt: now, updatedAt: now },
+      { id: id("bet"), sport: "football", league: "fifa.world", match: "德国 vs 日本", pick: "德国", odds: 1.65, stake: 400, currency: "¥", status: "lost", eventDate: day(-6), note: "爆冷，亏", createdAt: now, updatedAt: now },
+      { id: id("bet"), sport: "basketball", league: "nba", match: "湖人 vs 凯尔特人", pick: "凯尔特人", odds: 1.95, stake: 200, currency: "¥", status: "pending", eventDate: day(2), createdAt: now, updatedAt: now },
+    ],
   };
 }

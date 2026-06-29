@@ -92,6 +92,70 @@ def fetch_gold(rng="3mo"):
     return out
 
 
+# ─────────────────────────── 看球：比分 / 赛程（本机代取，无需 API key）──────────────
+ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
+# 只代理这些公开联赛（白名单，避免被当任意 URL 代理）
+SPORT_LEAGUES = {
+    "fifa.world": "soccer/fifa.world",          # 世界杯（男足）
+    "nba": "basketball/nba",                     # NBA
+    "wnba": "basketball/wnba",
+    "eng.1": "soccer/eng.1",                     # 英超
+    "esp.1": "soccer/esp.1",                     # 西甲
+    "ita.1": "soccer/ita.1",                     # 意甲
+    "ger.1": "soccer/ger.1",                     # 德甲
+    "uefa.champions": "soccer/uefa.champions",   # 欧冠
+}
+
+def _espn_side(c):
+    t = (c or {}).get("team", {}) or {}
+    return {"name": t.get("displayName"), "short": t.get("shortDisplayName") or t.get("abbreviation") or t.get("name"),
+            "abbr": t.get("abbreviation"), "logo": t.get("logo"),
+            "score": c.get("score"), "winner": bool(c.get("winner"))}
+
+def _espn_event(ev):
+    comp = (ev.get("competitions") or [{}])[0]
+    cs = comp.get("competitors") or []
+    home = next((x for x in cs if x.get("homeAway") == "home"), None)
+    away = next((x for x in cs if x.get("homeAway") == "away"), None)
+    st = (ev.get("status") or {}).get("type", {}) or {}
+    note = ""
+    notes = comp.get("notes") or []
+    if isinstance(notes, list) and notes:
+        note = notes[0].get("headline") or ""
+    odds = None
+    od = comp.get("odds") or []
+    if isinstance(od, list) and od:
+        odds = od[0].get("details")  # 庄家盘口，仅供参考
+    return {
+        "id": ev.get("id"), "date": ev.get("date"),
+        "name": ev.get("shortName") or ev.get("name"),
+        "state": st.get("state"),                 # pre / in / post
+        "completed": bool(st.get("completed")),
+        "detail": st.get("shortDetail") or st.get("detail") or "",
+        "note": note, "odds": odds,
+        "home": _espn_side(home) if home else None,
+        "away": _espn_side(away) if away else None,
+    }
+
+def fetch_sports(league, dates=None):
+    path = SPORT_LEAGUES.get(league)
+    if not path:
+        return {"ok": False, "error": "未知联赛：%s" % league}
+    url = "%s/%s/scoreboard" % (ESPN_BASE, path)
+    if dates:
+        url += "?dates=%s" % dates
+    try:
+        raw = _get_json(url, timeout=15)
+    except Exception as e:
+        return {"ok": False, "error": "拉取失败（需联网）：%s" % e}
+    events = [_espn_event(ev) for ev in (raw.get("events") or [])]
+    try:
+        lname = (raw.get("leagues") or [{}])[0].get("name") or ""
+    except Exception:
+        lname = ""
+    return {"ok": True, "league": league, "leagueName": lname, "events": events, "asOf": int(time.time() * 1000)}
+
+
 # ─────────────────────────── 磁盘扫描 / 清理（本机） ───────────────────────────
 HOME = os.path.expanduser("~")
 def _exp(p): return os.path.expanduser(p)
@@ -275,6 +339,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if bare == "/api/sports":
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            league = (q.get("league") or ["fifa.world"])[0]
+            raw_dates = (q.get("dates") or [""])[0]
+            dates = "".join(ch for ch in raw_dates if ch.isdigit() or ch == "-") or None
+            try:
+                body = fetch_sports(league, dates)
+            except Exception as e:
+                body = {"ok": False, "error": str(e)}
+            return self._send_json(body)
         if bare == "/api/disk/scan":
             return self._send_json(disk_scan())
         if bare == "/api/disk/targets":

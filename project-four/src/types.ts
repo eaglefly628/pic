@@ -93,6 +93,27 @@ export interface Account {
   updatedAt: number;
 }
 
+// ── 看球 · 下注台账 ───────────────────────────────────────────
+export type BetSport = "football" | "basketball" | "other";
+export type BetStatus = "pending" | "won" | "lost" | "void"; // 待结算 / 赢 / 输 / 取消(退还)
+
+/** 一笔下注：压了哪支队、赔率多少、压了多少钱，结算后算盈亏。纯手填——没人能替你记你押了什么。 */
+export interface Bet {
+  id: string;
+  sport: BetSport;
+  league?: string;       // fifa.world / nba …（用于关联赛事面板）
+  match: string;         // 比赛，如「阿根廷 vs 法国」自由文本
+  pick: string;          // 压哪个：队名或玩法（如「阿根廷」「大 2.5」）
+  odds: number;          // 十进制赔率，如 2.10
+  stake: number;         // 压了多少钱（本金）
+  currency?: string;     // 默认 ¥
+  status: BetStatus;
+  eventDate?: string;    // YYYY-MM-DD 比赛日（可选）
+  note?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** 解锁后内存中的完整数据 */
 export interface DevData {
   tasks: DevTask[];
@@ -105,6 +126,7 @@ export interface DevData {
   accounts: Account[];            // 账户 · 余额（工作账户 + 生活储值卡）
   company: CompanyInfo;           // 公司资料（单家）
   invoices: Invoice[];            // 公司：发票 / 报销记录
+  bets: Bet[];                    // 看球：下注台账
   settings: DevSettings;
   updatedAt: number;
 }
