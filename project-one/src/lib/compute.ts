@@ -87,6 +87,18 @@ export function netSeries(ds: Dataset): { date: string; v: number }[] {
   });
 }
 
+/** 同一个月可能记了好几笔——「每月」视图里只保留当月最后一次（最新那笔），
+ *  避免一个月出现好几个节点。返回按月升序、每月一个点。 */
+function collapseMonthly<T extends { date: string }>(series: T[]): T[] {
+  const byMonth = new Map<string, T>();
+  for (const p of series) {
+    const k = p.date.slice(0, 7);
+    const ex = byMonth.get(k);
+    if (!ex || p.date >= ex.date) byMonth.set(k, p); // 当月日期更靠后的覆盖前面的
+  }
+  return [...byMonth.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
 function monthLabel(iso: string): string {
   const [, m] = iso.split("-");
   return parseInt(m, 10) + "月";
@@ -176,8 +188,8 @@ export function buildView(ds: Dataset, ui: UIState) {
   const trendXLabels = pickXLabels(series.map((p) => ymLabel(p.date)), tc.pts);
   const trendPoints = series.map((p, i) => ({ x: tc.pts[i].x, y: tc.pts[i].y, date: p.date, value: p.v }));
 
-  // 净资产每月变化量（近 12 期，独立于时间范围）
-  const recentNet = fullNet.slice(-13);
+  // 净资产每月变化量（近 12 个月，独立于时间范围）；同月多笔只取当月最后一笔
+  const recentNet = collapseMonthly(fullNet).slice(-13);
   const mcMax = recentNet.reduce((m, p, i) => (i === 0 ? m : Math.max(m, Math.abs(p.v - recentNet[i - 1].v))), 0) || 1;
   const mNotes = ds.monthNotes || {};
   const monthlyChanges = recentNet
@@ -298,7 +310,7 @@ export function buildView(ds: Dataset, ui: UIState) {
   const da = accs.find((a) => a.id === ui.selectedId) || accs[0] ||
     ({ id: "", name: "—", cat: "liquid", type: "", color: "#8E8E93" } as AccountMeta);
   const daComp = (da as AccountMeta & { comp?: string }).comp ?? da.type;
-  const ds2 = da.id ? accountSeries(ds, da.id) : [];
+  const ds2 = da.id ? collapseMonthly(accountSeries(ds, da.id)) : [];
   const detailShown = ds2.slice(-6);
   const dc = buildChart(detailShown.map((p) => p.v), 600, 180, 52, 8, 14, 28);
   const detailDots = detailShown.map((p, i) => ({

@@ -62,32 +62,89 @@ def _get_json(url, timeout=10):
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
+def _yahoo_chart(symbol, rng="3mo"):
+    """Yahoo 日线收盘：现价 + 前收 + 历史（统一收在 history[].usd 里，复用前端图表逻辑）。"""
+    y = _get_json("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=%s&interval=1d" % (symbol, rng))
+    res = y["chart"]["result"][0]
+    meta = res.get("meta", {})
+    ts = res.get("timestamp") or []
+    closes = (res.get("indicators", {}).get("quote") or [{}])[0].get("close") or []
+    hist = [{"t": ts[i] * 1000, "usd": closes[i]} for i in range(min(len(ts), len(closes))) if closes[i] is not None]
+    return {"price": meta.get("regularMarketPrice") or (hist[-1]["usd"] if hist else None),
+            "prevClose": meta.get("chartPreviousClose"), "history": hist}
+
+def _usd_cny():
+    """美元兑人民币（两个免费源，谁通用用谁，都不要 key）。"""
+    for url in ("https://api.frankfurter.app/latest?from=USD&to=CNY", "https://open.er-api.com/v6/latest/USD"):
+        try:
+            return _get_json(url)["rates"]["CNY"]
+        except Exception:
+            continue
+    return None
+
 def fetch_gold(rng="3mo"):
     """黄金价格 + 走势（无需 API key，本机代取，避免浏览器跨域）。"""
     out = {"ok": False}
     try:  # 金价 + 历史：Yahoo 国际现货金期货 GC=F
-        y = _get_json("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=%s&interval=1d" % rng)
-        res = y["chart"]["result"][0]
-        meta = res.get("meta", {})
-        ts = res.get("timestamp") or []
-        closes = (res.get("indicators", {}).get("quote") or [{}])[0].get("close") or []
-        hist = [{"t": ts[i] * 1000, "usd": closes[i]} for i in range(min(len(ts), len(closes))) if closes[i] is not None]
-        out.update({"usdPerOz": meta.get("regularMarketPrice") or (hist[-1]["usd"] if hist else None),
-                    "prevClose": meta.get("chartPreviousClose"), "history": hist, "src": "yahoo"})
+        q = _yahoo_chart("GC=F", rng)
+        out.update({"usdPerOz": q["price"], "prevClose": q["prevClose"], "history": q["history"], "src": "yahoo"})
     except Exception:
         try:  # 降级：只取现价
             g = _get_json("https://api.gold-api.com/price/XAU")
             out.update({"usdPerOz": g.get("price"), "prevClose": None, "history": [], "src": "gold-api"})
         except Exception:
             return {"ok": False, "error": "金价获取失败（需联网）"}
-    out["usdCny"] = None  # 美元兑人民币（两个免费源，谁通用谁）
-    for url in ("https://api.frankfurter.app/latest?from=USD&to=CNY", "https://open.er-api.com/v6/latest/USD"):
-        try:
-            out["usdCny"] = _get_json(url)["rates"]["CNY"]
-            break
-        except Exception:
-            continue
+    out["usdCny"] = _usd_cny()
     out["ok"] = out.get("usdPerOz") is not None
+    out["asOf"] = int(time.time() * 1000)
+    return out
+
+def fetch_btc(rng="3mo"):
+    """比特币 BTC/USD 价格 + 走势（Yahoo BTC-USD，降级 Coinbase 现价），无需 API key。"""
+    out = {"ok": False}
+    try:
+        q = _yahoo_chart("BTC-USD", rng)
+        out.update({"usd": q["price"], "prevClose": q["prevClose"], "history": q["history"], "src": "yahoo"})
+    except Exception:
+        try:
+            c = _get_json("https://api.coinbase.com/v2/prices/BTC-USD/spot")
+            out.update({"usd": float(c["data"]["amount"]), "prevClose": None, "history": [], "src": "coinbase"})
+        except Exception:
+            return {"ok": False, "error": "比特币价格获取失败（需联网）"}
+    out["usdCny"] = _usd_cny()
+    out["ok"] = out.get("usd") is not None
+    out["asOf"] = int(time.time() * 1000)
+    return out
+
+FX_SYMBOLS = ["CNY", "EUR", "JPY", "HKD", "GBP", "KRW", "TWD", "AUD"]
+def fetch_fx(rng="3mo"):
+    """美元汇率：USD 兑一篮子货币（现价）+ USD/CNY 走势。frankfurter / er-api，无需 key。"""
+    out = {"ok": False, "base": "USD"}
+    rates = {}
+    try:
+        j = _get_json("https://api.frankfurter.app/latest?from=USD&to=%s" % ",".join(FX_SYMBOLS))
+        rates = j.get("rates", {})
+    except Exception:
+        try:
+            allr = _get_json("https://open.er-api.com/v6/latest/USD").get("rates", {})
+            rates = {k: allr[k] for k in FX_SYMBOLS if k in allr}
+        except Exception:
+            return {"ok": False, "error": "汇率获取失败（需联网）"}
+    out["rates"] = rates
+    out["cny"] = rates.get("CNY")
+    hist = []  # USD/CNY 走势（frankfurter 时间序列，开区间到今天）
+    try:
+        days = {"1mo": 32, "3mo": 95, "6mo": 190, "1y": 370}.get(rng, 95)
+        start = time.strftime("%Y-%m-%d", time.gmtime(time.time() - days * 86400))
+        r = _get_json("https://api.frankfurter.app/%s..?from=USD&to=CNY" % start).get("rates", {})
+        for d in sorted(r.keys()):
+            v = r[d].get("CNY")
+            if v is not None:
+                hist.append({"t": int(time.mktime(time.strptime(d, "%Y-%m-%d"))) * 1000, "usd": v})
+    except Exception:
+        pass
+    out["history"] = hist
+    out["ok"] = bool(rates)
     out["asOf"] = int(time.time() * 1000)
     return out
 
@@ -339,6 +396,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if bare in ("/api/btc", "/api/fx"):
+            from urllib.parse import urlparse, parse_qs
+            rng = (parse_qs(urlparse(self.path).query).get("range") or ["3mo"])[0]
+            if rng not in ("1mo", "3mo", "6mo", "1y"):
+                rng = "3mo"
+            try:
+                body = fetch_btc(rng) if bare == "/api/btc" else fetch_fx(rng)
+            except Exception as e:
+                body = {"ok": False, "error": str(e)}
+            return self._send_json(body)
         if bare == "/api/sports":
             from urllib.parse import urlparse, parse_qs
             q = parse_qs(urlparse(self.path).query)
