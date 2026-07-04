@@ -3,6 +3,7 @@ import type { Bet, BetSport, BetStatus, DevData } from "../../types";
 import { Btn, Segmented, TextField, card, inputStyle, EmptyState } from "../../ui";
 import { IconPlus, IconClose, IconCheck, IconTrash, IconRefresh } from "../../icons";
 import { uid } from "./shared";
+import WorldCupModel from "./WorldCupModel";
 import {
   profit, potential, summarize, STATUS_LABEL,
   fetchSports, type MatchT, type SportsResp,
@@ -34,11 +35,18 @@ export default function Sports({ data, mut }: { data: DevData; mut: Mut }) {
 // ── 世界杯：赛况(实时) + 我在世界杯的下注 ─────────────────────────
 function WorldCup({ data, mut }: { data: DevData; mut: Mut }) {
   const [editing, setEditing] = useState<Bet | null>(null);
+  const [wcTab, setWcTab] = useState<"live" | "model">("live");
   const bets = (data.bets ?? []).filter((b) => b.sport === "football");
   const sum = summarize(bets);
 
   return (
     <div style={{ maxWidth: 760 }}>
+      <div style={{ marginBottom: 16 }}>
+        <Segmented<"live" | "model"> value={wcTab} onChange={setWcTab} style={{ width: 300 }}
+          options={[{ value: "live", label: "赛况 · 我的下注" }, { value: "model", label: "淘汰赛 · 小球模型" }]} />
+      </div>
+      {wcTab === "model" ? <WorldCupModel data={data} mut={mut} /> : (
+      <>{/* 赛况 · 下注 */}
       {/* 我的世界杯战绩 */}
       <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: bets.length ? 14 : 0 }}>
@@ -57,6 +65,8 @@ function WorldCup({ data, mut }: { data: DevData; mut: Mut }) {
 
       {editing && <BetEditor key={editing.id} initial={editing} onClose={() => setEditing(null)}
         onSave={(b) => { saveBet(mut, b); setEditing(null); }} onDelete={() => { delBet(mut, editing.id); setEditing(null); }} />}
+      </>
+      )}
     </div>
   );
 }
