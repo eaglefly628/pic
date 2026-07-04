@@ -1,6 +1,6 @@
 // 世界杯淘汰赛：大小球 / 波胆 的统计与泊松模型（纯逻辑）。
 // 数据默认用 2026 世界杯 32 强淘汰赛（R32）真实 90 分钟比分——大小球、波胆都按常规时间结算。
-import type { KnockoutMatch, WcModel } from "../types";
+import type { KnockoutMatch, WcModel, MatchOdds } from "../types";
 
 let _i = 0;
 const kid = () => "k_" + (_i++).toString(36) + "_" + Math.round(performance.now?.() ?? 0).toString(36);
@@ -244,6 +244,62 @@ export function optimize(rows: EvRow[], stakeTotal: number, mode: "even" | "kell
   const ev = sel.reduce((a, r) => a + r.p * (stakes[r.key] * r.odds), 0) - spent;
   return { sel, stakes, hitProb, ev, spent };
 }
+
+// ── 盘口去水头 + 每场最佳选择（小球 base） ─────────────────────
+/** 一组赔率去掉水头(overround) → 归一化隐含概率。 */
+export function deVig(odds: number[]): number[] {
+  const inv = odds.map((o) => (o > 0 ? 1 / o : 0));
+  const s = inv.reduce((a, b) => a + b, 0);
+  return s > 0 ? inv.map((x) => x / s) : odds.map(() => 0);
+}
+export const OU_LINES = ["1.5", "2", "2.5", "3", "3.5"];
+export const CS_KEYS = ["0-0", "1-0", "0-1", "1-1", "2-0", "0-2", "2-1", "1-2", "2-2", "3-0", "0-3", "3-1", "1-3"];
+
+export interface MatchPick {
+  favorite?: string; favP?: number;
+  under25?: number;          // 盘口去水后的小球(<2.5)概率
+  overLean?: boolean;        // 盘口偏大球
+  bestUnder?: { line: string; odds: number; p: number };  // 推荐小球盘
+  bestCS?: { key: string; odds: number; p: number; win: string };  // 推荐小波胆
+}
+/** 从录入的盘口，按“小球 base”给出每场最佳选择（全部基于盘口去水头，不靠naive模型）。 */
+export function analyzeOdds(o: MatchOdds, home: string, away: string): MatchPick {
+  const out: MatchPick = {};
+  if (o.win && (o.win.h || o.win.a)) {
+    const [ph, , pa] = deVig([o.win.h || 1e6, o.win.d || 1e6, o.win.a || 1e6]);
+    if (ph >= pa) { out.favorite = home; out.favP = ph; } else { out.favorite = away; out.favP = pa; }
+  }
+  const lineProb: { line: string; odds: number; p: number }[] = [];
+  for (const ln of OU_LINES) { const l = o.ou?.[ln]; if (l?.o && l?.u) { const [pu] = deVig([l.u, l.o]); lineProb.push({ line: ln, odds: l.u, p: pu }); } }
+  const l25 = lineProb.find((x) => x.line === "2.5");
+  if (l25) { out.under25 = l25.p; out.overLean = l25.p < 0.5; }
+  if (lineProb.length) {
+    if (l25 && l25.p >= 0.52) out.bestUnder = l25;                    // 盘口自己偏小 → 小2.5
+    else out.bestUnder = lineProb.filter((x) => x.p >= 0.53).sort((a, b) => parseFloat(a.line) - parseFloat(b.line))[0] || l25 || lineProb[lineProb.length - 1];
+  }
+  if (o.cs) {
+    const keys = Object.keys(o.cs).filter((k) => (o.cs![k] || 0) > 0);
+    const probs = deVig(keys.map((k) => o.cs![k]));
+    let bestK = "", bestP = -1;
+    keys.forEach((k, i) => { const [h, a] = k.split("-").map(Number); if (h + a <= 2 && probs[i] > bestP) { bestP = probs[i]; bestK = k; } });
+    if (bestK) { const [h, a] = bestK.split("-").map(Number); out.bestCS = { key: bestK, odds: o.cs[bestK], p: bestP, win: h > a ? home : a > h ? away : "平" }; }
+  }
+  return out;
+}
+
+/** 今晚两场的真实盘口（HK 盘口已换算成十进制：大小球/让球=显示值+1；独赢/波胆本就是十进制）。 */
+export const DEFAULT_MATCH_ODDS: Record<string, MatchOdds> = {
+  f_ca_ma: {
+    ou: { "1.5": { o: 1.36, u: 3.04 }, "2": { o: 1.63, u: 2.29 }, "2.5": { o: 2.20, u: 1.69 } },
+    win: { h: 5.10, d: 3.40, a: 1.79 },
+    cs: { "1-0": 10.5, "2-0": 29, "2-1": 16, "0-0": 8.5, "1-1": 6.9, "2-2": 18, "0-1": 6.5, "0-2": 8.4, "1-2": 7.9, "0-3": 18, "1-3": 16 },
+  },
+  f_py_fr: {
+    ou: { "2.5": { o: 1.63, u: 2.28 }, "3": { o: 2.07, u: 1.78 }, "3.5": { o: 2.72, u: 1.45 } },
+    win: { h: 18.0, d: 6.80, a: 1.19 },
+    cs: { "1-0": 36, "2-0": 121, "2-1": 56, "0-0": 16, "1-1": 13.5, "2-2": 41, "0-1": 6.8, "0-2": 5.3, "1-2": 10.5, "0-3": 6.3, "1-3": 11.5, "2-3": 46 },
+  },
+};
 
 /** 波胆组合：均分筹码到选中的比分，用手填赔率算命中率与期望盈亏。 */
 export function portfolio(picks: string[], stakeTotal: number, odds: Record<string, number>, topScores: WcModelOut["topScores"]) {

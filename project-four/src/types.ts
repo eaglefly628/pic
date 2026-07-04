@@ -139,6 +139,14 @@ export interface WcModel {
   picks?: string[];            // 选中的比分（如 "1-1"）
   odds?: Record<string, number>; // 各比分赔率（手填）
   evMode?: "even" | "kelly";   // 筹码分配：均分 / 凯利
+  matchOdds?: Record<string, MatchOdds>; // 各场盘口（按 fixture id）
+}
+
+/** 一场比赛录入的盘口（十进制/欧赔）。 */
+export interface MatchOdds {
+  ou?: Record<string, { o?: number; u?: number }>; // 盘口线 "2.5" -> { 大, 小 }
+  win?: { h?: number; d?: number; a?: number };     // 独赢 主/和/客
+  cs?: Record<string, number>;                       // 波胆 "主-客" -> 赔率
 }
 
 /** 解锁后内存中的完整数据 */

@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from "react";
-import type { DevData, KnockoutMatch, WcModel } from "../../types";
+import type { DevData, KnockoutMatch, WcModel, MatchOdds } from "../../types";
 import { Btn, Segmented, card } from "../../ui";
 import { IconPlus, IconTrash, IconRefresh, IconClose, IconCheck } from "../../icons";
 import {
   R32_2026, matchesOf, summarize, model, total, scoreKey, newMatch,
   DEFAULT_PRIOR_WEIGHT, DEFAULT_PRIOR_YEARS, WC_KNOCKOUT_HISTORY, pooledPrior, histAvg, histUnderRate, type HistYear,
   R16_FIXTURES, teamStrengths, matchSplit, topScorelinesFor, overProb, linreg,
+  analyzeOdds, DEFAULT_MATCH_ODDS, OU_LINES, CS_KEYS,
 } from "../../lib/wc";
 
 type Mut = (fn: (d: DevData) => void) => void;
@@ -178,6 +179,9 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
 
       {/* 后续赛程 · 每场小球概率 */}
       <FixturesBoard base={mo.lambdaAdj} str={str} />
+
+      {/* 盘口录入 · 每场最佳选择（小球 base） */}
+      <OddsBoard data={data} mut={mut} />
 
       {/* 波胆组合 */}
       <Portfolio data={data} mut={mut} topScores={mo.topScores} />
@@ -463,6 +467,109 @@ function PmfBars({ pmf }: { pmf: number[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── 盘口录入 + 每场最佳选择（小球 base）─────────────────────────
+function OddsBoard({ data, mut }: { data: DevData; mut: Mut }) {
+  const [edit, setEdit] = useState<string | null>(null);
+  const stored = data.wc?.matchOdds ?? {};
+  const oddsOf = (id: string): MatchOdds | undefined => stored[id] ?? DEFAULT_MATCH_ODDS[id];
+  const saveOdds = (id: string, mo: MatchOdds) => mut((d) => { const w = ensureWc(d); w.matchOdds = { ...(w.matchOdds ?? {}), [id]: mo }; });
+  const fixtures = [...R16_FIXTURES].sort((a, b) => (oddsOf(b.id) ? 1 : 0) - (oddsOf(a.id) ? 1 : 0));
+
+  return (
+    <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>盘口录入 · 每场最佳选择（🔴 小球 base）</div>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>
+        录入盘口(大小球/独赢/波胆)→ 自动<strong>去水头</strong>算隐含概率 → 以<strong>小球为基准</strong>给每场<span style={{ color: "var(--red)", fontWeight: 700 }}>标红</span>最佳选择。全部按<strong>盘口</strong>来(盘口最准)。今晚两场已录入,以后你把赔率发我、我继续录。
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {fixtures.map((f) => {
+          const o = oddsOf(f.id);
+          const a = o ? analyzeOdds(o, f.home, f.away) : null;
+          return (
+            <div key={f.id} style={{ border: "0.5px solid var(--separator)", borderRadius: 12, padding: "12px 14px", background: "var(--bg-elevated)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ width: 40, flex: "none", fontSize: 10.5, color: "var(--text-tertiary)" }}>{f.date.slice(5)}</span>
+                <span style={{ flex: 1, minWidth: 100, fontSize: 13.5, fontWeight: 700 }}>{f.home} <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>vs</span> {f.away}</span>
+                {a?.favorite && <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>热门 {a.favorite} {pct0(a.favP ?? 0)}</span>}
+                <Btn variant="ghost" onClick={() => setEdit(f.id)}>{o ? "改盘口" : "录盘口"}</Btn>
+              </div>
+              {a ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>盘口小球(&lt;2.5)：<strong style={{ color: a.overLean ? OVER : UNDER }}>{pct0(a.under25 ?? 0)}</strong>{a.overLean && <span style={{ color: OVER }}> · 偏大球</span>}</span>
+                  <div style={{ flex: 1 }} />
+                  {a.bestUnder && <Pick label={`小 ${a.bestUnder.line}`} sub={`@${a.bestUnder.odds}`} />}
+                  {a.bestCS && <Pick label={`波胆 ${a.bestCS.key}`} sub={`${a.bestCS.win}胜 @${a.bestCS.odds}`} />}
+                </div>
+              ) : <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 6 }}>还没录盘口，点「录盘口」。</div>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>标红=以小球为base的最佳选择,全部基于盘口去水头(不是naive模型)。偏大球的场(如强弱悬殊)会提示,别硬做小球。博彩有风险。</div>
+      {edit && <OddsEditor fx={R16_FIXTURES.find((x) => x.id === edit)!} initial={oddsOf(edit) ?? {}} onClose={() => setEdit(null)} onSave={(mo) => { saveOdds(edit, mo); setEdit(null); }} />}
+    </div>
+  );
+}
+function Pick({ label, sub }: { label: string; sub: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "color-mix(in srgb, var(--red) 12%, transparent)", border: "0.5px solid color-mix(in srgb, var(--red) 40%, transparent)", borderRadius: 8, padding: "4px 10px" }}>
+      <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--red)" }}>{label}</span>
+      <span style={{ fontSize: 11, color: "var(--red)", opacity: 0.85 }}>{sub}</span>
+    </span>
+  );
+}
+function OddsEditor({ fx, initial, onClose, onSave }: { fx: { home: string; away: string }; initial: MatchOdds; onClose: () => void; onSave: (o: MatchOdds) => void }) {
+  const [o, setO] = useState<MatchOdds>(() => JSON.parse(JSON.stringify(initial)));
+  const setOu = (line: string, side: "o" | "u", v: number) => setO((p) => { const ou = { ...(p.ou ?? {}) }; const cur = { ...(ou[line] ?? {}) }; if (v > 0) cur[side] = v; else delete cur[side]; ou[line] = cur; return { ...p, ou }; });
+  const setWin = (k: "h" | "d" | "a", v: number) => setO((p) => { const win = { ...(p.win ?? {}) }; if (v > 0) win[k] = v; else delete win[k]; return { ...p, win }; });
+  const setCs = (k: string, v: number) => setO((p) => { const cs = { ...(p.cs ?? {}) }; if (v > 0) cs[k] = v; else delete cs[k]; return { ...p, cs }; });
+  const inp: React.CSSProperties = { width: 58, height: 30, padding: "0 8px", fontSize: 12.5, borderRadius: 7, border: "0.5px solid var(--separator)", background: "var(--fill-q)", color: "var(--text-primary)", textAlign: "center" };
+  return (
+    <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.34)", backdropFilter: "blur(2px)", animation: "fvFade .15s ease" }}>
+      <div style={{ ...card, width: 480, maxWidth: "94%", maxHeight: "90%", display: "flex", flexDirection: "column", overflow: "hidden", animation: "fvPop .18s ease" }}>
+        <div style={{ display: "flex", alignItems: "center", padding: "14px 20px", borderBottom: "0.5px solid var(--separator)" }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>录盘口 · {fx.home} vs {fx.away}</div><div style={{ flex: 1 }} />
+          <button className="fv-icnbtn" onClick={onClose} style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 7, background: "transparent", border: "none", cursor: "pointer", color: "var(--text-tertiary)" }}><IconClose size={17} stroke="currentColor" /></button>
+        </div>
+        <div style={{ padding: "14px 20px", overflowY: "auto" }}>
+          <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>填<strong>十进制/欧赔</strong>（香港盘口=显示值+1，如小 0.69→1.69）。留空即忽略。</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>大 / 小</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+            <div style={{ display: "flex", gap: 10, fontSize: 10.5, color: "var(--text-tertiary)", fontWeight: 600 }}><span style={{ width: 44 }}>盘口线</span><span style={{ width: 58, textAlign: "center" }}>大</span><span style={{ width: 58, textAlign: "center" }}>小</span></div>
+            {OU_LINES.map((ln) => (
+              <div key={ln} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ width: 44, fontSize: 12.5, fontWeight: 600 }}>{ln}</span>
+                <input type="number" step="0.01" value={o.ou?.[ln]?.o ?? ""} onChange={(e) => setOu(ln, "o", parseFloat(e.target.value))} style={inp} placeholder="—" />
+                <input type="number" step="0.01" value={o.ou?.[ln]?.u ?? ""} onChange={(e) => setOu(ln, "u", parseFloat(e.target.value))} style={inp} placeholder="—" />
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>独赢（主 / 和 / 客）</div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+            <input type="number" step="0.01" value={o.win?.h ?? ""} onChange={(e) => setWin("h", parseFloat(e.target.value))} style={inp} placeholder="主" />
+            <input type="number" step="0.01" value={o.win?.d ?? ""} onChange={(e) => setWin("d", parseFloat(e.target.value))} style={inp} placeholder="和" />
+            <input type="number" step="0.01" value={o.win?.a ?? ""} onChange={(e) => setWin("a", parseFloat(e.target.value))} style={inp} placeholder="客" />
+          </div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>波胆（主-客 比分 → 赔率）</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            {CS_KEYS.map((k) => (
+              <label key={k} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 30, fontSize: 12, fontWeight: 600 }}>{k}</span>
+                <input type="number" step="0.1" value={o.cs?.[k] ?? ""} onChange={(e) => setCs(k, parseFloat(e.target.value))} style={{ ...inp, width: 54 }} placeholder="—" />
+              </label>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "0.5px solid var(--separator)" }}>
+          <div style={{ flex: 1 }} />
+          <Btn variant="ghost" onClick={onClose}>取消</Btn>
+          <Btn onClick={() => onSave(o)}><IconCheck size={15} stroke="#fff" />保存</Btn>
+        </div>
+      </div>
     </div>
   );
 }

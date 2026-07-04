@@ -23,7 +23,7 @@ export default function Sports({ data, mut }: { data: DevData; mut: Mut }) {
     <div>
       <div style={{ marginBottom: 18 }}>
         <Segmented<View> value={view} onChange={setView} style={{ width: 330 }}
-          options={[{ value: "worldcup", label: "世界杯" }, { value: "basketball", label: "篮球" }, { value: "bets", label: "我的下注" }]} />
+          options={[{ value: "worldcup", label: "⚽ 世界杯" }, { value: "basketball", label: "🏀 篮球" }, { value: "bets", label: "我的下注" }]} />
       </div>
       {view === "worldcup" && <WorldCup data={data} mut={mut} />}
       {view === "basketball" && <Basketball data={data} mut={mut} />}
@@ -35,15 +35,15 @@ export default function Sports({ data, mut }: { data: DevData; mut: Mut }) {
 // ── 世界杯：赛况(实时) + 我在世界杯的下注 ─────────────────────────
 function WorldCup({ data, mut }: { data: DevData; mut: Mut }) {
   const [editing, setEditing] = useState<Bet | null>(null);
-  const [wcTab, setWcTab] = useState<"live" | "model">("live");
+  const [wcTab, setWcTab] = useState<"live" | "model">("model");
   const bets = (data.bets ?? []).filter((b) => b.sport === "football");
   const sum = summarize(bets);
 
   return (
     <div style={{ maxWidth: 760 }}>
       <div style={{ marginBottom: 16 }}>
-        <Segmented<"live" | "model"> value={wcTab} onChange={setWcTab} style={{ width: 300 }}
-          options={[{ value: "live", label: "赛况 · 我的下注" }, { value: "model", label: "淘汰赛 · 小球模型" }]} />
+        <Segmented<"live" | "model"> value={wcTab} onChange={setWcTab} style={{ width: 320 }}
+          options={[{ value: "model", label: "⚽ 数据模型" }, { value: "live", label: "赛况 · 下注" }]} />
       </div>
       {wcTab === "model" ? <WorldCupModel data={data} mut={mut} /> : (
       <>{/* 赛况 · 下注 */}
