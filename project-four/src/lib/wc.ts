@@ -28,19 +28,60 @@ export const R32_2026: KnockoutMatch[] = [
 export const DEFAULT_PRIOR_LAMBDA = 2.35; // 近几届淘汰赛 90 分钟场均总进球（低于小组赛，约 2.2~2.4）
 export const DEFAULT_PRIOR_WEIGHT = 20;   // 先验等效场次（锚定强度，可调）
 
-/** 历届世界杯淘汰赛概况（32 队时代，每届 16 场：R16+QF+SF+3rd+决赛），按 90′ 常规时间。
- *  整理自公开赛果——重点是把进加时/点球的场次按「90 分钟比分」计（大小球就是这么结算的）。
- *  关键发现：很多淘汰赛 90′ 是 0-0 / 1-1 才进加时，所以 90′ 口径远比“最终比分”偏小球。
- *  个别加时进球归属可能有 ±1 场误差，可点开每格核对修改。2026 为本届 R32 真实数据。 */
 export interface HistYear { year: number; label: string; matches: number; goals: number; under: number; est: boolean }
+
+/** 历届世界杯淘汰赛「全部逐场」（32 队时代，每届 16 场：R16+QF+SF+3P季军+F），按 90′ 常规时间。
+ *  整理自公开赛果——进加时/点球的场次记「90 分钟比分」(大小球/波胆就是这么结算)。
+ *  很多场 90′ 是 0-0/1-1 才拖进加时，所以 90′ 口径比“最终比分”偏小球。可核对/修改。 */
+export interface HistMatch { y: number; r: string; h: string; a: string; hg: number; ag: number }
+export const KNOCKOUT_MATCHES: HistMatch[] = [
+  // ── 2022 卡塔尔 ──
+  { y: 2022, r: "R16", h: "荷兰", a: "美国", hg: 3, ag: 1 }, { y: 2022, r: "R16", h: "阿根廷", a: "澳大利亚", hg: 2, ag: 1 }, { y: 2022, r: "R16", h: "法国", a: "波兰", hg: 3, ag: 1 }, { y: 2022, r: "R16", h: "英格兰", a: "塞内加尔", hg: 3, ag: 0 },
+  { y: 2022, r: "R16", h: "日本", a: "克罗地亚", hg: 1, ag: 1 }, { y: 2022, r: "R16", h: "巴西", a: "韩国", hg: 4, ag: 1 }, { y: 2022, r: "R16", h: "摩洛哥", a: "西班牙", hg: 0, ag: 0 }, { y: 2022, r: "R16", h: "葡萄牙", a: "瑞士", hg: 6, ag: 1 },
+  { y: 2022, r: "QF", h: "克罗地亚", a: "巴西", hg: 1, ag: 1 }, { y: 2022, r: "QF", h: "荷兰", a: "阿根廷", hg: 2, ag: 2 }, { y: 2022, r: "QF", h: "摩洛哥", a: "葡萄牙", hg: 1, ag: 0 }, { y: 2022, r: "QF", h: "英格兰", a: "法国", hg: 1, ag: 2 },
+  { y: 2022, r: "SF", h: "阿根廷", a: "克罗地亚", hg: 3, ag: 0 }, { y: 2022, r: "SF", h: "法国", a: "摩洛哥", hg: 2, ag: 0 }, { y: 2022, r: "3P", h: "克罗地亚", a: "摩洛哥", hg: 2, ag: 1 }, { y: 2022, r: "F", h: "阿根廷", a: "法国", hg: 2, ag: 2 },
+  // ── 2018 俄罗斯 ──
+  { y: 2018, r: "R16", h: "法国", a: "阿根廷", hg: 4, ag: 3 }, { y: 2018, r: "R16", h: "乌拉圭", a: "葡萄牙", hg: 2, ag: 1 }, { y: 2018, r: "R16", h: "西班牙", a: "俄罗斯", hg: 1, ag: 1 }, { y: 2018, r: "R16", h: "克罗地亚", a: "丹麦", hg: 1, ag: 1 },
+  { y: 2018, r: "R16", h: "巴西", a: "墨西哥", hg: 2, ag: 0 }, { y: 2018, r: "R16", h: "比利时", a: "日本", hg: 3, ag: 2 }, { y: 2018, r: "R16", h: "瑞典", a: "瑞士", hg: 1, ag: 0 }, { y: 2018, r: "R16", h: "哥伦比亚", a: "英格兰", hg: 1, ag: 1 },
+  { y: 2018, r: "QF", h: "乌拉圭", a: "法国", hg: 0, ag: 2 }, { y: 2018, r: "QF", h: "巴西", a: "比利时", hg: 1, ag: 2 }, { y: 2018, r: "QF", h: "瑞典", a: "英格兰", hg: 0, ag: 2 }, { y: 2018, r: "QF", h: "俄罗斯", a: "克罗地亚", hg: 1, ag: 1 },
+  { y: 2018, r: "SF", h: "法国", a: "比利时", hg: 1, ag: 0 }, { y: 2018, r: "SF", h: "克罗地亚", a: "英格兰", hg: 1, ag: 1 }, { y: 2018, r: "3P", h: "比利时", a: "英格兰", hg: 2, ag: 0 }, { y: 2018, r: "F", h: "法国", a: "克罗地亚", hg: 4, ag: 2 },
+  // ── 2014 巴西 ──
+  { y: 2014, r: "R16", h: "巴西", a: "智利", hg: 1, ag: 1 }, { y: 2014, r: "R16", h: "哥伦比亚", a: "乌拉圭", hg: 2, ag: 0 }, { y: 2014, r: "R16", h: "荷兰", a: "墨西哥", hg: 2, ag: 1 }, { y: 2014, r: "R16", h: "哥斯达黎加", a: "希腊", hg: 1, ag: 1 },
+  { y: 2014, r: "R16", h: "法国", a: "尼日利亚", hg: 2, ag: 0 }, { y: 2014, r: "R16", h: "德国", a: "阿尔及利亚", hg: 0, ag: 0 }, { y: 2014, r: "R16", h: "阿根廷", a: "瑞士", hg: 0, ag: 0 }, { y: 2014, r: "R16", h: "比利时", a: "美国", hg: 0, ag: 0 },
+  { y: 2014, r: "QF", h: "法国", a: "德国", hg: 0, ag: 1 }, { y: 2014, r: "QF", h: "巴西", a: "哥伦比亚", hg: 2, ag: 1 }, { y: 2014, r: "QF", h: "阿根廷", a: "比利时", hg: 1, ag: 0 }, { y: 2014, r: "QF", h: "荷兰", a: "哥斯达黎加", hg: 0, ag: 0 },
+  { y: 2014, r: "SF", h: "巴西", a: "德国", hg: 1, ag: 7 }, { y: 2014, r: "SF", h: "荷兰", a: "阿根廷", hg: 0, ag: 0 }, { y: 2014, r: "3P", h: "巴西", a: "荷兰", hg: 0, ag: 3 }, { y: 2014, r: "F", h: "德国", a: "阿根廷", hg: 0, ag: 0 },
+  // ── 2010 南非 ──
+  { y: 2010, r: "R16", h: "乌拉圭", a: "韩国", hg: 2, ag: 1 }, { y: 2010, r: "R16", h: "美国", a: "加纳", hg: 1, ag: 1 }, { y: 2010, r: "R16", h: "德国", a: "英格兰", hg: 4, ag: 1 }, { y: 2010, r: "R16", h: "阿根廷", a: "墨西哥", hg: 3, ag: 1 },
+  { y: 2010, r: "R16", h: "荷兰", a: "斯洛伐克", hg: 2, ag: 1 }, { y: 2010, r: "R16", h: "巴西", a: "智利", hg: 3, ag: 0 }, { y: 2010, r: "R16", h: "巴拉圭", a: "日本", hg: 0, ag: 0 }, { y: 2010, r: "R16", h: "西班牙", a: "葡萄牙", hg: 1, ag: 0 },
+  { y: 2010, r: "QF", h: "荷兰", a: "巴西", hg: 2, ag: 1 }, { y: 2010, r: "QF", h: "乌拉圭", a: "加纳", hg: 1, ag: 1 }, { y: 2010, r: "QF", h: "阿根廷", a: "德国", hg: 0, ag: 4 }, { y: 2010, r: "QF", h: "巴拉圭", a: "西班牙", hg: 0, ag: 1 },
+  { y: 2010, r: "SF", h: "乌拉圭", a: "荷兰", hg: 2, ag: 3 }, { y: 2010, r: "SF", h: "德国", a: "西班牙", hg: 0, ag: 1 }, { y: 2010, r: "3P", h: "乌拉圭", a: "德国", hg: 2, ag: 3 }, { y: 2010, r: "F", h: "荷兰", a: "西班牙", hg: 0, ag: 0 },
+  // ── 2006 德国 ──
+  { y: 2006, r: "R16", h: "德国", a: "瑞典", hg: 2, ag: 0 }, { y: 2006, r: "R16", h: "阿根廷", a: "墨西哥", hg: 1, ag: 1 }, { y: 2006, r: "R16", h: "英格兰", a: "厄瓜多尔", hg: 1, ag: 0 }, { y: 2006, r: "R16", h: "葡萄牙", a: "荷兰", hg: 1, ag: 0 },
+  { y: 2006, r: "R16", h: "意大利", a: "澳大利亚", hg: 1, ag: 0 }, { y: 2006, r: "R16", h: "瑞士", a: "乌克兰", hg: 0, ag: 0 }, { y: 2006, r: "R16", h: "巴西", a: "加纳", hg: 3, ag: 0 }, { y: 2006, r: "R16", h: "西班牙", a: "法国", hg: 1, ag: 3 },
+  { y: 2006, r: "QF", h: "德国", a: "阿根廷", hg: 1, ag: 1 }, { y: 2006, r: "QF", h: "意大利", a: "乌克兰", hg: 3, ag: 0 }, { y: 2006, r: "QF", h: "英格兰", a: "葡萄牙", hg: 0, ag: 0 }, { y: 2006, r: "QF", h: "巴西", a: "法国", hg: 0, ag: 1 },
+  { y: 2006, r: "SF", h: "德国", a: "意大利", hg: 0, ag: 0 }, { y: 2006, r: "SF", h: "葡萄牙", a: "法国", hg: 0, ag: 1 }, { y: 2006, r: "3P", h: "德国", a: "葡萄牙", hg: 3, ag: 1 }, { y: 2006, r: "F", h: "意大利", a: "法国", hg: 1, ag: 1 },
+  // ── 2002 韩日 ──
+  { y: 2002, r: "R16", h: "德国", a: "巴拉圭", hg: 1, ag: 0 }, { y: 2002, r: "R16", h: "英格兰", a: "丹麦", hg: 3, ag: 0 }, { y: 2002, r: "R16", h: "瑞典", a: "塞内加尔", hg: 1, ag: 1 }, { y: 2002, r: "R16", h: "西班牙", a: "爱尔兰", hg: 1, ag: 1 },
+  { y: 2002, r: "R16", h: "美国", a: "墨西哥", hg: 2, ag: 0 }, { y: 2002, r: "R16", h: "巴西", a: "比利时", hg: 2, ag: 0 }, { y: 2002, r: "R16", h: "日本", a: "土耳其", hg: 0, ag: 1 }, { y: 2002, r: "R16", h: "韩国", a: "意大利", hg: 1, ag: 1 },
+  { y: 2002, r: "QF", h: "英格兰", a: "巴西", hg: 1, ag: 2 }, { y: 2002, r: "QF", h: "德国", a: "美国", hg: 1, ag: 0 }, { y: 2002, r: "QF", h: "西班牙", a: "韩国", hg: 0, ag: 0 }, { y: 2002, r: "QF", h: "塞内加尔", a: "土耳其", hg: 0, ag: 0 },
+  { y: 2002, r: "SF", h: "德国", a: "韩国", hg: 1, ag: 0 }, { y: 2002, r: "SF", h: "巴西", a: "土耳其", hg: 1, ag: 0 }, { y: 2002, r: "3P", h: "韩国", a: "土耳其", hg: 2, ag: 3 }, { y: 2002, r: "F", h: "德国", a: "巴西", hg: 0, ag: 2 },
+  // ── 1998 法国 ──
+  { y: 1998, r: "R16", h: "意大利", a: "挪威", hg: 1, ag: 0 }, { y: 1998, r: "R16", h: "巴西", a: "智利", hg: 4, ag: 1 }, { y: 1998, r: "R16", h: "法国", a: "巴拉圭", hg: 0, ag: 0 }, { y: 1998, r: "R16", h: "尼日利亚", a: "丹麦", hg: 1, ag: 4 },
+  { y: 1998, r: "R16", h: "德国", a: "墨西哥", hg: 2, ag: 1 }, { y: 1998, r: "R16", h: "荷兰", a: "南斯拉夫", hg: 2, ag: 1 }, { y: 1998, r: "R16", h: "罗马尼亚", a: "克罗地亚", hg: 0, ag: 1 }, { y: 1998, r: "R16", h: "阿根廷", a: "英格兰", hg: 2, ag: 2 },
+  { y: 1998, r: "QF", h: "意大利", a: "法国", hg: 0, ag: 0 }, { y: 1998, r: "QF", h: "巴西", a: "丹麦", hg: 3, ag: 2 }, { y: 1998, r: "QF", h: "荷兰", a: "阿根廷", hg: 2, ag: 1 }, { y: 1998, r: "QF", h: "德国", a: "克罗地亚", hg: 0, ag: 3 },
+  { y: 1998, r: "SF", h: "巴西", a: "荷兰", hg: 1, ag: 1 }, { y: 1998, r: "SF", h: "法国", a: "克罗地亚", hg: 2, ag: 1 }, { y: 1998, r: "3P", h: "荷兰", a: "克罗地亚", hg: 1, ag: 2 }, { y: 1998, r: "F", h: "巴西", a: "法国", hg: 0, ag: 3 },
+];
+
+const HIST_META: { year: number; label: string }[] = [
+  { year: 1998, label: "1998 法国" }, { year: 2002, label: "2002 韩日" }, { year: 2006, label: "2006 德国" }, { year: 2010, label: "2010 南非" },
+  { year: 2014, label: "2014 巴西" }, { year: 2018, label: "2018 俄罗斯" }, { year: 2022, label: "2022 卡塔尔" },
+];
+/** 逐场派生的历届概况（含季军战，共 16 场/届）+ 本届 R32。 */
 export const WC_KNOCKOUT_HISTORY: HistYear[] = [
-  { year: 1998, label: "1998 法国", matches: 16, goals: 44, under: 5, est: true },
-  { year: 2002, label: "2002 韩日", matches: 16, goals: 28, under: 13, est: true },
-  { year: 2006, label: "2006 德国", matches: 16, goals: 27, under: 12, est: true },
-  { year: 2010, label: "2010 南非", matches: 16, goals: 42, under: 7, est: true },
-  { year: 2014, label: "2014 巴西", matches: 16, goals: 27, under: 12, est: true },
-  { year: 2018, label: "2018 俄罗斯", matches: 16, goals: 44, under: 11, est: true },
-  { year: 2022, label: "2022 卡塔尔", matches: 16, goals: 50, under: 5, est: true },
+  ...HIST_META.map((m) => {
+    const rows = KNOCKOUT_MATCHES.filter((x) => x.y === m.year);
+    return { year: m.year, label: m.label, matches: rows.length, goals: rows.reduce((a, x) => a + x.hg + x.ag, 0), under: rows.filter((x) => x.hg + x.ag <= 2).length, est: true };
+  }),
   { year: 2026, label: "2026 本届 R32", matches: 16, goals: 36, under: 10, est: false },
 ];
 export const histAvg = (h: HistYear) => (h.matches ? h.goals / h.matches : 0);
@@ -65,16 +106,18 @@ export const DEFAULT_PRIOR_YEARS = [2010, 2014, 2018, 2022]; // 默认用近四�
 export const ROUND_ORDER = ["R32", "R16", "QF", "SF", "F"];
 export const ROUND_LABEL: Record<string, string> = { R32: "1/16 · 32强", R16: "1/8 · 16强", QF: "1/4 · 8强", SF: "半决赛", F: "决赛" };
 export interface RoundAgg { year: number; round: string; matches: number; under: number }
-/** 历届各轮次的 90′ 小球数（整理自公开赛果；不含季军战——季军多为放开踢）。可核对。 */
-export const KNOCKOUT_BY_ROUND: RoundAgg[] = [
-  { year: 2022, round: "R16", matches: 8, under: 2 }, { year: 2022, round: "QF", matches: 4, under: 2 }, { year: 2022, round: "SF", matches: 2, under: 1 }, { year: 2022, round: "F", matches: 1, under: 0 },
-  { year: 2018, round: "R16", matches: 8, under: 5 }, { year: 2018, round: "QF", matches: 4, under: 3 }, { year: 2018, round: "SF", matches: 2, under: 2 }, { year: 2018, round: "F", matches: 1, under: 0 },
-  { year: 2014, round: "R16", matches: 8, under: 7 }, { year: 2014, round: "QF", matches: 4, under: 3 }, { year: 2014, round: "SF", matches: 2, under: 1 }, { year: 2014, round: "F", matches: 1, under: 1 },
-  { year: 2010, round: "R16", matches: 8, under: 3 }, { year: 2010, round: "QF", matches: 4, under: 2 }, { year: 2010, round: "SF", matches: 2, under: 1 }, { year: 2010, round: "F", matches: 1, under: 1 },
-  { year: 2006, round: "R16", matches: 8, under: 6 }, { year: 2006, round: "QF", matches: 4, under: 3 }, { year: 2006, round: "SF", matches: 2, under: 2 }, { year: 2006, round: "F", matches: 1, under: 1 },
-  { year: 2002, round: "R16", matches: 8, under: 7 }, { year: 2002, round: "QF", matches: 4, under: 3 }, { year: 2002, round: "SF", matches: 2, under: 2 }, { year: 2002, round: "F", matches: 1, under: 1 },
-  { year: 1998, round: "R16", matches: 8, under: 3 }, { year: 1998, round: "QF", matches: 4, under: 1 }, { year: 1998, round: "SF", matches: 2, under: 1 }, { year: 1998, round: "F", matches: 1, under: 0 },
-];
+/** 由逐场派生的历届各轮次 90′ 小球数（不含季军战——季军多为放开踢）。 */
+export const KNOCKOUT_BY_ROUND: RoundAgg[] = (() => {
+  const map = new Map<string, { matches: number; under: number }>();
+  for (const x of KNOCKOUT_MATCHES) {
+    if (x.r === "3P") continue;
+    const k = x.y + "|" + x.r;
+    const e = map.get(k) ?? { matches: 0, under: 0 };
+    e.matches++; if (x.hg + x.ag <= 2) e.under++;
+    map.set(k, e);
+  }
+  return [...map.entries()].map(([k, e]) => { const [y, r] = k.split("|"); return { year: +y, round: r, matches: e.matches, under: e.under }; });
+})();
 /** 汇总选中历届 → 每轮次 {场次, 小球数}。 */
 export function poolByRound(years: number[]): Record<string, { matches: number; under: number }> {
   const m: Record<string, { matches: number; under: number }> = {};

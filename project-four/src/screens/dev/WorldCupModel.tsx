@@ -7,7 +7,7 @@ import {
   DEFAULT_PRIOR_WEIGHT, DEFAULT_PRIOR_YEARS, WC_KNOCKOUT_HISTORY, pooledPrior, histAvg, histUnderRate, historyWithLive, type HistYear,
   R16_FIXTURES, teamStrengths, matchSplit, topScorelinesFor, overProb, linreg,
   analyzeOdds, DEFAULT_MATCH_ODDS, OU_LINES, CS_KEYS,
-  poolByRound, roundStatsFromMatches, KNOCKOUT_BY_ROUND, ROUND_ORDER, ROUND_LABEL,
+  poolByRound, roundStatsFromMatches, KNOCKOUT_MATCHES, ROUND_ORDER, ROUND_LABEL,
 } from "../../lib/wc";
 
 type Mut = (fn: (d: DevData) => void) => void;
@@ -613,7 +613,7 @@ function RoundTree({ years, ms }: { years: number[]; ms: KnockoutMatch[] }) {
           const po = pooled[rd], cu = cur[rd];
           if (!po && !cu) return null;
           const isOpen = open === rd;
-          const yrs = KNOCKOUT_BY_ROUND.filter((r) => r.round === rd && years.includes(r.year)).sort((a, b) => b.year - a.year);
+          const histMatches = KNOCKOUT_MATCHES.filter((x) => x.r === rd && years.includes(x.y)).sort((a, b) => b.y - a.y);
           const curMatches = ms.filter((m) => m.round === rd);
           return (
             <div key={rd} style={{ borderTop: "0.5px solid var(--separator)" }}>
@@ -632,12 +632,12 @@ function RoundTree({ years, ms }: { years: number[]; ms: KnockoutMatch[] }) {
                       <span style={{ flex: "none", fontWeight: 700, color: total(m) >= 3 ? OVER : UNDER }}>{total(m)}球 {total(m) >= 3 ? "大" : "小"}</span>
                     </div>
                   ))}
-                  {yrs.length > 0 && <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", fontWeight: 600, marginTop: 6 }}>往年逐届</div>}
-                  {yrs.map((r) => (
-                    <div key={r.year} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                      <span style={{ width: 52, flex: "none", color: "var(--text-secondary)" }}>{r.year}</span>
-                      <div style={{ flex: 1, height: 7, borderRadius: 4, background: "var(--fill-q)", overflow: "hidden" }}><div style={{ height: "100%", width: `${(r.under / r.matches) * 100}%`, background: UNDER }} /></div>
-                      <span style={{ width: 84, flex: "none", textAlign: "right", color: "var(--text-tertiary)" }}>{pct0(r.under / r.matches)} ({r.under}/{r.matches})</span>
+                  {histMatches.length > 0 && <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", fontWeight: 600, marginTop: 6 }}>往年逐场（{histMatches.length} 场 · 90′）</div>}
+                  {histMatches.map((x, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                      <span style={{ width: 34, flex: "none", color: "var(--text-tertiary)" }}>{x.y}</span>
+                      <span style={{ flex: 1, minWidth: 0, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.h} {x.hg}-{x.ag} {x.a}</span>
+                      <span style={{ flex: "none", fontWeight: 700, color: (x.hg + x.ag) >= 3 ? OVER : UNDER }}>{x.hg + x.ag}球 {(x.hg + x.ag) >= 3 ? "大" : "小"}</span>
                     </div>
                   ))}
                 </div>
