@@ -46,6 +46,11 @@ export const WC_KNOCKOUT_HISTORY: HistYear[] = [
 export const histAvg = (h: HistYear) => (h.matches ? h.goals / h.matches : 0);
 export const histUnderRate = (h: HistYear) => (h.matches ? h.under / h.matches : 0);
 
+/** 用本届已录入的真实淘汰赛(90′)动态替换 2026 行——真实结果出来后自动修正、长期累积。 */
+export function historyWithLive(s: { n: number; goals: number; under25: number }): HistYear[] {
+  return WC_KNOCKOUT_HISTORY.map((h) => (h.year === 2026 ? { ...h, matches: s.n, goals: s.goals, under: s.under25 } : h));
+}
+
 /** 汇总选中的若干届 → 池化先验 λ 与小球率。 */
 export function pooledPrior(rows: HistYear[], years: number[]) {
   const sel = rows.filter((r) => years.includes(r.year));

@@ -4,7 +4,7 @@ import { Btn, Segmented, card } from "../../ui";
 import { IconPlus, IconTrash, IconRefresh, IconClose, IconCheck } from "../../icons";
 import {
   R32_2026, matchesOf, summarize, model, total, scoreKey, newMatch,
-  DEFAULT_PRIOR_WEIGHT, DEFAULT_PRIOR_YEARS, WC_KNOCKOUT_HISTORY, pooledPrior, histAvg, histUnderRate, type HistYear,
+  DEFAULT_PRIOR_WEIGHT, DEFAULT_PRIOR_YEARS, WC_KNOCKOUT_HISTORY, pooledPrior, histAvg, histUnderRate, historyWithLive, type HistYear,
   R16_FIXTURES, teamStrengths, matchSplit, topScorelinesFor, overProb, linreg,
   analyzeOdds, DEFAULT_MATCH_ODDS, OU_LINES, CS_KEYS,
 } from "../../lib/wc";
@@ -28,6 +28,7 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
   const s = useMemo(() => summarize(ms), [ms]);
   const priorYears = wc?.priorYears ?? DEFAULT_PRIOR_YEARS;
   const pp = useMemo(() => pooledPrior(WC_KNOCKOUT_HISTORY, priorYears), [priorYears]);
+  const hist = useMemo(() => historyWithLive(s), [s]);
   const reg = useMemo(() => linreg(WC_KNOCKOUT_HISTORY.filter((h) => h.est).map((h) => ({ x: h.year, y: histAvg(h) }))), []);
   const useReg = wc?.useReg ?? false;
   const lam0 = useReg ? Math.max(0.6, reg.predict(2026)) : pp.lambda;
@@ -75,6 +76,9 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
         <Kpi label="双方进球" value={pct0(s.bttsr)} sub="BTTS" />
       </div>
 
+      {/* 本届 vs 往年 对标（长期统计 + 信号） */}
+      <SeasonVsHistory s={s} pp={pp} />
+
       {/* 图1：每场总进球 */}
       <Panel title="每场总进球（90 分钟）" legend={<Legend items={[{ c: UNDER, t: "小球 ≤2" }, { c: OVER, t: "大球 ≥3" }]} />}>
         <MatchBars ms={ms} />
@@ -82,8 +86,8 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
       </Panel>
 
       {/* 图2：滚动小球率 */}
-      <Panel title="滚动小球率 vs 历史基准" legend={<Legend items={[{ c: UNDER, t: "累计小球率" }, { c: "var(--text-tertiary)", t: "历史≈60%" }]} />}>
-        <RollingUnder ms={ms} baseline={0.6} />
+      <Panel title="滚动小球率 vs 历史基准" legend={<Legend items={[{ c: UNDER, t: "累计小球率" }, { c: "var(--text-tertiary)", t: `往年≈${pct0(pp.underRate)}` }]} />}>
+        <RollingUnder ms={ms} baseline={pp.underRate} />
         <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8 }}>本届 R32 收在 <strong style={{ color: UNDER }}>{pct(s.u25r)}</strong>，与“淘汰赛小球 &gt; 60%”的历史规律一致。</div>
       </Panel>
 
@@ -110,7 +114,7 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
             );
           })}
         </div>
-        <HistBars rows={WC_KNOCKOUT_HISTORY} selected={priorYears} />
+        <HistBars rows={hist} selected={priorYears} />
         <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 12, paddingTop: 12, borderTop: "0.5px solid var(--separator)" }}>
           <Stat2 label={`选中 ${pp.count} 届 · 池化 λ`} value={pp.lambda.toFixed(2)} color="var(--accent)" />
           <Stat2 label="池化小球率" value={pct0(pp.underRate)} color={UNDER} />
@@ -127,7 +131,7 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
           </label>
         </div>
         <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>把历届场均对年份做最小二乘回归,外推 2026 的“应然”基准,辅助你后面的选择。</div>
-        <RegChart rows={WC_KNOCKOUT_HISTORY} reg={reg} />
+        <RegChart rows={hist} reg={reg} />
         <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 12 }}>
           <Stat2 label="斜率(球/年)" value={(reg.slope >= 0 ? "+" : "") + reg.slope.toFixed(3)} color={reg.slope >= 0 ? OVER : UNDER} />
           <Stat2 label="拟合度 R²" value={reg.r2.toFixed(2)} />
@@ -569,6 +573,30 @@ function OddsEditor({ fx, initial, onClose, onSave }: { fx: { home: string; away
           <Btn variant="ghost" onClick={onClose}>取消</Btn>
           <Btn onClick={() => onSave(o)}><IconCheck size={15} stroke="#fff" />保存</Btn>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 本届 vs 往年 · 小球率对标（长期统计 + 信号）──────────────────
+function SeasonVsHistory({ s, pp }: { s: ReturnType<typeof summarize>; pp: ReturnType<typeof pooledPrior> }) {
+  const cur = s.u25r, base = pp.underRate, gapPP = (cur - base) * 100;
+  const big = Math.abs(gapPP) >= 6;
+  let tone = "var(--text-secondary)", bg = "var(--fill-q)", title = "与往年接近", note = "本届小球率和往年基准差不多，按常规节奏即可。";
+  if (gapPP >= 6) { tone = "var(--accent)"; bg = "color-mix(in srgb, var(--accent) 10%, transparent)"; title = "本届明显更偏小球"; note = "本届淘汰赛比往年小球得多——顺势做小球更有底气（这届风格/防守确实更浓）。"; }
+  else if (gapPP <= -6) { tone = "var(--orange)"; bg = "color-mix(in srgb, var(--orange) 10%, transparent)"; title = "本届明显偏大球"; note = "本届比往年进球多、小球少。按你的均值回归思路可「多试一点小球」赌它回归——但这是主观押注（独立比赛不真的负相关），别加太重。"; }
+  return (
+    <div style={{ ...card, padding: "14px 18px", marginBottom: 16 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>本届 vs 往年 · 小球率对标（累计 90′）</div>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>补录真实结果后<strong>自动累积、自动修正</strong>；本届小球率明显偏离往年时给你信号。</div>
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 12 }}>
+        <Stat2 label={`本届累计(${s.n}场)`} value={pct(cur)} color={UNDER} />
+        <Stat2 label={`往年基准(选中${pp.count}届/${pp.matches}场)`} value={pct(base)} />
+        <Stat2 label="差值" value={(gapPP >= 0 ? "+" : "") + gapPP.toFixed(1) + "pp"} color={gapPP >= 0 ? "var(--green)" : "var(--orange)"} />
+        <Stat2 label="本届场均" value={s.avg.toFixed(2)} />
+      </div>
+      <div style={{ background: bg, borderRadius: 10, padding: "10px 14px", fontSize: 12.5, lineHeight: 1.6 }}>
+        <strong style={{ color: tone }}>{big ? "⚑ " : ""}{title}</strong>：<span style={{ color: "var(--text-secondary)" }}>{note}</span>
       </div>
     </div>
   );
