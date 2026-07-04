@@ -28,18 +28,19 @@ export const R32_2026: KnockoutMatch[] = [
 export const DEFAULT_PRIOR_LAMBDA = 2.35; // 近几届淘汰赛 90 分钟场均总进球（低于小组赛，约 2.2~2.4）
 export const DEFAULT_PRIOR_WEIGHT = 20;   // 先验等效场次（锚定强度，可调）
 
-/** 历届世界杯淘汰赛概况（32 队时代，每届 16 场，按 ~90′）。
- *  ⚠️ 这些是整理/估计值(公开赛果，含少量加时口径差)，仅作先验；请自行核对、可在界面里改。
- *  2026 为本届 R32 真实数据(est:false)，其余为估计(est:true)。 */
+/** 历届世界杯淘汰赛概况（32 队时代，每届 16 场：R16+QF+SF+3rd+决赛），按 90′ 常规时间。
+ *  整理自公开赛果——重点是把进加时/点球的场次按「90 分钟比分」计（大小球就是这么结算的）。
+ *  关键发现：很多淘汰赛 90′ 是 0-0 / 1-1 才进加时，所以 90′ 口径远比“最终比分”偏小球。
+ *  个别加时进球归属可能有 ±1 场误差，可点开每格核对修改。2026 为本届 R32 真实数据。 */
 export interface HistYear { year: number; label: string; matches: number; goals: number; under: number; est: boolean }
 export const WC_KNOCKOUT_HISTORY: HistYear[] = [
-  { year: 1998, label: "1998 法国", matches: 16, goals: 36, under: 9, est: true },
-  { year: 2002, label: "2002 韩日", matches: 16, goals: 34, under: 10, est: true },
-  { year: 2006, label: "2006 德国", matches: 16, goals: 30, under: 12, est: true },
-  { year: 2010, label: "2010 南非", matches: 16, goals: 32, under: 11, est: true },
-  { year: 2014, label: "2014 巴西", matches: 16, goals: 39, under: 8, est: true },
-  { year: 2018, label: "2018 俄罗斯", matches: 16, goals: 42, under: 7, est: true },
-  { year: 2022, label: "2022 卡塔尔", matches: 16, goals: 44, under: 6, est: true },
+  { year: 1998, label: "1998 法国", matches: 16, goals: 44, under: 5, est: true },
+  { year: 2002, label: "2002 韩日", matches: 16, goals: 28, under: 13, est: true },
+  { year: 2006, label: "2006 德国", matches: 16, goals: 27, under: 12, est: true },
+  { year: 2010, label: "2010 南非", matches: 16, goals: 42, under: 7, est: true },
+  { year: 2014, label: "2014 巴西", matches: 16, goals: 27, under: 12, est: true },
+  { year: 2018, label: "2018 俄罗斯", matches: 16, goals: 44, under: 11, est: true },
+  { year: 2022, label: "2022 卡塔尔", matches: 16, goals: 50, under: 5, est: true },
   { year: 2026, label: "2026 本届 R32", matches: 16, goals: 36, under: 10, est: false },
 ];
 export const histAvg = (h: HistYear) => (h.matches ? h.goals / h.matches : 0);
@@ -187,6 +188,22 @@ export function matchLambda(base: number, home: string, away: string, str: Retur
   const bAtt = B && B.n ? B.gf / B.n : avg, bDef = B && B.n ? B.ga / B.n : avg;
   const raw = (aAtt * bDef / avg) + (bAtt * aDef / avg);   // 攻×对方防 / 平均
   return Math.max(0.4, Math.min(6, base * (1 - w) + raw * w));
+}
+/** 单场拆成主/客期望进球（给波胆用）。 */
+export function matchSplit(base: number, home: string, away: string, str: ReturnType<typeof teamStrengths>, w = 0.35) {
+  const avg = base / 2 || 1;
+  const A = str.get(home), B = str.get(away);
+  const aAtt = A && A.n ? A.gf / A.n : avg, aDef = A && A.n ? A.ga / A.n : avg;
+  const bAtt = B && B.n ? B.gf / B.n : avg, bDef = B && B.n ? B.ga / B.n : avg;
+  const lamH = Math.max(0.15, Math.min(4, avg * (1 - w) + (aAtt * bDef / avg) * w));
+  const lamA = Math.max(0.15, Math.min(4, avg * (1 - w) + (bAtt * aDef / avg) * w));
+  return { lam: lamH + lamA, lamH, lamA };
+}
+/** 该场最可能的若干个「有序」比分（主-客），给波胆推荐。 */
+export function topScorelinesFor(lamH: number, lamA: number, n = 3) {
+  const out: { key: string; h: number; a: number; p: number }[] = [];
+  for (let h = 0; h <= 5; h++) for (let a = 0; a <= 5; a++) out.push({ key: `${h}-${a}`, h, a, p: pois(h, lamH) * pois(a, lamA) });
+  return out.sort((x, y) => y.p - x.p).slice(0, n);
 }
 
 /** 最小二乘线性回归：给 (x,y) 点，返回斜率/截距/R² 与预测函数。 */

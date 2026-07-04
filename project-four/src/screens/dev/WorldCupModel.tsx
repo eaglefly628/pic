@@ -5,7 +5,7 @@ import { IconPlus, IconTrash, IconRefresh, IconClose, IconCheck } from "../../ic
 import {
   R32_2026, matchesOf, summarize, model, total, scoreKey, newMatch,
   DEFAULT_PRIOR_WEIGHT, DEFAULT_PRIOR_YEARS, WC_KNOCKOUT_HISTORY, pooledPrior, histAvg, histUnderRate, type HistYear,
-  R16_FIXTURES, teamStrengths, matchLambda, overProb, linreg,
+  R16_FIXTURES, teamStrengths, matchSplit, topScorelinesFor, overProb, linreg,
 } from "../../lib/wc";
 
 type Mut = (fn: (d: DevData) => void) => void;
@@ -96,7 +96,7 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
       <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
           <div style={{ fontSize: 14, fontWeight: 700 }}>历届淘汰赛 · 选 N 届当先验</div>
-          <div style={{ fontSize: 11, color: "var(--orange)" }}>历史为估计值 · 可点开每格改成你核对过的实测</div>
+          <div style={{ fontSize: 11, color: "var(--orange)" }}>历史=整理自公开赛果(90′) · 个别加时口径或 ±1 场 · 可核对修改</div>
         </div>
         <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>勾选想纳入先验的年份——池化成场均 λ 喂给模型。想信“防守年代”就只选 06/10；想跟“近年高分”就选近四届。</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
@@ -331,26 +331,41 @@ function RegChart({ rows, reg }: { rows: HistYear[]; reg: ReturnType<typeof linr
 }
 
 function FixturesBoard({ base, str }: { base: number; str: ReturnType<typeof teamStrengths> }) {
-  const rows = R16_FIXTURES.map((f) => { const lam = matchLambda(base, f.home, f.away, str); return { f, lam, under: 1 - overProb(lam, 2.5) }; });
+  const rows = R16_FIXTURES.map((f) => {
+    const sp = matchSplit(base, f.home, f.away, str);
+    const under = 1 - overProb(sp.lam, 2.5);
+    const tops = topScorelinesFor(sp.lamH, sp.lamA, 3);
+    return { f, lam: sp.lam, under, tops };
+  });
   const sorted = [...rows].sort((a, b) => b.under - a.under);
   return (
     <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>后续赛程 · 每场小球概率（动态）</div>
+        <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>后续赛程 · 每场小球概率 + 波胆 Top（动态）</div>
         <Legend items={[{ c: UNDER, t: "小球" }, { c: OVER, t: "大球" }]} />
       </div>
-      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>R16 全 8 场。每场 λ = 模型基准 + 两队淘汰赛攻防<strong>轻度微调</strong>（样本少·仅参考）；小球 = P(总进球&lt;2.5)。补录新比分后<strong>动态</strong>刷新，越往后越准。按小球概率从高到低排。</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>R16 全 8 场。每场 λ = 模型基准 + 两队淘汰赛攻防<strong>轻度微调</strong>（样本少·仅参考）；小球 = P(总进球&lt;2.5)；波胆 Top 为该场最可能的比分(主-客)。补录新比分后<strong>动态</strong>刷新。按小球概率从高到低排。</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {sorted.map((r) => (
-          <div key={r.f.id} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderRadius: 8 }}>
-            <span style={{ width: 40, flex: "none", fontSize: 10.5, color: "var(--text-tertiary)" }}>{r.f.date.slice(5)}</span>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.f.home} <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>vs</span> {r.f.away}</span>
-            <span style={{ width: 48, flex: "none", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>λ{r.lam.toFixed(2)}</span>
-            <div style={{ width: 110, flex: "none", height: 9, borderRadius: 5, overflow: "hidden", display: "flex", background: "var(--fill-q)" }}>
-              <div style={{ width: `${r.under * 100}%`, background: UNDER }} />
-              <div style={{ width: `${(1 - r.under) * 100}%`, background: OVER, opacity: 0.55 }} />
+          <div key={r.f.id} className="fv-row" style={{ padding: "9px 8px", borderRadius: 9 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ width: 40, flex: "none", fontSize: 10.5, color: "var(--text-tertiary)" }}>{r.f.date.slice(5)}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.f.home} <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>vs</span> {r.f.away}</span>
+              <span style={{ width: 48, flex: "none", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>λ{r.lam.toFixed(2)}</span>
+              <div style={{ width: 96, flex: "none", height: 9, borderRadius: 5, overflow: "hidden", display: "flex", background: "var(--fill-q)" }}>
+                <div style={{ width: `${r.under * 100}%`, background: UNDER }} />
+                <div style={{ width: `${(1 - r.under) * 100}%`, background: OVER, opacity: 0.55 }} />
+              </div>
+              <span style={{ width: 62, flex: "none", textAlign: "right", fontSize: 12.5, fontWeight: 700, color: UNDER, fontVariantNumeric: "tabular-nums" }}>小 {pct0(r.under)}</span>
             </div>
-            <span style={{ width: 88, flex: "none", textAlign: "right", fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><span style={{ color: UNDER }}>小 {pct0(r.under)}</span></span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 50, marginTop: 5, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10.5, color: "var(--text-tertiary)" }}>波胆 Top：</span>
+              {r.tops.map((t, i) => (
+                <span key={t.key} style={{ fontSize: 11.5, fontWeight: 700, color: i === 0 ? "var(--text-primary)" : "var(--text-secondary)", background: i === 0 ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "var(--fill-q)", padding: "2px 8px", borderRadius: 6 }}>
+                  {t.key} <span style={{ fontWeight: 500, color: "var(--text-tertiary)" }}>{pct0(t.p)}</span>
+                </span>
+              ))}
+            </div>
           </div>
         ))}
       </div>
