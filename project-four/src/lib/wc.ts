@@ -61,6 +61,33 @@ export function pooledPrior(rows: HistYear[], years: number[]) {
 }
 export const DEFAULT_PRIOR_YEARS = [2010, 2014, 2018, 2022]; // 默认用近四届当先验
 
+// ── 分轮次小球率（看“越往后越小球？”）──────────────────────────
+export const ROUND_ORDER = ["R32", "R16", "QF", "SF", "F"];
+export const ROUND_LABEL: Record<string, string> = { R32: "1/16 · 32强", R16: "1/8 · 16强", QF: "1/4 · 8强", SF: "半决赛", F: "决赛" };
+export interface RoundAgg { year: number; round: string; matches: number; under: number }
+/** 历届各轮次的 90′ 小球数（整理自公开赛果；不含季军战——季军多为放开踢）。可核对。 */
+export const KNOCKOUT_BY_ROUND: RoundAgg[] = [
+  { year: 2022, round: "R16", matches: 8, under: 2 }, { year: 2022, round: "QF", matches: 4, under: 2 }, { year: 2022, round: "SF", matches: 2, under: 1 }, { year: 2022, round: "F", matches: 1, under: 0 },
+  { year: 2018, round: "R16", matches: 8, under: 5 }, { year: 2018, round: "QF", matches: 4, under: 3 }, { year: 2018, round: "SF", matches: 2, under: 2 }, { year: 2018, round: "F", matches: 1, under: 0 },
+  { year: 2014, round: "R16", matches: 8, under: 7 }, { year: 2014, round: "QF", matches: 4, under: 3 }, { year: 2014, round: "SF", matches: 2, under: 1 }, { year: 2014, round: "F", matches: 1, under: 1 },
+  { year: 2010, round: "R16", matches: 8, under: 3 }, { year: 2010, round: "QF", matches: 4, under: 2 }, { year: 2010, round: "SF", matches: 2, under: 1 }, { year: 2010, round: "F", matches: 1, under: 1 },
+  { year: 2006, round: "R16", matches: 8, under: 6 }, { year: 2006, round: "QF", matches: 4, under: 3 }, { year: 2006, round: "SF", matches: 2, under: 2 }, { year: 2006, round: "F", matches: 1, under: 1 },
+  { year: 2002, round: "R16", matches: 8, under: 7 }, { year: 2002, round: "QF", matches: 4, under: 3 }, { year: 2002, round: "SF", matches: 2, under: 2 }, { year: 2002, round: "F", matches: 1, under: 1 },
+  { year: 1998, round: "R16", matches: 8, under: 3 }, { year: 1998, round: "QF", matches: 4, under: 1 }, { year: 1998, round: "SF", matches: 2, under: 1 }, { year: 1998, round: "F", matches: 1, under: 0 },
+];
+/** 汇总选中历届 → 每轮次 {场次, 小球数}。 */
+export function poolByRound(years: number[]): Record<string, { matches: number; under: number }> {
+  const m: Record<string, { matches: number; under: number }> = {};
+  for (const r of KNOCKOUT_BY_ROUND) { if (!years.includes(r.year)) continue; const e = m[r.round] ?? { matches: 0, under: 0 }; e.matches += r.matches; e.under += r.under; m[r.round] = e; }
+  return m;
+}
+/** 本届已录比赛按轮次统计。 */
+export function roundStatsFromMatches(ms: KnockoutMatch[]): Record<string, { matches: number; under: number }> {
+  const m: Record<string, { matches: number; under: number }> = {};
+  for (const x of ms) { const e = m[x.round] ?? { matches: 0, under: 0 }; e.matches++; if (total(x) <= 2) e.under++; m[x.round] = e; }
+  return m;
+}
+
 export const total = (m: KnockoutMatch) => m.hg + m.ag;
 export const scoreKey = (m: KnockoutMatch) => { const [h, l] = m.hg >= m.ag ? [m.hg, m.ag] : [m.ag, m.hg]; return `${h}-${l}`; }; // 无序比分（大-小）
 export const newMatch = (round = "R16"): KnockoutMatch => ({ id: kid(), round, home: "", away: "", hg: 0, ag: 0 });

@@ -7,6 +7,7 @@ import {
   DEFAULT_PRIOR_WEIGHT, DEFAULT_PRIOR_YEARS, WC_KNOCKOUT_HISTORY, pooledPrior, histAvg, histUnderRate, historyWithLive, type HistYear,
   R16_FIXTURES, teamStrengths, matchSplit, topScorelinesFor, overProb, linreg,
   analyzeOdds, DEFAULT_MATCH_ODDS, OU_LINES, CS_KEYS,
+  poolByRound, roundStatsFromMatches, KNOCKOUT_BY_ROUND, ROUND_ORDER, ROUND_LABEL,
 } from "../../lib/wc";
 
 type Mut = (fn: (d: DevData) => void) => void;
@@ -121,6 +122,9 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
           <Stat2 label="样本场次" value={String(pp.matches)} />
         </div>
       </div>
+
+      {/* 分轮次小球率（越往后越小球？）+ 树 */}
+      <RoundTree years={priorYears} ms={ms} />
 
       {/* 回归趋势 */}
       <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
@@ -574,6 +578,75 @@ function OddsEditor({ fx, initial, onClose, onSave }: { fx: { home: string; away
           <Btn onClick={() => onSave(o)}><IconCheck size={15} stroke="#fff" />保存</Btn>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── 分轮次小球率 · 越往后越小球？（曲线 + 树）─────────────────────
+function RoundTree({ years, ms }: { years: number[]; ms: KnockoutMatch[] }) {
+  const [open, setOpen] = useState<string | null>("SF");
+  const pooled = poolByRound(years);
+  const cur = roundStatsFromMatches(ms);
+  const rate = (e?: { matches: number; under: number }) => (e && e.matches ? e.under / e.matches : null);
+  const curveRounds = ["R16", "QF", "SF", "F"];
+  const W = 660, H = 152, padB = 26, padT = 16, padL = 34, padR = 12;
+  const n = curveRounds.length;
+  const X = (i: number) => padL + (i / (n - 1)) * (W - padL - padR);
+  const Y = (r: number) => padT + (1 - r) * (H - padT - padB);
+  const pts = curveRounds.map((rd, i) => ({ x: X(i), y: Y(rate(pooled[rd]) ?? 0), r: rate(pooled[rd]) ?? 0, rd }));
+  const line = pts.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
+
+  return (
+    <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>分轮次小球率 · 越往后越小球？</div>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>选中往年淘汰赛按轮次拆开(90′)。点下面的树可展开每轮的<strong>逐届</strong>与本届的<strong>逐场</strong>核对。不含季军战。</div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H, display: "block" }}>
+        {[0.25, 0.5, 0.75, 1].map((g) => <g key={g}><line x1={padL} y1={Y(g)} x2={W - padR} y2={Y(g)} stroke="var(--separator)" strokeWidth="0.5" /><text x={padL - 5} y={Y(g) + 3} textAnchor="end" fontSize="8.5" fill="var(--text-tertiary)">{g * 100}%</text></g>)}
+        <path d={line} fill="none" stroke={UNDER} strokeWidth="2.5" />
+        {pts.map((p) => <g key={p.rd}><circle cx={p.x} cy={p.y} r="4.5" fill={UNDER} /><text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="10.5" fontWeight="700" fill={UNDER}>{pct0(p.r)}</text><text x={p.x} y={H - 8} textAnchor="middle" fontSize="9.5" fontWeight="600" fill="var(--text-secondary)">{ROUND_LABEL[p.rd].split(" ")[0]}</text></g>)}
+      </svg>
+      <div style={{ fontSize: 11.5, color: "var(--text-secondary)", margin: "8px 0 12px", lineHeight: 1.6 }}>
+        往年规律：<strong>1/8 → 1/4 → 半决赛 逐轮走高</strong>（峰值半决赛 {pct0(rate(pooled.SF) ?? 0)}），<strong>决赛反而回落</strong>（{pct0(rate(pooled.F) ?? 0)}）——半决赛最“小球”，决赛两极分化。
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {ROUND_ORDER.map((rd) => {
+          const po = pooled[rd], cu = cur[rd];
+          if (!po && !cu) return null;
+          const isOpen = open === rd;
+          const yrs = KNOCKOUT_BY_ROUND.filter((r) => r.round === rd && years.includes(r.year)).sort((a, b) => b.year - a.year);
+          const curMatches = ms.filter((m) => m.round === rd);
+          return (
+            <div key={rd} style={{ borderTop: "0.5px solid var(--separator)" }}>
+              <div className="fv-row" onClick={() => setOpen(isOpen ? null : rd)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 6px", borderRadius: 8, cursor: "pointer", flexWrap: "wrap" }}>
+                <span style={{ width: 12, flex: "none", color: "var(--text-tertiary)", fontSize: 11 }}>{isOpen ? "▾" : "▸"}</span>
+                <span style={{ flex: 1, minWidth: 90, fontSize: 13, fontWeight: 600 }}>{ROUND_LABEL[rd]}</span>
+                {po && <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>往年 <strong style={{ color: UNDER }}>{pct0(rate(po)!)}</strong> <span style={{ opacity: 0.7 }}>({po.under}/{po.matches})</span></span>}
+                {cu && <span style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginLeft: 8 }}>本届 <strong style={{ color: rate(cu)! >= (po ? rate(po)! : 0.5) ? UNDER : OVER }}>{pct0(rate(cu)!)}</strong> <span style={{ opacity: 0.7 }}>({cu.under}/{cu.matches})</span></span>}
+              </div>
+              {isOpen && (
+                <div style={{ padding: "2px 6px 10px 28px", display: "flex", flexDirection: "column", gap: 4 }}>
+                  {curMatches.length > 0 && <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", fontWeight: 600, marginTop: 4 }}>本届逐场（90′）</div>}
+                  {curMatches.map((m) => (
+                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                      <span style={{ flex: 1, minWidth: 0, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.home} {m.hg}-{m.ag} {m.away}</span>
+                      <span style={{ flex: "none", fontWeight: 700, color: total(m) >= 3 ? OVER : UNDER }}>{total(m)}球 {total(m) >= 3 ? "大" : "小"}</span>
+                    </div>
+                  ))}
+                  {yrs.length > 0 && <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", fontWeight: 600, marginTop: 6 }}>往年逐届</div>}
+                  {yrs.map((r) => (
+                    <div key={r.year} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                      <span style={{ width: 52, flex: "none", color: "var(--text-secondary)" }}>{r.year}</span>
+                      <div style={{ flex: 1, height: 7, borderRadius: 4, background: "var(--fill-q)", overflow: "hidden" }}><div style={{ height: "100%", width: `${(r.under / r.matches) * 100}%`, background: UNDER }} /></div>
+                      <span style={{ width: 84, flex: "none", textAlign: "right", color: "var(--text-tertiary)" }}>{pct0(r.under / r.matches)} ({r.under}/{r.matches})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", marginTop: 10 }}>往年为整理值（可与逐场核对）；本届随补录自动更新——补录 16 强/8 强后就能看到本届的逐轮小球曲线。</div>
     </div>
   );
 }
