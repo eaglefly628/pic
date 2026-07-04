@@ -130,12 +130,15 @@ export interface KnockoutMatch {
 /** 世界杯淘汰赛分析所需的可调参数（比赛数据 + 历史先验 + 下注计划）。 */
 export interface WcModel {
   matches?: KnockoutMatch[];   // 未设置时用内置的 2026 R32 真实数据
-  priorLambda?: number;        // 历史先验：淘汰赛场均总进球（默认 2.35）
-  priorWeight?: number;        // 先验等效场次（默认 12）
+  priorYears?: number[];       // 选中的历届（作为先验来源）
+  priorLambda?: number;        // 历史先验 λ（不设时由选中历届池化得到）
+  priorWeight?: number;        // 先验等效场次（锚定强度）
   tilt?: number;               // 均值回归微调强度 0..1（默认 0=关）
+  useReg?: boolean;            // 用“逐届回归”预测值当基准
   stakeTotal?: number;         // 波胆总筹码
   picks?: string[];            // 选中的比分（如 "1-1"）
   odds?: Record<string, number>; // 各比分赔率（手填）
+  evMode?: "even" | "kelly";   // 筹码分配：均分 / 凯利
 }
 
 /** 解锁后内存中的完整数据 */

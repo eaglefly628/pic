@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from "react";
 import type { DevData, KnockoutMatch, WcModel } from "../../types";
-import { Btn, card } from "../../ui";
+import { Btn, Segmented, card } from "../../ui";
 import { IconPlus, IconTrash, IconRefresh, IconClose, IconCheck } from "../../icons";
 import {
-  R32_2026, matchesOf, summarize, model, portfolio, total, scoreKey, newMatch,
-  DEFAULT_PRIOR_LAMBDA, DEFAULT_PRIOR_WEIGHT,
+  R32_2026, matchesOf, summarize, model, total, scoreKey, newMatch,
+  DEFAULT_PRIOR_WEIGHT, DEFAULT_PRIOR_YEARS, WC_KNOCKOUT_HISTORY, pooledPrior, histAvg, histUnderRate, type HistYear,
+  R16_FIXTURES, teamStrengths, matchLambda, overProb, linreg,
 } from "../../lib/wc";
 
 type Mut = (fn: (d: DevData) => void) => void;
@@ -24,15 +25,22 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
   const wc = data.wc;
   const ms = matchesOf(wc);
   const s = useMemo(() => summarize(ms), [ms]);
-  const mo = useMemo(() => model(ms, wc), [ms, wc]);
+  const priorYears = wc?.priorYears ?? DEFAULT_PRIOR_YEARS;
+  const pp = useMemo(() => pooledPrior(WC_KNOCKOUT_HISTORY, priorYears), [priorYears]);
+  const reg = useMemo(() => linreg(WC_KNOCKOUT_HISTORY.filter((h) => h.est).map((h) => ({ x: h.year, y: histAvg(h) }))), []);
+  const useReg = wc?.useReg ?? false;
+  const lam0 = useReg ? Math.max(0.6, reg.predict(2026)) : pp.lambda;
+  const priorWeight = wc?.priorWeight ?? DEFAULT_PRIOR_WEIGHT;
+  const tilt = wc?.tilt ?? 0;
+  const mo = useMemo(() => model(ms, { ...wc, priorLambda: lam0, priorWeight }), [ms, lam0, priorWeight, tilt, wc]);
+  const str = useMemo(() => teamStrengths(ms), [ms]);
   const [editing, setEditing] = useState<KnockoutMatch | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [fetchMsg, setFetchMsg] = useState("");
 
-  const priorLambda = wc?.priorLambda ?? DEFAULT_PRIOR_LAMBDA;
-  const priorWeight = wc?.priorWeight ?? DEFAULT_PRIOR_WEIGHT;
-  const tilt = wc?.tilt ?? 0;
-  const setParam = (k: "priorLambda" | "priorWeight" | "tilt", v: number) => mut((d) => { ensureWc(d)[k] = v; });
+  const setParam = (k: "priorWeight" | "tilt", v: number) => mut((d) => { ensureWc(d)[k] = v; });
+  const toggleYear = (y: number) => mut((d) => { const w = ensureWc(d); const set = new Set(w.priorYears ?? DEFAULT_PRIOR_YEARS); set.has(y) ? set.delete(y) : set.add(y); w.priorYears = [...set].sort((a, b) => a - b); });
+  const setUseReg = (v: boolean) => mut((d) => { ensureWc(d).useReg = v; });
 
   const saveMatch = (m: KnockoutMatch) => { mut((d) => { const w = ensureWc(d); const i = w.matches!.findIndex((x) => x.id === m.id); if (i >= 0) w.matches![i] = m; else w.matches!.unshift(m); }); setEditing(null); };
   const delMatch = (id: string) => mut((d) => { const w = ensureWc(d); w.matches = w.matches!.filter((x) => x.id !== id); });
@@ -84,15 +92,61 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
         <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8 }}>实际最常见：<strong>1-1×{s.scores.find((x) => x.key === "1-1")?.count ?? 0}、2-1×{s.scores.find((x) => x.key === "2-1")?.count ?? 0}</strong>——正是小球波胆的甜区。</div>
       </Panel>
 
+      {/* 历史先验 · 选 N 届 */}
+      <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>历届淘汰赛 · 选 N 届当先验</div>
+          <div style={{ fontSize: 11, color: "var(--orange)" }}>历史为估计值 · 可点开每格改成你核对过的实测</div>
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>勾选想纳入先验的年份——池化成场均 λ 喂给模型。想信“防守年代”就只选 06/10；想跟“近年高分”就选近四届。</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+          {WC_KNOCKOUT_HISTORY.map((h) => {
+            const on = priorYears.includes(h.year);
+            return (
+              <button key={h.year} className="fv-tap" onClick={() => toggleYear(h.year)} disabled={!h.est} title={h.est ? "" : "本届为观测数据，不作先验"} style={{ border: "0.5px solid " + (on ? "transparent" : "var(--separator)"), background: on ? "var(--accent)" : "var(--bg-elevated)", color: on ? "#fff" : h.est ? "var(--text-secondary)" : "var(--text-tertiary)", fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, cursor: h.est ? "pointer" : "default", opacity: h.est ? 1 : 0.55 }}>
+                {h.label}{!h.est && " ·本届"}
+              </button>
+            );
+          })}
+        </div>
+        <HistBars rows={WC_KNOCKOUT_HISTORY} selected={priorYears} />
+        <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 12, paddingTop: 12, borderTop: "0.5px solid var(--separator)" }}>
+          <Stat2 label={`选中 ${pp.count} 届 · 池化 λ`} value={pp.lambda.toFixed(2)} color="var(--accent)" />
+          <Stat2 label="池化小球率" value={pct0(pp.underRate)} color={UNDER} />
+          <Stat2 label="样本场次" value={String(pp.matches)} />
+        </div>
+      </div>
+
+      {/* 回归趋势 */}
+      <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>逐届线性回归 · 场均总进球趋势</div>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-secondary)", cursor: "pointer" }}>
+            <input type="checkbox" checked={useReg} onChange={(e) => setUseReg(e.target.checked)} />用回归预测当基准
+          </label>
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>把历届场均对年份做最小二乘回归,外推 2026 的“应然”基准,辅助你后面的选择。</div>
+        <RegChart rows={WC_KNOCKOUT_HISTORY} reg={reg} />
+        <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 12 }}>
+          <Stat2 label="斜率(球/年)" value={(reg.slope >= 0 ? "+" : "") + reg.slope.toFixed(3)} color={reg.slope >= 0 ? OVER : UNDER} />
+          <Stat2 label="拟合度 R²" value={reg.r2.toFixed(2)} />
+          <Stat2 label="回归预测 2026" value={reg.predict(2026).toFixed(2)} />
+          <Stat2 label="本届实测 R32" value={s.avg.toFixed(2)} color={s.avg < reg.predict(2026) ? UNDER : OVER} />
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>
+          斜率 {reg.slope >= 0 ? "为正,历届淘汰赛进球缓慢走高" : "为负,历届淘汰赛进球走低"};本届 R32 实测 {s.avg.toFixed(2)} {s.avg < reg.predict(2026) ? "低于" : "高于"}回归线,说明这届更{s.avg < reg.predict(2026) ? "偏小球" : "偏大球"}。R² 越接近 1 趋势越可信。
+        </div>
+      </div>
+
       {/* 模型 + 预测 */}
       <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>泊松模型 · 下一场预测</div>
         <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 14, lineHeight: 1.6 }}>
-          把<strong>历史先验</strong>和<strong>已观测淘汰赛</strong>用贝叶斯融合，得到场均期望 λ，再按泊松分布算大小球概率。
+          把<strong>历史先验 λ₀={lam0.toFixed(2)}</strong>（{useReg ? "回归外推" : `选中 ${pp.count} 届池化`}）和<strong>已观测 {s.n} 场</strong>用贝叶斯融合，再按泊松分布算大小球概率。
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <Num label="历史先验 λ（场均球）" value={priorLambda} step={0.05} onChange={(v) => setParam("priorLambda", v)} />
-          <Num label="先验等效场次" value={priorWeight} step={1} onChange={(v) => setParam("priorWeight", Math.max(0, Math.round(v)))} />
+          <Stat2 label="先验 λ₀（来自上方）" value={lam0.toFixed(2)} color="var(--accent)" />
+          <Num label="先验锚定强度(场)" value={priorWeight} step={2} onChange={(v) => setParam("priorWeight", Math.max(0, Math.round(v)))} />
           <Stat2 label="后验 λ（融合后）" value={mo.lambda.toFixed(2)} />
           <Stat2 label="最近6场场均" value={mo.recentAvg.toFixed(2)} />
         </div>
@@ -121,6 +175,9 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>预测总进球分布（泊松，λ={mo.lambdaAdj.toFixed(2)}）</div>
         <PmfBars pmf={mo.pmf} />
       </div>
+
+      {/* 后续赛程 · 每场小球概率 */}
+      <FixturesBoard base={mo.lambdaAdj} str={str} />
 
       {/* 波胆组合 */}
       <Portfolio data={data} mut={mut} topScores={mo.topScores} />
@@ -159,62 +216,144 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
   );
 }
 
-// ── 波胆组合 ────────────────────────────────────────────────
+// ── 波胆组合 + EV 优选 ──────────────────────────────────────
 function Portfolio({ data, mut, topScores }: { data: DevData; mut: Mut; topScores: ReturnType<typeof model>["topScores"] }) {
   const wc = data.wc;
   const picks = wc?.picks ?? ["1-1", "2-1", "1-0"];
   const stakeTotal = wc?.stakeTotal ?? 300;
   const odds = wc?.odds ?? {};
+  const evMode = wc?.evMode ?? "even";
   const setWc = (fn: (w: WcModel) => void) => mut((d) => { if (!d.wc) d.wc = {}; fn(d.wc); });
   const togglePick = (k: string) => setWc((w) => { const p = new Set(w.picks ?? ["1-1", "2-1", "1-0"]); p.has(k) ? p.delete(k) : p.add(k); w.picks = [...p]; });
   const setOdds = (k: string, v: number) => setWc((w) => { w.odds = { ...(w.odds ?? {}), [k]: v }; });
   const setStake = (v: number) => setWc((w) => { w.stakeTotal = v; });
+  const setMode = (m: "even" | "kelly") => setWc((w) => { w.evMode = m; });
 
-  const pf = portfolio(picks, stakeTotal, odds, topScores);
-  const scoreOpts = topScores.filter((t) => t.low || t.p > 0.03).map((t) => t.key);
-  const allOpts = Array.from(new Set([...scoreOpts, "0-0", "1-0", "1-1", "2-1", "2-0", "2-2", "3-1"]));
+  const pMap = new Map(topScores.map((t) => [t.key, t.p]));
+  const candKeys = Array.from(new Set([...topScores.map((t) => t.key), "0-0", "1-0", "1-1", "2-1", "2-0", "2-2", "3-1"]));
+  const cand = candKeys.map((k) => { const p = pMap.get(k) ?? 0; const o = odds[k] ?? 0; const edge = o > 0 ? p * o - 1 : 0; return { key: k, p, o, edge, on: picks.includes(k) }; }).sort((a, b) => b.p - a.p);
+
+  const sel = cand.filter((c) => c.on);
+  const kf = (c: typeof cand[number]) => (c.o > 1 && c.edge > 0 ? c.edge / (c.o - 1) : 0);
+  const kTot = sel.reduce((a, c) => a + kf(c), 0);
+  const stakeOf = (c: typeof cand[number]) => sel.length === 0 ? 0 : evMode === "kelly" ? (kTot > 0 ? stakeTotal * 0.5 * (kf(c) / kTot) + (stakeTotal * 0.5) / sel.length : stakeTotal / sel.length) : stakeTotal / sel.length;
+  const spent = sel.reduce((a, c) => a + stakeOf(c), 0);
+  const hitProb = sel.reduce((a, c) => a + c.p, 0);
+  const ev = sel.reduce((a, c) => a + c.p * (stakeOf(c) * c.o), 0) - spent;
+  const posCount = cand.filter((c) => c.edge > 0 && c.o > 0).length;
+  const autoPick = () => setWc((w) => { w.picks = cand.filter((c) => c.edge > 0 && c.o > 0).map((c) => c.key); });
 
   return (
     <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>波胆组合 · 均分筹码冲奖</div>
-      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>选几个小比分，筹码<strong>均分</strong>，填上各自赔率，自动算命中率和期望盈亏。你的策略：小球波胆铺开、冲高赔。</div>
-
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-        {allOpts.map((k) => {
-          const on = picks.includes(k);
-          const mp = topScores.find((t) => t.key === k)?.p ?? 0;
-          return (
-            <button key={k} className="fv-tap" onClick={() => togglePick(k)} style={{ border: "0.5px solid " + (on ? "transparent" : "var(--separator)"), background: on ? "var(--accent)" : "var(--bg-elevated)", color: on ? "#fff" : "var(--text-secondary)", fontSize: 12.5, fontWeight: 600, padding: "6px 11px", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-              {k}<span style={{ fontSize: 10, opacity: 0.75 }}>{pct0(mp)}</span>
-            </button>
-          );
-        })}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>波胆组合 · EV 优选</div>
+        <div style={{ width: 150 }}><Segmented value={evMode} onChange={(v) => setMode(v as "even" | "kelly")} options={[{ value: "even", label: "均分" }, { value: "kelly", label: "凯利" }]} /></div>
       </div>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>填赔率 → 看<strong>边际(edge=概率×赔率−1)</strong> → 一键勾选所有<strong>正期望</strong>比分 → 筹码按<strong>均分</strong>或<strong>凯利(近似)</strong>分配。edge&gt;0 才有下注价值。</div>
 
       <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
-        <Num label="总筹码 ¥" value={stakeTotal} step={50} onChange={setStake} w={110} />
-        <Stat2 label="每注" value={"¥" + Math.round(pf.each)} />
-        <Stat2 label="命中率(任一中)" value={pct(pf.hitProb)} color={pf.hitProb >= 0.5 ? "var(--green)" : undefined} />
-        <Stat2 label="期望盈亏" value={(pf.ev >= 0 ? "+" : "−") + "¥" + Math.abs(Math.round(pf.ev))} color={pf.ev >= 0 ? "var(--green)" : "var(--red)"} />
+        <Num label="总筹码 ¥" value={stakeTotal} step={50} onChange={setStake} w={104} />
+        <Btn variant="soft" onClick={autoPick}>自动选正期望（{posCount}）</Btn>
+        <Stat2 label="命中率(任一中)" value={pct(hitProb)} color={hitProb >= 0.5 ? "var(--green)" : undefined} />
+        <Stat2 label="投入" value={"¥" + Math.round(spent)} />
+        <Stat2 label="期望盈亏" value={(ev >= 0 ? "+" : "−") + "¥" + Math.abs(Math.round(ev))} color={ev >= 0 ? "var(--green)" : "var(--red)"} />
       </div>
 
-      {picks.length === 0 ? <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", padding: "8px 0" }}>上面点几个比分组进来。</div> : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ display: "flex", fontSize: 10.5, color: "var(--text-tertiary)", padding: "0 4px", fontWeight: 600 }}>
-            <span style={{ width: 52 }}>比分</span><span style={{ width: 60 }}>模型概率</span><span style={{ flex: 1 }}>赔率(手填)</span><span style={{ width: 64, textAlign: "right" }}>本金</span><span style={{ width: 74, textAlign: "right" }}>中了拿回</span>
-          </div>
-          {pf.rows.map((r) => (
-            <div key={r.key} style={{ display: "flex", alignItems: "center", padding: "6px 4px", borderTop: "0.5px solid var(--separator)" }}>
-              <span style={{ width: 52, fontSize: 13, fontWeight: 700 }}>{r.key}</span>
-              <span style={{ width: 60, fontSize: 12, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{pct(r.p)}</span>
-              <span style={{ flex: 1 }}><input type="number" step="0.5" min="1" value={odds[r.key] ?? ""} placeholder="如 8.0" onChange={(e) => setOdds(r.key, parseFloat(e.target.value) || 0)} style={{ width: 90, height: 30, padding: "0 10px", fontSize: 13, borderRadius: 8, border: "0.5px solid var(--separator)", background: "var(--fill-q)", color: "var(--text-primary)" }} /></span>
-              <span style={{ width: 64, textAlign: "right", fontSize: 12.5, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>¥{Math.round(r.stake)}</span>
-              <span style={{ width: 74, textAlign: "right", fontSize: 12.5, fontWeight: 700, color: r.odds > 0 ? "var(--green)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{r.odds > 0 ? "¥" + Math.round(r.ret) : "—"}</span>
-            </div>
-          ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", fontSize: 10.5, color: "var(--text-tertiary)", padding: "0 4px", fontWeight: 600 }}>
+          <span style={{ width: 30 }} /><span style={{ width: 48 }}>比分</span><span style={{ width: 54 }}>模型</span><span style={{ width: 96 }}>赔率(填)</span><span style={{ flex: 1 }}>edge</span><span style={{ width: 58, textAlign: "right" }}>本金</span><span style={{ width: 66, textAlign: "right" }}>中了拿回</span>
         </div>
-      )}
-      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>命中率 = 选中比分的模型概率之和（比分互斥）。期望盈亏 = Σ 概率×回报 − 总筹码；&gt;0 才是长期正期望（很依赖你填的赔率）。</div>
+        {cand.map((c) => (
+          <div key={c.key} onClick={() => togglePick(c.key)} className="fv-row" style={{ display: "flex", alignItems: "center", padding: "6px 4px", borderTop: "0.5px solid var(--separator)", cursor: "pointer" }}>
+            <span style={{ width: 30, flex: "none" }}><input type="checkbox" checked={c.on} readOnly style={{ pointerEvents: "none" }} /></span>
+            <span style={{ width: 48, fontSize: 13, fontWeight: 700 }}>{c.key}</span>
+            <span style={{ width: 54, fontSize: 11.5, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{pct0(c.p)}</span>
+            <span style={{ width: 96, flex: "none" }} onClick={(e) => e.stopPropagation()}><input type="number" step="0.5" min="1" value={odds[c.key] ?? ""} placeholder={"公平≈" + (c.p > 0 ? (1 / c.p).toFixed(1) : "—")} onChange={(e) => setOdds(c.key, parseFloat(e.target.value) || 0)} style={{ width: 84, height: 28, padding: "0 8px", fontSize: 12.5, borderRadius: 7, border: "0.5px solid var(--separator)", background: "var(--fill-q)", color: "var(--text-primary)" }} /></span>
+            <span style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: c.o > 0 ? (c.edge > 0 ? "var(--green)" : "var(--red)") : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{c.o > 0 ? (c.edge >= 0 ? "+" : "") + pct0(c.edge) : "—"}</span>
+            <span style={{ width: 58, textAlign: "right", fontSize: 12, fontWeight: 600, color: c.on ? "var(--text-primary)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{c.on ? "¥" + Math.round(stakeOf(c)) : "—"}</span>
+            <span style={{ width: 66, textAlign: "right", fontSize: 12, fontWeight: 700, color: c.on && c.o > 0 ? "var(--green)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{c.on && c.o > 0 ? "¥" + Math.round(stakeOf(c) * c.o) : "—"}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>edge&gt;0=模型认为这个赔率有价值。命中率=选中比分概率之和(互斥)。凯利为分数凯利近似(互斥比分下非严格最优),给不动就用均分。期望很吃你填的赔率,理性投注。</div>
+    </div>
+  );
+}
+
+// ── 历史 / 回归 / 赛程 图 ─────────────────────────────────────
+function HistBars({ rows, selected }: { rows: HistYear[]; selected: number[] }) {
+  const W = 660, H = 168, padB = 42, padT = 10, padL = 26, padR = 8;
+  const maxG = Math.max(3, ...rows.map(histAvg));
+  const n = rows.length, bw = (W - padL - padR) / n;
+  const y = (g: number) => padT + (1 - g / maxG) * (H - padT - padB);
+  return (
+    <div style={{ width: "100%", overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", minWidth: 560, height: H, display: "block" }}>
+        {[1, 2, 3].map((g) => <g key={g}><line x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke="var(--separator)" strokeWidth="0.5" /><text x={padL - 4} y={y(g) + 3} textAnchor="end" fontSize="8.5" fill="var(--text-tertiary)">{g}</text></g>)}
+        <line x1={padL} y1={y(2.5)} x2={W - padR} y2={y(2.5)} stroke="var(--text-tertiary)" strokeWidth="1" strokeDasharray="4 3" opacity="0.7" />
+        {rows.map((h, i) => {
+          const on = selected.includes(h.year), g = histAvg(h), cur = !h.est;
+          return (
+            <g key={h.year}>
+              <title>{h.label}: 场均 {g.toFixed(2)} · 小球 {(histUnderRate(h) * 100).toFixed(0)}%</title>
+              <rect x={padL + i * bw + bw * 0.18} y={y(g)} width={bw * 0.64} height={Math.max(1, (H - padT - padB) - (y(g) - padT))} rx="3" fill={cur ? "var(--green)" : on ? "var(--accent)" : "var(--fill)"} stroke={on || cur ? "none" : "var(--separator)"} strokeWidth="0.5" />
+              <text x={padL + i * bw + bw / 2} y={y(g) - 3} textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--text-secondary)">{g.toFixed(2)}</text>
+              <text x={padL + i * bw + bw / 2} y={H - 26} textAnchor="middle" fontSize="8" fill="var(--text-tertiary)">{String(h.year).slice(2)}</text>
+              <text x={padL + i * bw + bw / 2} y={H - 13} textAnchor="middle" fontSize="8.5" fontWeight="700" fill={UNDER}>{(histUnderRate(h) * 100).toFixed(0)}%</text>
+            </g>
+          );
+        })}
+        <text x={padL} y={H - 2} fontSize="8" fill="var(--text-tertiary)">蓝=选中先验 · 绿=本届 · 灰=未选 · 底部=小球率</text>
+      </svg>
+    </div>
+  );
+}
+
+function RegChart({ rows, reg }: { rows: HistYear[]; reg: ReturnType<typeof linreg> }) {
+  const hist = rows.filter((h) => h.est), cur = rows.find((h) => !h.est);
+  const W = 660, H = 176, padB = 22, padT = 12, padL = 30, padR = 44;
+  const minY = Math.min(...rows.map((r) => r.year)), maxY = 2026;
+  const vals = rows.map(histAvg).concat([reg.predict(minY), reg.predict(2026)]);
+  const minV = Math.min(1.5, ...vals) - 0.1, maxV = Math.max(3, ...vals) + 0.1;
+  const X = (yr: number) => padL + ((yr - minY) / (maxY - minY || 1)) * (W - padL - padR);
+  const Y = (v: number) => padT + (1 - (v - minV) / (maxV - minV || 1)) * (H - padT - padB);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H, display: "block" }}>
+      {[2, 2.5, 3].map((v) => <line key={v} x1={padL} y1={Y(v)} x2={W - padR} y2={Y(v)} stroke="var(--separator)" strokeWidth="0.5" />)}
+      <line x1={X(minY)} y1={Y(reg.predict(minY))} x2={X(2026)} y2={Y(reg.predict(2026))} stroke="var(--accent2)" strokeWidth="2" />
+      {hist.map((h) => <g key={h.year}><title>{h.label}: {histAvg(h).toFixed(2)}</title><circle cx={X(h.year)} cy={Y(histAvg(h))} r="4.5" fill="var(--accent)" /></g>)}
+      {cur && <g><title>本届 R32: {histAvg(cur).toFixed(2)}</title><circle cx={X(cur.year)} cy={Y(histAvg(cur))} r="5.5" fill="var(--green)" stroke="#fff" strokeWidth="1.5" /></g>}
+      <circle cx={X(2026)} cy={Y(reg.predict(2026))} r="4" fill="none" stroke="var(--accent2)" strokeWidth="2" />
+      <text x={X(2026) + 5} y={Y(reg.predict(2026)) + 3} fontSize="9.5" fontWeight="700" fill="var(--accent2)">{reg.predict(2026).toFixed(2)}</text>
+      {rows.map((h) => <text key={h.year} x={X(h.year)} y={H - 7} textAnchor="middle" fontSize="8" fontWeight={h.est ? 400 : 700} fill={h.est ? "var(--text-tertiary)" : "var(--green)"}>{String(h.year).slice(2)}</text>)}
+    </svg>
+  );
+}
+
+function FixturesBoard({ base, str }: { base: number; str: ReturnType<typeof teamStrengths> }) {
+  const rows = R16_FIXTURES.map((f) => { const lam = matchLambda(base, f.home, f.away, str); return { f, lam, under: 1 - overProb(lam, 2.5) }; });
+  const sorted = [...rows].sort((a, b) => b.under - a.under);
+  return (
+    <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>后续赛程 · 每场小球概率（动态）</div>
+        <Legend items={[{ c: UNDER, t: "小球" }, { c: OVER, t: "大球" }]} />
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>R16 全 8 场。每场 λ = 模型基准 + 两队淘汰赛攻防<strong>轻度微调</strong>（样本少·仅参考）；小球 = P(总进球&lt;2.5)。补录新比分后<strong>动态</strong>刷新，越往后越准。按小球概率从高到低排。</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {sorted.map((r) => (
+          <div key={r.f.id} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderRadius: 8 }}>
+            <span style={{ width: 40, flex: "none", fontSize: 10.5, color: "var(--text-tertiary)" }}>{r.f.date.slice(5)}</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.f.home} <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>vs</span> {r.f.away}</span>
+            <span style={{ width: 48, flex: "none", fontSize: 11, color: "var(--text-tertiary)", textAlign: "right" }}>λ{r.lam.toFixed(2)}</span>
+            <div style={{ width: 110, flex: "none", height: 9, borderRadius: 5, overflow: "hidden", display: "flex", background: "var(--fill-q)" }}>
+              <div style={{ width: `${r.under * 100}%`, background: UNDER }} />
+              <div style={{ width: `${(1 - r.under) * 100}%`, background: OVER, opacity: 0.55 }} />
+            </div>
+            <span style={{ width: 88, flex: "none", textAlign: "right", fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}><span style={{ color: UNDER }}>小 {pct0(r.under)}</span></span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
