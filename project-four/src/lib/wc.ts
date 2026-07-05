@@ -25,6 +25,14 @@ export const R32_2026: KnockoutMatch[] = [
   { id: "wc_ar_cv", round: "R32", date: "2026-07-03", home: "阿根廷", away: "佛得角", hg: 1, ag: 1, aet: true, note: "加时 3-2，阿根廷晋级（梅西世界杯第20球）" },
 ];
 
+/** 2026 世界杯 16 强（1/8 决赛）已完赛的 90′ 真实比分（随比赛进行补充）。 */
+export const R16_2026: KnockoutMatch[] = [
+  { id: "wc26_ca_ma", round: "R16", date: "2026-07-04", home: "加拿大", away: "摩洛哥", hg: 0, ag: 3 },
+  { id: "wc26_py_fr", round: "R16", date: "2026-07-04", home: "巴拉圭", away: "法国", hg: 0, ag: 1 },
+];
+/** 本届淘汰赛已知的全部真实比分（R32 + 已完赛的 16 强…），作为默认数据。 */
+export const SEED_2026: KnockoutMatch[] = [...R32_2026, ...R16_2026];
+
 export const DEFAULT_PRIOR_LAMBDA = 2.35; // 近几届淘汰赛 90 分钟场均总进球（低于小组赛，约 2.2~2.4）
 export const DEFAULT_PRIOR_WEIGHT = 20;   // 先验等效场次（锚定强度，可调）
 
@@ -82,7 +90,7 @@ export const WC_KNOCKOUT_HISTORY: HistYear[] = [
     const rows = KNOCKOUT_MATCHES.filter((x) => x.y === m.year);
     return { year: m.year, label: m.label, matches: rows.length, goals: rows.reduce((a, x) => a + x.hg + x.ag, 0), under: rows.filter((x) => x.hg + x.ag <= 2).length, est: true };
   }),
-  { year: 2026, label: "2026 本届 R32", matches: 16, goals: 36, under: 10, est: false },
+  { year: 2026, label: "2026 本届", matches: 16, goals: 36, under: 10, est: false },
 ];
 export const histAvg = (h: HistYear) => (h.matches ? h.goals / h.matches : 0);
 export const histUnderRate = (h: HistYear) => (h.matches ? h.under / h.matches : 0);
@@ -136,7 +144,7 @@ export const scoreKey = (m: KnockoutMatch) => { const [h, l] = m.hg >= m.ag ? [m
 export const newMatch = (round = "R16"): KnockoutMatch => ({ id: kid(), round, home: "", away: "", hg: 0, ag: 0 });
 
 export function matchesOf(wc?: WcModel): KnockoutMatch[] {
-  return wc?.matches && wc.matches.length ? wc.matches : R32_2026;
+  return wc?.matches && wc.matches.length ? wc.matches : SEED_2026;
 }
 
 export interface KStats {

@@ -3,7 +3,7 @@ import type { DevData, KnockoutMatch, WcModel, MatchOdds } from "../../types";
 import { Btn, Segmented, card } from "../../ui";
 import { IconPlus, IconTrash, IconRefresh, IconClose, IconCheck } from "../../icons";
 import {
-  R32_2026, matchesOf, summarize, model, total, scoreKey, newMatch,
+  SEED_2026, matchesOf, summarize, model, total, scoreKey, newMatch,
   DEFAULT_PRIOR_WEIGHT, DEFAULT_PRIOR_YEARS, WC_KNOCKOUT_HISTORY, pooledPrior, histAvg, histUnderRate, historyWithLive, type HistYear,
   R16_FIXTURES, teamStrengths, matchSplit, topScorelinesFor, overProb, linreg,
   analyzeOdds, DEFAULT_MATCH_ODDS, OU_LINES, CS_KEYS,
@@ -19,7 +19,7 @@ const pct0 = (x: number) => Math.round(x * 100) + "%";
 // 把当前 wc（可能没设过）落成一个可写对象，并保证 matches 存在
 function ensureWc(d: DevData): WcModel {
   if (!d.wc) d.wc = {};
-  if (!d.wc.matches || !d.wc.matches.length) d.wc.matches = R32_2026.map((m) => ({ ...m }));
+  if (!d.wc.matches || !d.wc.matches.length) d.wc.matches = SEED_2026.map((m) => ({ ...m }));
   return d.wc;
 }
 
@@ -47,7 +47,7 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
 
   const saveMatch = (m: KnockoutMatch) => { mut((d) => { const w = ensureWc(d); const i = w.matches!.findIndex((x) => x.id === m.id); if (i >= 0) w.matches![i] = m; else w.matches!.unshift(m); }); setEditing(null); };
   const delMatch = (id: string) => mut((d) => { const w = ensureWc(d); w.matches = w.matches!.filter((x) => x.id !== id); });
-  const resetR32 = () => { if (confirm("重置为内置的 2026 R32 真实数据？你自己加的 16 强等比赛会被清掉。")) mut((d) => { ensureWc(d).matches = R32_2026.map((m) => ({ ...m })); }); };
+  const resetR32 = () => { if (confirm("重置为内置的 2026 真实数据（R32 + 已完赛的 16 强）？你自己改的会被覆盖。")) mut((d) => { ensureWc(d).matches = SEED_2026.map((m) => ({ ...m })); }); };
 
   // 从本机 run.py 拉世界杯实时比分，匹配/补录已完赛的场次
   const fetchLive = async () => {
@@ -69,7 +69,7 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
 
       {/* KPI */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10, marginBottom: 16 }}>
-        <Kpi label="场次(90′)" value={String(s.n)} sub="R32 全部完赛" />
+        <Kpi label="场次(90′)" value={String(s.n)} sub="本届淘汰赛" />
         <Kpi label="场均总进球" value={s.avg.toFixed(2)} sub="球/场" accent />
         <Kpi label="小球率 <2.5" value={pct0(s.u25r)} sub={`${s.under25}/${s.n} 场`} color={UNDER} big />
         <Kpi label="大球率 >2.5" value={pct0(s.o25r)} sub={`${s.over25}/${s.n} 场`} color={OVER} />
