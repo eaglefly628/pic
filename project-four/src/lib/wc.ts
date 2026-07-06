@@ -146,7 +146,12 @@ export const scoreKey = (m: KnockoutMatch) => { const [h, l] = m.hg >= m.ag ? [m
 export const newMatch = (round = "R16"): KnockoutMatch => ({ id: kid(), round, home: "", away: "", hg: 0, ag: 0 });
 
 export function matchesOf(wc?: WcModel): KnockoutMatch[] {
-  return wc?.matches && wc.matches.length ? wc.matches : SEED_2026;
+  const user = wc?.matches;
+  if (!user || !user.length) return SEED_2026;
+  // 合并官方新增(按 id)：我后续补录的真实比分/新场次，即使你本地已有数据也能显示；你改过的(同 id)以你为准。
+  const ids = new Set(user.map((m) => m.id));
+  const extra = SEED_2026.filter((m) => !ids.has(m.id));
+  return extra.length ? [...user, ...extra] : user;
 }
 
 export interface KStats {

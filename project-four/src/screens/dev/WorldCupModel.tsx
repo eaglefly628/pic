@@ -191,6 +191,9 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
       {/* 盘口录入 · 每场最佳选择（小球 base） */}
       <OddsBoard data={data} mut={mut} />
 
+      {/* 预测成绩单 · 命中率 */}
+      <PredictionScorecard data={data} />
+
       {/* 波胆组合 */}
       <Portfolio data={data} mut={mut} topScores={mo.topScores} />
 
@@ -671,6 +674,52 @@ function SeasonVsHistory({ s, pp }: { s: ReturnType<typeof summarize>; pp: Retur
       <div style={{ background: bg, borderRadius: 10, padding: "10px 14px", fontSize: 12.5, lineHeight: 1.6 }}>
         <strong style={{ color: tone }}>{big ? "⚑ " : ""}{title}</strong>：<span style={{ color: "var(--text-secondary)" }}>{note}</span>
       </div>
+    </div>
+  );
+}
+
+// ── 预测成绩单 · 命中率（诚实版）─────────────────────────────
+interface ScoreRow { id: string; label: string; u: number; pred: string; hg: number; ag: number; tot: number; actual: string; ouHit: boolean; csPred: string; csHit: boolean }
+function PredictionScorecard({ data }: { data: DevData }) {
+  const ms = matchesOf(data.wc);
+  const stored = data.wc?.matchOdds ?? {};
+  const rows: ScoreRow[] = [];
+  for (const fx of R16_FIXTURES) {
+    const odds = stored[fx.id] ?? DEFAULT_MATCH_ODDS[fx.id];
+    const played = ms.find((m) => m.round === "R16" && m.home === fx.home && m.away === fx.away);
+    if (!odds || !played) continue;
+    const a = analyzeOdds(odds, fx.home, fx.away);
+    if (a.under25 == null) continue;
+    const pred = a.under25 >= 0.5 ? "小" : "大";
+    const tot = played.hg + played.ag;
+    const csPred = a.bestCS?.key ?? "";
+    rows.push({ id: fx.id, label: `${fx.home}-${fx.away}`, u: a.under25, pred, hg: played.hg, ag: played.ag, tot, actual: tot >= 3 ? "大" : "小", ouHit: pred === (tot >= 3 ? "大" : "小"), csPred, csHit: csPred === `${played.hg}-${played.ag}` });
+  }
+  if (!rows.length) return null;
+  const ouW = rows.filter((r) => r.ouHit).length, csW = rows.filter((r) => r.csHit).length, n = rows.length;
+  return (
+    <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>预测成绩单 · 命中率（诚实版）</div>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>已完赛场次：赛前<strong>盘口方向</strong> / <strong>最佳小波胆</strong> vs 实际结果。样本极小，只作复盘、别当水平。补录新结果自动更新。</div>
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 12 }}>
+        <Stat2 label="大小球方向命中" value={`${ouW}/${n} = ${Math.round(ouW / n * 100)}%`} color={ouW / n >= 0.5 ? "var(--green)" : "var(--red)"} />
+        <Stat2 label="波胆命中" value={`${csW}/${n} = ${Math.round(csW / n * 100)}%`} color={csW > 0 ? "var(--green)" : "var(--red)"} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ display: "flex", fontSize: 10.5, color: "var(--text-tertiary)", fontWeight: 600, padding: "0 6px" }}>
+          <span style={{ flex: 1 }}>比赛</span><span style={{ width: 72 }}>赛前预测</span><span style={{ width: 78 }}>实际</span><span style={{ width: 34, textAlign: "center" }}>大小</span><span style={{ width: 34, textAlign: "center" }}>波胆</span>
+        </div>
+        {rows.map((r) => (
+          <div key={r.id} className="fv-row" style={{ display: "flex", alignItems: "center", padding: "7px 6px", borderRadius: 8, borderTop: "0.5px solid var(--separator)", fontSize: 12 }}>
+            <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.label}</span>
+            <span style={{ width: 72, fontWeight: 600, color: r.pred === "小" ? UNDER : OVER }}>{r.pred}球 {pct0(r.u)}</span>
+            <span style={{ width: 78, fontWeight: 600 }}>{r.hg}-{r.ag} <span style={{ color: r.actual === "大" ? OVER : UNDER }}>{r.tot}球{r.actual}</span></span>
+            <span style={{ width: 34, textAlign: "center", fontWeight: 800, color: r.ouHit ? "var(--green)" : "var(--red)" }}>{r.ouHit ? "✓" : "✗"}</span>
+            <span style={{ width: 34, textAlign: "center", fontWeight: 800, color: r.csHit ? "var(--green)" : "var(--red)" }}>{r.csHit ? "✓" : "✗"}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>{n} 场里方向只中 {ouW} 场——正印证前面结论：现代淘汰赛小球 edge 很弱、市场有效，别硬做小球。{n < 10 ? "（不到 10 场，纯噪声，不代表长期。）" : ""}</div>
     </div>
   );
 }
