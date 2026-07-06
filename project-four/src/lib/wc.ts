@@ -29,6 +29,8 @@ export const R32_2026: KnockoutMatch[] = [
 export const R16_2026: KnockoutMatch[] = [
   { id: "wc26_ca_ma", round: "R16", date: "2026-07-04", home: "加拿大", away: "摩洛哥", hg: 0, ag: 3 },
   { id: "wc26_py_fr", round: "R16", date: "2026-07-04", home: "巴拉圭", away: "法国", hg: 0, ag: 1 },
+  { id: "wc26_br_no", round: "R16", date: "2026-07-05", home: "巴西", away: "挪威", hg: 1, ag: 2, note: "哈兰德2球" },
+  { id: "wc26_mx_en", round: "R16", date: "2026-07-05", home: "墨西哥", away: "英格兰", hg: 1, ag: 2, note: "贝林厄姆2球" },
 ];
 /** 本届淘汰赛已知的全部真实比分（R32 + 已完赛的 16 强…），作为默认数据。 */
 export const SEED_2026: KnockoutMatch[] = [...R32_2026, ...R16_2026];
