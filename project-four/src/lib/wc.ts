@@ -33,9 +33,16 @@ export const R16_2026: KnockoutMatch[] = [
   { id: "wc26_mx_en", round: "R16", date: "2026-07-05", home: "墨西哥", away: "英格兰", hg: 1, ag: 2, note: "贝林厄姆2球" },
   { id: "wc26_pt_es", round: "R16", date: "2026-07-06", home: "葡萄牙", away: "西班牙", hg: 0, ag: 1, note: "梅里诺补时绝杀·C罗告别" },
   { id: "wc26_us_be", round: "R16", date: "2026-07-06", home: "美国", away: "比利时", hg: 1, ag: 4, note: "德凯特拉雷2球·卢卡库·东道主出局" },
+  { id: "wc26_ar_eg", round: "R16", date: "2026-07-07", home: "阿根廷", away: "埃及", hg: 3, ag: 2, note: "0-2落后梅西领衔逆转·90+2绝杀" },
+  { id: "wc26_ch_co", round: "R16", date: "2026-07-07", home: "瑞士", away: "哥伦比亚", hg: 0, ag: 0, pens: true, note: "120分钟0-0·点球4-3晋级" },
 ];
-/** 本届淘汰赛已知的全部真实比分（R32 + 已完赛的 16 强…），作为默认数据。 */
-export const SEED_2026: KnockoutMatch[] = [...R32_2026, ...R16_2026];
+/** 2026 世界杯 1/4 决赛（8 强）已完赛的 90′ 真实比分（随比赛进行补充）。 */
+export const QF_2026: KnockoutMatch[] = [
+  { id: "wc26_fr_ma", round: "QF", date: "2026-07-09", home: "法国", away: "摩洛哥", hg: 2, ag: 0, note: "姆巴佩+登贝莱" },
+  { id: "wc26_es_be", round: "QF", date: "2026-07-10", home: "西班牙", away: "比利时", hg: 2, ag: 1, note: "梅里诺绝杀·连场救主" },
+];
+/** 本届淘汰赛已知的全部真实比分（R32 + 已完赛的 16 强 + 8 强…），作为默认数据。 */
+export const SEED_2026: KnockoutMatch[] = [...R32_2026, ...R16_2026, ...QF_2026];
 
 export const DEFAULT_PRIOR_LAMBDA = 2.35; // 近几届淘汰赛 90 分钟场均总进球（低于小组赛，约 2.2~2.4）
 export const DEFAULT_PRIOR_WEIGHT = 20;   // 先验等效场次（锚定强度，可调）
@@ -264,6 +271,15 @@ export const R16_FIXTURES: Fixture[] = [
   { id: "f_ar_eg", round: "R16", date: "2026-07-07", home: "阿根廷", away: "埃及" },
   { id: "f_ch_co", round: "R16", date: "2026-07-07", home: "瑞士", away: "哥伦比亚" },
 ];
+/** 1/4 决赛（8 强）赛程。前两场已完赛，后两场今日进行。 */
+export const QF_FIXTURES: Fixture[] = [
+  { id: "f_fr_ma", round: "QF", date: "2026-07-09", home: "法国", away: "摩洛哥" },
+  { id: "f_es_be", round: "QF", date: "2026-07-10", home: "西班牙", away: "比利时" },
+  { id: "f_no_en", round: "QF", date: "2026-07-11", home: "挪威", away: "英格兰" },
+  { id: "f_ar_ch", round: "QF", date: "2026-07-11", home: "阿根廷", away: "瑞士" },
+];
+/** 全部有盘口/预测意义的赛程（16 强 + 8 强），供赛程板与成绩单统一遍历。 */
+export const ALL_FIXTURES: Fixture[] = [...R16_FIXTURES, ...QF_FIXTURES];
 
 /** 各队在已录淘汰赛里的攻防（进球/失球每场），用于给每场比赛做轻度队伍微调。 */
 export function teamStrengths(ms: KnockoutMatch[]) {
@@ -417,6 +433,12 @@ export const DEFAULT_MATCH_ODDS: Record<string, MatchOdds> = {
     ou: { "1.5": { o: 1.39, u: 2.92 }, "2": { o: 1.69, u: 2.20 }, "2.5": { o: 2.28, u: 1.64 } },
     win: { h: 3.50, d: 3.15, a: 2.28 },
     cs: { "1-0": 9.5, "2-0": 20, "2-1": 12.0, "3-0": 61, "3-1": 31, "0-0": 8.0, "1-1": 6.5, "2-2": 15.5, "0-1": 7.0, "0-2": 11.0, "1-2": 9.0, "1-3": 19.0 },
+  },
+  // 1/4 决赛 · 挪威 vs 英格兰（大小球=HK+1；独赢/波胆本就是十进制）
+  f_no_en: {
+    ou: { "2.5": { o: 1.67, u: 2.23 }, "3": { o: 2.13, u: 1.74 }, "3.5": { o: 2.72, u: 1.46 } },
+    win: { h: 3.80, d: 3.80, a: 1.94 },
+    cs: { "1-0": 16.0, "2-0": 26, "2-1": 11.0, "3-0": 61, "3-1": 29, "3-2": 26, "0-0": 15.0, "1-1": 7.0, "2-2": 12.0, "0-1": 10.0, "0-2": 12.0, "1-2": 7.2, "0-3": 21, "1-3": 12.0, "2-3": 21 },
   },
 };
 

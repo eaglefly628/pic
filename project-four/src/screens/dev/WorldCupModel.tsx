@@ -5,7 +5,7 @@ import { IconPlus, IconTrash, IconRefresh, IconClose, IconCheck } from "../../ic
 import {
   SEED_2026, matchesOf, summarize, model, total, scoreKey, newMatch,
   DEFAULT_PRIOR_WEIGHT, DEFAULT_PRIOR_YEARS, WC_KNOCKOUT_HISTORY, pooledPrior, histAvg, histUnderRate, historyWithLive, type HistYear,
-  R16_FIXTURES, teamStrengths, matchSplit, topScorelinesFor, overProb, linreg,
+  ALL_FIXTURES, teamStrengths, matchSplit, topScorelinesFor, overProb, linreg,
   analyzeOdds, DEFAULT_MATCH_ODDS, OU_LINES, CS_KEYS,
   poolByRound, roundStatsFromMatches, KNOCKOUT_MATCHES, ROUND_ORDER, ROUND_LABEL,
 } from "../../lib/wc";
@@ -186,7 +186,7 @@ export default function WorldCupModel({ data, mut }: { data: DevData; mut: Mut }
       </div>
 
       {/* 后续赛程 · 每场小球概率 */}
-      <FixturesBoard base={mo.lambdaAdj} str={str} />
+      <FixturesBoard base={mo.lambdaAdj} str={str} ms={ms} />
 
       {/* 盘口录入 · 每场最佳选择（小球 base） */}
       <OddsBoard data={data} mut={mut} />
@@ -345,8 +345,9 @@ function RegChart({ rows, reg }: { rows: HistYear[]; reg: ReturnType<typeof linr
   );
 }
 
-function FixturesBoard({ base, str }: { base: number; str: ReturnType<typeof teamStrengths> }) {
-  const rows = R16_FIXTURES.map((f) => {
+function FixturesBoard({ base, str, ms }: { base: number; str: ReturnType<typeof teamStrengths>; ms: KnockoutMatch[] }) {
+  const upcoming = ALL_FIXTURES.filter((f) => !ms.some((m) => m.round === f.round && m.home === f.home && m.away === f.away));
+  const rows = upcoming.map((f) => {
     const sp = matchSplit(base, f.home, f.away, str);
     const under = 1 - overProb(sp.lam, 2.5);
     const tops = topScorelinesFor(sp.lamH, sp.lamA, 3);
@@ -359,8 +360,9 @@ function FixturesBoard({ base, str }: { base: number; str: ReturnType<typeof tea
         <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>后续赛程 · 每场小球概率 + 波胆 Top（动态）</div>
         <Legend items={[{ c: UNDER, t: "小球" }, { c: OVER, t: "大球" }]} />
       </div>
-      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>R16 全 8 场。每场 λ = 模型基准 + 两队淘汰赛攻防<strong>轻度微调</strong>（样本少·仅参考）；小球 = P(总进球&lt;2.5)；波胆 Top 为该场最可能的比分(主-客)。补录新比分后<strong>动态</strong>刷新。按小球概率从高到低排。</div>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>只列<strong>未开赛</strong>的场次（16 强 / 8 强）。每场 λ = 模型基准 + 两队淘汰赛攻防<strong>轻度微调</strong>（样本少·仅参考）；小球 = P(总进球&lt;2.5)；波胆 Top 为该场最可能的比分(主-客)。补录新比分后<strong>动态</strong>刷新。按小球概率从高到低排。</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {!sorted.length && <div style={{ fontSize: 12, color: "var(--text-tertiary)", padding: "6px 2px" }}>本轮已全部完赛，等下一轮盘口出来再更新。</div>}
         {sorted.map((r) => (
           <div key={r.f.id} className="fv-row" style={{ padding: "9px 8px", borderRadius: 9 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -488,7 +490,7 @@ function OddsBoard({ data, mut }: { data: DevData; mut: Mut }) {
   const stored = data.wc?.matchOdds ?? {};
   const oddsOf = (id: string): MatchOdds | undefined => stored[id] ?? DEFAULT_MATCH_ODDS[id];
   const saveOdds = (id: string, mo: MatchOdds) => mut((d) => { const w = ensureWc(d); w.matchOdds = { ...(w.matchOdds ?? {}), [id]: mo }; });
-  const fixtures = [...R16_FIXTURES].sort((a, b) => (oddsOf(b.id) ? 1 : 0) - (oddsOf(a.id) ? 1 : 0));
+  const fixtures = [...ALL_FIXTURES].sort((a, b) => (oddsOf(b.id) ? 1 : 0) - (oddsOf(a.id) ? 1 : 0));
 
   return (
     <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
@@ -521,7 +523,7 @@ function OddsBoard({ data, mut }: { data: DevData; mut: Mut }) {
         })}
       </div>
       <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>标红=以小球为base的最佳选择,全部基于盘口去水头(不是naive模型)。偏大球的场(如强弱悬殊)会提示,别硬做小球。博彩有风险。</div>
-      {edit && <OddsEditor fx={R16_FIXTURES.find((x) => x.id === edit)!} initial={oddsOf(edit) ?? {}} onClose={() => setEdit(null)} onSave={(mo) => { saveOdds(edit, mo); setEdit(null); }} />}
+      {edit && <OddsEditor fx={ALL_FIXTURES.find((x) => x.id === edit)!} initial={oddsOf(edit) ?? {}} onClose={() => setEdit(null)} onSave={(mo) => { saveOdds(edit, mo); setEdit(null); }} />}
     </div>
   );
 }
@@ -684,9 +686,9 @@ function PredictionScorecard({ data }: { data: DevData }) {
   const ms = matchesOf(data.wc);
   const stored = data.wc?.matchOdds ?? {};
   const rows: ScoreRow[] = [];
-  for (const fx of R16_FIXTURES) {
+  for (const fx of ALL_FIXTURES) {
     const odds = stored[fx.id] ?? DEFAULT_MATCH_ODDS[fx.id];
-    const played = ms.find((m) => m.round === "R16" && m.home === fx.home && m.away === fx.away);
+    const played = ms.find((m) => m.round === fx.round && m.home === fx.home && m.away === fx.away);
     if (!odds || !played) continue;
     const a = analyzeOdds(odds, fx.home, fx.away);
     if (a.under25 == null) continue;
@@ -719,7 +721,7 @@ function PredictionScorecard({ data }: { data: DevData }) {
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>{n} 场里方向只中 {ouW} 场——正印证前面结论：现代淘汰赛小球 edge 很弱、市场有效，别硬做小球。{n < 10 ? "（不到 10 场，纯噪声，不代表长期。）" : ""}</div>
+      <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>{n} 场方向命中 {ouW} 场（{Math.round(ouW / n * 100)}%）、波胆 {csW} 场——大小球方向≈抛硬币，波胆更难蒙对，印证现代淘汰赛小球 edge 很弱、市场有效，别硬做。{n < 10 ? "（不到 10 场，纯噪声，不代表长期。）" : ""}</div>
     </div>
   );
 }
