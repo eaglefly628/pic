@@ -558,7 +558,19 @@
       await applyBundle(latest); location.reload();
     }
     async function initHomeVersion() {
-      try { const r = await fetch('/api/version').then((x) => x.json()); if (r && r.version) { HOME_VERSION = 'v' + r.version; if (verlabel) verlabel.textContent = HOME_VERSION; if (bkdir && r.dir) bkdir.textContent = '目录：' + r.dir; } } catch (e) { }
+      try {
+        const r = await fetch('/api/version').then((x) => x.json());
+        if (r && r.version) {
+          HOME_VERSION = r.version;                 // 原始号(如 0.3.0)，用于备份元数据
+          if (verlabel) {
+            const dev = r.channel === 'dev';
+            verlabel.textContent = 'v' + (r.label || r.version) + (dev ? ' · 开发版' : ' · 发布版');
+            verlabel.style.background = dev ? 'rgba(255,149,0,.16)' : 'var(--fill)';
+            verlabel.style.color = dev ? '#ff9500' : 'var(--text-secondary)';
+          }
+          if (bkdir && r.dir) bkdir.textContent = '目录：' + r.dir;
+        }
+      } catch (e) { }
     }
     if (bknow) bknow.addEventListener('click', async () => { bknow.disabled = true; const r = await autoSave('manual'); toast(r && r.ok ? '已备份到本机' : '备份失败（要从 run.py 启动才有本机备份）'); bknow.disabled = false; });
     if (bkrestore) bkrestore.addEventListener('click', restoreFromDisk);

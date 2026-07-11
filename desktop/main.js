@@ -51,7 +51,12 @@ async function ensureServer() {
   if (!python) return "no-python";
   py = spawn(python, ["run.py"], {
     cwd: payloadDir(),
-    env: { ...process.env, HOME_NO_BROWSER: "1", PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
+    env: {
+      ...process.env,
+      HOME_NO_BROWSER: "1", PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8",
+      // 打包安装的 = 发布版；npm start 跑的 = 开发版
+      HOME_CHANNEL: app.isPackaged ? "release" : "dev",
+    },
   });
   if (py.stdout) py.stdout.on("data", () => {});
   if (py.stderr) py.stderr.on("data", () => {});

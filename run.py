@@ -72,7 +72,20 @@ def data_dir() -> Path:
         return d
 
 
+def app_channel() -> str:
+    """发布版 / 开发版分开：
+    - 打成 .app 安装后（Resources/payload，没有 .git）→ release「发布版」
+    - 在仓库里直接跑（python run.py / npm start，有 .git）→ dev「开发版」
+    Electron 会用 HOME_CHANNEL 明确指定；直接跑时按有没有 .git 自动判断。"""
+    env = os.environ.get("HOME_CHANNEL")
+    if env in ("dev", "release"):
+        return env
+    return "dev" if (ROOT / ".git").exists() else "release"
+
+
 APP_VERSION = app_version()
+APP_CHANNEL = app_channel()
+APP_LABEL = APP_VERSION + ("-dev" if APP_CHANNEL == "dev" else "")   # 开发版带 -dev 后缀，一眼区分
 DATA_DIR = data_dir()
 
 
@@ -90,6 +103,7 @@ def backup_save(raw: bytes) -> dict:
     if not isinstance(bundle, dict) or not bundle.get("__home_backup"):
         return {"ok": False, "error": "不是本系统的备份数据"}
     bundle["appVersion"] = APP_VERSION
+    bundle["appChannel"] = APP_CHANNEL
     bundle["savedAt"] = int(time.time() * 1000)
     data = json.dumps(bundle, ensure_ascii=False).encode("utf-8")
     (DATA_DIR / "backups").mkdir(parents=True, exist_ok=True)   # 运行中目录被删也能自愈
@@ -503,7 +517,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 body = {"ok": False, "error": str(e)}
             return self._send_json(body)
         if bare == "/api/version":
-            return self._send_json({"ok": True, "version": APP_VERSION, "dir": str(DATA_DIR)})
+            return self._send_json({"ok": True, "version": APP_VERSION, "channel": APP_CHANNEL,
+                                    "label": APP_LABEL, "dir": str(DATA_DIR)})
         if bare == "/api/backup/latest":
             data = backup_latest()
             if not data:
@@ -595,8 +610,9 @@ def main() -> int:
             webbrowser.open(url)
         return 0
     with httpd:
+        _tag = f"v{APP_LABEL}  ·  {'开发版' if APP_CHANNEL == 'dev' else '发布版'}"
         print("┌──────────────────────────────────────────────┐")
-        print(f"│  我家里的一切  v{APP_VERSION:<31}│")
+        print(f"│  我家里的一切  {_tag:<28}│")
         print(f"│  已启动：{url:<36}│")
         print("│  顶部菜单进入：理财 / 影像 / 密码 / 开发       │")
         print("│  数据本地保存 · 按 Ctrl+C 退出                 │")
