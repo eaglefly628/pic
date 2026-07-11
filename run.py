@@ -586,11 +586,13 @@ def main() -> int:
         print("✗ 缺少 hub/index.html")
         return 1
     url = f"http://localhost:{PORT}/"   # 用 localhost：WebAuthn / Touch ID 不接受 IP 地址
+    no_browser = bool(os.environ.get("HOME_NO_BROWSER"))   # 被 Mac App(Electron) 拉起时=1，不再另开系统浏览器
     try:
         httpd = Server(("127.0.0.1", PORT), Handler)
     except OSError:
         print(f"检测到 {PORT} 已被占用，直接打开：{url}")
-        webbrowser.open(url)
+        if not no_browser:
+            webbrowser.open(url)
         return 0
     with httpd:
         print("┌──────────────────────────────────────────────┐")
@@ -600,7 +602,8 @@ def main() -> int:
         print("│  数据本地保存 · 按 Ctrl+C 退出                 │")
         print("└──────────────────────────────────────────────┘")
         print(f"  自动备份目录：{DATA_DIR}")
-        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+        if not no_browser:
+            threading.Timer(0.6, lambda: webbrowser.open(url)).start()
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

@@ -1,0 +1,41 @@
+{
+  "name": "wojiali-desktop",
+  "productName": "我家里的一切",
+  "version": "0.2.0",
+  "description": "我家里的一切 —— 本地加密、一家人专属的桌面 App（理财 / 影像 / 密码 / 开发世界）",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "node sync-version.js && electron .",
+    "mac": "node sync-version.js && electron-builder --mac",
+    "mac:dir": "node sync-version.js && electron-builder --mac dir"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.junbai.familyvault",
+    "productName": "我家里的一切",
+    "directories": { "output": "release" },
+    "files": ["main.js", "package.json"],
+    "extraResources": [
+      { "from": "../run.py", "to": "payload/run.py" },
+      { "from": "../VERSION", "to": "payload/VERSION" },
+      { "from": "../hub", "to": "payload/hub" },
+      { "from": "../project-one/dist", "to": "payload/project-one/dist" },
+      { "from": "../project-two/dist", "to": "payload/project-two/dist" },
+      { "from": "../project-three/dist", "to": "payload/project-three/dist" },
+      { "from": "../project-four/dist", "to": "payload/project-four/dist" }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "../project-one/src-tauri/icons/icon.icns",
+      "target": ["dmg", "zip"],
+      "identity": null
+    },
+    "dmg": {
+      "title": "我家里的一切 ${version}"
+    }
+  }
+}
