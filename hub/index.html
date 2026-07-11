@@ -214,13 +214,24 @@
         <div class="shint" id="biomsg"></div>
       </div>
       <div class="sec">
+        <div class="seclabel">本机自动备份 · 防丢失
+          <span id="verlabel" style="margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--fill);color:var(--text-secondary);font-size:11px;font-weight:600"></span>
+        </div>
+        <div class="shint" id="bkstatus">每隔一会儿、以及每次离开页面时，自动把全屋数据存到本机磁盘；开机若发现本机是空的会自动恢复。换新版本 App 也照样读回来。</div>
+        <div class="row2">
+          <button class="pbtn soft" id="bknow">立即备份到本机</button>
+          <button class="pbtn ghost" id="bkrestore">从本机备份恢复…</button>
+        </div>
+        <div class="shint" id="bkdir" style="color:var(--text-tertiary);word-break:break-all"></div>
+      </div>
+      <div class="sec">
         <div class="seclabel">整屋备份 · 一个文件，含所有世界 + 设置</div>
         <div class="row2">
           <button class="pbtn soft" id="bkexport">导出全部</button>
           <button class="pbtn ghost" id="bkimport">从备份恢复…</button>
           <input type="file" id="bkfile" style="display:none" />
         </div>
-        <div class="shint">导出的是<b>一个文件</b>，覆盖全家所有世界的数据和设置。恢复会用所选文件<b>替换</b>本机当前全部数据，完成后自动刷新。</div>
+        <div class="shint">导出的是<b>一个文件</b>，可拷到 U 盘/云盘异地留底。恢复会用所选文件<b>替换</b>本机当前全部数据，完成后自动刷新。</div>
         <div class="shint" id="bkmsg" style="color:var(--accent)"></div>
       </div>
     </div>
@@ -460,10 +471,7 @@
     async function exportAll() {
       bkexport.disabled = true; bkmsg.textContent = '正在打包…';
       try {
-        const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k === 'home.bio') continue; ls[k] = localStorage.getItem(k); }   // home.bio 与本机 Touch ID 绑定，不随备份迁移
-        let dbs = []; try { dbs = (await indexedDB.databases()) || []; } catch (e) { dbs = []; }
-        const idb = []; for (const info of dbs) if (info.name) idb.push(await dumpDB(info.name));
-        const bundle = { __home_backup: 1, v: 1, origin: location.origin, localStorage: ls, indexedDB: idb };
+        const bundle = await buildBundle();
         const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
         const dt = new Date(); a.download = `我家里的一切-备份-${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, '0')}${String(dt.getDate()).padStart(2, '0')}.home`;
@@ -478,12 +486,7 @@
       if (!confirm('从备份恢复会用所选文件【替换】本机当前全部数据，确定继续？')) return;
       bkmsg.textContent = '正在恢复…';
       try {
-        const keepBio = localStorage.getItem('home.bio');   // Touch ID 凭据与本机绑定、不在备份里——恢复时别把它冲掉
-        localStorage.clear();
-        for (const k of Object.keys(bundle.localStorage || {})) localStorage.setItem(k, bundle.localStorage[k]);
-        if (keepBio != null && localStorage.getItem('home.bio') == null) localStorage.setItem('home.bio', keepBio);
-        for (const d of (bundle.indexedDB || [])) await restoreDB(d);
-        sessionStorage.removeItem(SKEY);
+        await applyBundle(bundle);
         bkmsg.textContent = '恢复完成，正在刷新…';
         setTimeout(() => location.reload(), 700);
       } catch (e) { bkmsg.textContent = '恢复出错：' + (e && e.message || e); }
@@ -491,6 +494,76 @@
     bkexport.addEventListener('click', exportAll);
     bkimport.addEventListener('click', () => bkfile.click());
     bkfile.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importAll(f); e.target.value = ''; });
+
+    // ── 本机自动备份（防丢失）+ 版本号 ──────────────────────────────
+    let HOME_VERSION = '';        // 由 /api/version 覆盖成服务端真实版本
+    let lastSig = '';
+    const verlabel = document.getElementById('verlabel');
+    const bkstatus = document.getElementById('bkstatus');
+    const bkdir = document.getElementById('bkdir');
+    const bknow = document.getElementById('bknow');
+    const bkrestore = document.getElementById('bkrestore');
+    const fmtTime = (ms) => { try { const d = new Date(ms), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; } catch (e) { return ''; } };
+
+    // 整屋打包（各库数据在浏览器里本就已加密，这里只是把密文原样收进一个对象）
+    async function buildBundle() {
+      const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k === 'home.bio') continue; ls[k] = localStorage.getItem(k); }
+      let dbs = []; try { dbs = (await indexedDB.databases()) || []; } catch (e) { dbs = []; }
+      const idb = []; for (const info of dbs) if (info.name) idb.push(await dumpDB(info.name));
+      return { __home_backup: 1, v: 1, appVersion: HOME_VERSION, origin: location.origin, localStorage: ls, indexedDB: idb };
+    }
+    // 用一个 bundle 覆盖本机数据（保留本机 Touch ID 凭据）
+    async function applyBundle(bundle) {
+      const keepBio = localStorage.getItem('home.bio');
+      localStorage.clear();
+      for (const k of Object.keys(bundle.localStorage || {})) localStorage.setItem(k, bundle.localStorage[k]);
+      if (keepBio != null && localStorage.getItem('home.bio') == null) localStorage.setItem('home.bio', keepBio);
+      for (const d of (bundle.indexedDB || [])) await restoreDB(d);
+      sessionStorage.removeItem(SKEY);
+    }
+    // 便宜的内容指纹：只在数据真的变了才写盘，避免反复重写
+    const sigOf = (s) => { let h = 0; const step = Math.max(1, s.length >> 12); for (let i = 0; i < s.length; i += step) h = (h * 131 + s.charCodeAt(i)) >>> 0; return s.length + ':' + h; };
+
+    async function autoSave(reason) {
+      try {
+        const bundle = await buildBundle();
+        const body = JSON.stringify(bundle);
+        const sig = sigOf(body);
+        if (sig === lastSig && reason !== 'manual') return null;   // 没变化就不重复写
+        const r = await fetch('/api/backup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((x) => x.json()).catch(() => null);
+        if (r && r.ok) { lastSig = sig; if (bkstatus) bkstatus.textContent = `已自动存到本机 · ${fmtTime(r.savedAt)}（磁盘保留最近 40 份历史）`; if (bkdir) bkdir.textContent = '目录：' + r.dir; }
+        return r;
+      } catch (e) { return null; }
+    }
+    // 开机若发现本机是“全新/被清空”的，就从磁盘上的最新备份自动恢复（有任何本机数据则绝不覆盖）
+    async function maybeAutoRestore() {
+      if (sessionStorage.getItem('home.autorestored')) return false;
+      let latest = null;
+      try { const res = await fetch('/api/backup/latest'); if (res.status === 204) return false; latest = await res.json(); } catch (e) { return false; }
+      if (!latest || !latest.__home_backup) return false;
+      let has = false;
+      try { const dbs = (await indexedDB.databases()) || []; const names = new Set(dbs.map((d) => d.name)); for (const d of (latest.indexedDB || [])) if (names.has(d.name)) { has = true; break; } } catch (e) { }
+      if (!has) for (const k of Object.keys(latest.localStorage || {})) if (k !== 'home.bio' && localStorage.getItem(k) != null) { has = true; break; }
+      if (has) return false;
+      sessionStorage.setItem('home.autorestored', '1');
+      await applyBundle(latest);
+      location.reload();
+      return true;
+    }
+    async function restoreFromDisk() {
+      let latest = null;
+      try { const res = await fetch('/api/backup/latest'); if (res.status === 204) { toast('本机还没有自动备份'); return; } latest = await res.json(); } catch (e) { toast('读取本机备份失败'); return; }
+      if (!latest || !latest.__home_backup) { toast('本机备份无法识别'); return; }
+      if (!confirm(`用本机最近一次自动备份（${fmtTime(latest.savedAt)}）替换当前全部数据？`)) return;
+      await applyBundle(latest); location.reload();
+    }
+    async function initHomeVersion() {
+      try { const r = await fetch('/api/version').then((x) => x.json()); if (r && r.version) { HOME_VERSION = 'v' + r.version; if (verlabel) verlabel.textContent = HOME_VERSION; if (bkdir && r.dir) bkdir.textContent = '目录：' + r.dir; } } catch (e) { }
+    }
+    if (bknow) bknow.addEventListener('click', async () => { bknow.disabled = true; const r = await autoSave('manual'); toast(r && r.ok ? '已备份到本机' : '备份失败（要从 run.py 启动才有本机备份）'); bknow.disabled = false; });
+    if (bkrestore) bkrestore.addEventListener('click', restoreFromDisk);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') autoSave('hide'); });
+    window.addEventListener('pagehide', () => { try { buildBundle().then((b) => navigator.sendBeacon('/api/backup/save', new Blob([JSON.stringify(b)], { type: 'application/json' }))); } catch (e) { } });
 
     // ===== Touch ID（WebAuthn PRF）解锁家庭理财 =====
     const BIOKEY = 'home.bio';
@@ -581,6 +654,15 @@
 
     const start = (location.hash || '#home').slice(1);
     nav(screens[start] || SRC[start] ? start : 'home');
+
+    // 版本号 + 本机自动备份/恢复
+    (async () => {
+      await initHomeVersion();
+      const restored = await maybeAutoRestore();
+      if (restored) return;                       // 正在整机恢复并重载
+      await autoSave('boot');                     // 开机先把现状钉到磁盘一份
+      setInterval(() => autoSave('interval'), 45000);
+    })();
   </script>
 </body>
 </html>

@@ -22,6 +22,7 @@ import os
 import shutil
 import socketserver
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -37,6 +38,90 @@ MOUNTS = {
     "/dev": (ROOT / "project-four" / "dist"),
 }
 PORT = 5180
+BACKUP_KEEP = 40   # 磁盘上保留的历史备份份数（轮转）
+
+
+def app_version() -> str:
+    """版本号单一真源：根目录 VERSION 文件。改版本只改这一处，各处读取它。"""
+    try:
+        v = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        return v or "0.0.0"
+    except Exception:
+        return "0.0.0"
+
+
+def data_dir() -> Path:
+    """本机稳定数据目录——跨版本升级不变（这样新版本能读到旧版本的数据，兼容往前）。
+    macOS: ~/Library/Application Support/我家里的一切
+    Windows: %APPDATA%/我家里的一切     Linux: ~/.local/share/我家里的一切
+    取不到系统目录时退回项目内 .home-data。"""
+    home = Path.home()
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or (home / "AppData" / "Roaming"))
+    elif sys.platform == "darwin":
+        base = home / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or (home / ".local" / "share"))
+    d = base / "我家里的一切"
+    try:
+        (d / "backups").mkdir(parents=True, exist_ok=True)
+        return d
+    except Exception:
+        d = ROOT / ".home-data"
+        (d / "backups").mkdir(parents=True, exist_ok=True)
+        return d
+
+
+APP_VERSION = app_version()
+DATA_DIR = data_dir()
+
+
+def _atomic_write(path: Path, data: bytes):
+    path.parent.mkdir(parents=True, exist_ok=True)   # 目录被删/首次写入也能自愈
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)   # 原子替换，避免写一半导致的半损坏文件
+
+
+def backup_save(raw: bytes) -> dict:
+    """收下浏览器端打包好的「整屋备份」（各库数据已在浏览器里加密，服务端只当密文存盘）。
+    写 current.home（最新），并在 backups/ 里留一份带时间戳的历史，轮转保留最近 BACKUP_KEEP 份。"""
+    bundle = json.loads(raw)
+    if not isinstance(bundle, dict) or not bundle.get("__home_backup"):
+        return {"ok": False, "error": "不是本系统的备份数据"}
+    bundle["appVersion"] = APP_VERSION
+    bundle["savedAt"] = int(time.time() * 1000)
+    data = json.dumps(bundle, ensure_ascii=False).encode("utf-8")
+    (DATA_DIR / "backups").mkdir(parents=True, exist_ok=True)   # 运行中目录被删也能自愈
+    _atomic_write(DATA_DIR / "current.home", data)
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    _atomic_write(DATA_DIR / "backups" / f"我家里的一切-备份-{ts}.home", data)
+    files = sorted((DATA_DIR / "backups").glob("*.home"))
+    for f in files[:-BACKUP_KEEP]:      # 只留最近的若干份
+        try:
+            f.unlink()
+        except Exception:
+            pass
+    try:
+        (DATA_DIR / "meta.json").write_text(
+            json.dumps({"appVersion": APP_VERSION, "savedAt": bundle["savedAt"], "bytes": len(data)}, ensure_ascii=False),
+            encoding="utf-8")
+    except Exception:
+        pass
+    return {"ok": True, "savedAt": bundle["savedAt"], "bytes": len(data), "dir": str(DATA_DIR)}
+
+
+def backup_latest():
+    p = DATA_DIR / "current.home"
+    return p.read_bytes() if p.is_file() else None
+
+
+def backup_list() -> dict:
+    files = sorted((DATA_DIR / "backups").glob("*.home"), key=lambda f: f.name, reverse=True)
+    items = [{"name": f.name, "bytes": f.stat().st_size, "mtime": int(f.stat().st_mtime * 1000)} for f in files]
+    cur = DATA_DIR / "current.home"
+    return {"ok": True, "version": APP_VERSION, "dir": str(DATA_DIR),
+            "current": (int(cur.stat().st_mtime * 1000) if cur.is_file() else None), "backups": items}
 
 
 def resolve(path: str):
@@ -417,6 +502,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 body = {"ok": False, "error": str(e)}
             return self._send_json(body)
+        if bare == "/api/version":
+            return self._send_json({"ok": True, "version": APP_VERSION, "dir": str(DATA_DIR)})
+        if bare == "/api/backup/latest":
+            data = backup_latest()
+            if not data:
+                self.send_response(204)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if bare == "/api/backup/list":
+            return self._send_json(backup_list())
         if bare == "/api/disk/scan":
             return self._send_json(disk_scan())
         if bare == "/api/disk/targets":
@@ -449,6 +551,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         bare = self.path.split("?")[0]
+        if bare == "/api/backup/save":
+            origin = self.headers.get("Origin", "")
+            if origin and origin not in ("http://localhost:%d" % PORT, "http://127.0.0.1:%d" % PORT):
+                self.send_error(403); return
+            try:
+                ln = int(self.headers.get("Content-Length", "0") or "0")
+                raw = self.rfile.read(ln) if ln else b""
+                res = backup_save(raw)
+            except Exception as e:
+                res = {"ok": False, "error": str(e)}
+            return self._send_json(res)
         if bare == "/api/disk/clean":
             origin = self.headers.get("Origin", "")
             if origin and origin not in ("http://localhost:%d" % PORT, "http://127.0.0.1:%d" % PORT):
@@ -481,11 +594,12 @@ def main() -> int:
         return 0
     with httpd:
         print("┌──────────────────────────────────────────────┐")
-        print("│  我家里的一切                                   │")
+        print(f"│  我家里的一切  v{APP_VERSION:<31}│")
         print(f"│  已启动：{url:<36}│")
         print("│  顶部菜单进入：理财 / 影像 / 密码 / 开发       │")
         print("│  数据本地保存 · 按 Ctrl+C 退出                 │")
         print("└──────────────────────────────────────────────┘")
+        print(f"  自动备份目录：{DATA_DIR}")
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
         try:
             httpd.serve_forever()
