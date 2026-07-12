@@ -40,6 +40,8 @@ export const R16_2026: KnockoutMatch[] = [
 export const QF_2026: KnockoutMatch[] = [
   { id: "wc26_fr_ma", round: "QF", date: "2026-07-09", home: "法国", away: "摩洛哥", hg: 2, ag: 0, note: "姆巴佩+登贝莱" },
   { id: "wc26_es_be", round: "QF", date: "2026-07-10", home: "西班牙", away: "比利时", hg: 2, ag: 1, note: "梅里诺绝杀·连场救主" },
+  { id: "wc26_no_en", round: "QF", date: "2026-07-11", home: "挪威", away: "英格兰", hg: 1, ag: 1, aet: true, note: "90分钟1-1·贝林厄姆加时绝杀·英格兰2-1晋级" },
+  { id: "wc26_ar_ch", round: "QF", date: "2026-07-11", home: "阿根廷", away: "瑞士", hg: 1, ag: 1, aet: true, note: "90分钟1-1·麦卡利斯特/恩多耶·瑞士10人·加时决胜(晋级待定)" },
 ];
 /** 本届淘汰赛已知的全部真实比分（R32 + 已完赛的 16 强 + 8 强…），作为默认数据。 */
 export const SEED_2026: KnockoutMatch[] = [...R32_2026, ...R16_2026, ...QF_2026];

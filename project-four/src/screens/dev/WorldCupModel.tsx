@@ -699,13 +699,14 @@ function PredictionScorecard({ data }: { data: DevData }) {
   }
   if (!rows.length) return null;
   const ouW = rows.filter((r) => r.ouHit).length, csW = rows.filter((r) => r.csHit).length, n = rows.length;
+  const csN = rows.filter((r) => r.csPred).length;   // 只在“有录波胆盘口”的场次里算命中率
   return (
     <div style={{ ...card, padding: "16px 18px", marginBottom: 16 }}>
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>预测成绩单 · 命中率（诚实版）</div>
       <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>已完赛场次：赛前<strong>盘口方向</strong> / <strong>最佳小波胆</strong> vs 实际结果。样本极小，只作复盘、别当水平。补录新结果自动更新。</div>
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 12 }}>
         <Stat2 label="大小球方向命中" value={`${ouW}/${n} = ${Math.round(ouW / n * 100)}%`} color={ouW / n >= 0.5 ? "var(--green)" : "var(--red)"} />
-        <Stat2 label="波胆命中" value={`${csW}/${n} = ${Math.round(csW / n * 100)}%`} color={csW > 0 ? "var(--green)" : "var(--red)"} />
+        <Stat2 label="波胆命中" value={`${csW}/${csN} = ${csN ? Math.round(csW / csN * 100) : 0}%`} color={csW > 0 ? "var(--green)" : "var(--red)"} />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <div style={{ display: "flex", fontSize: 10.5, color: "var(--text-tertiary)", fontWeight: 600, padding: "0 6px" }}>
@@ -717,11 +718,11 @@ function PredictionScorecard({ data }: { data: DevData }) {
             <span style={{ width: 72, fontWeight: 600, color: r.pred === "小" ? UNDER : OVER }}>{r.pred}球 {pct0(r.u)}</span>
             <span style={{ width: 78, fontWeight: 600 }}>{r.hg}-{r.ag} <span style={{ color: r.actual === "大" ? OVER : UNDER }}>{r.tot}球{r.actual}</span></span>
             <span style={{ width: 34, textAlign: "center", fontWeight: 800, color: r.ouHit ? "var(--green)" : "var(--red)" }}>{r.ouHit ? "✓" : "✗"}</span>
-            <span style={{ width: 34, textAlign: "center", fontWeight: 800, color: r.csHit ? "var(--green)" : "var(--red)" }}>{r.csHit ? "✓" : "✗"}</span>
+            <span style={{ width: 34, textAlign: "center", fontWeight: 800, color: !r.csPred ? "var(--text-tertiary)" : r.csHit ? "var(--green)" : "var(--red)" }}>{!r.csPred ? "—" : r.csHit ? "✓" : "✗"}</span>
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>{n} 场方向命中 {ouW} 场（{Math.round(ouW / n * 100)}%）、波胆 {csW} 场——大小球方向≈抛硬币，波胆更难蒙对，印证现代淘汰赛小球 edge 很弱、市场有效，别硬做。{n < 10 ? "（不到 10 场，纯噪声，不代表长期。）" : ""}</div>
+      <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", marginTop: 10, lineHeight: 1.6 }}>{n} 场方向命中 {ouW} 场（{Math.round(ouW / n * 100)}%）、波胆 {csW}/{csN}——大小球方向≈抛硬币，波胆基本靠运气，印证现代淘汰赛小球 edge 很弱、市场有效，别硬做。{n < 12 ? "（样本还小，纯噪声，不代表长期。）" : ""}</div>
     </div>
   );
 }
