@@ -280,8 +280,13 @@ export const QF_FIXTURES: Fixture[] = [
   { id: "f_no_en", round: "QF", date: "2026-07-11", home: "挪威", away: "英格兰" },
   { id: "f_ar_ch", round: "QF", date: "2026-07-11", home: "阿根廷", away: "瑞士" },
 ];
-/** 全部有盘口/预测意义的赛程（16 强 + 8 强），供赛程板与成绩单统一遍历。 */
-export const ALL_FIXTURES: Fixture[] = [...R16_FIXTURES, ...QF_FIXTURES];
+/** 半决赛（4 强）赛程。 */
+export const SF_FIXTURES: Fixture[] = [
+  { id: "f_fr_es", round: "SF", date: "2026-07-14", home: "法国", away: "西班牙" },
+  { id: "f_ar_en", round: "SF", date: "2026-07-15", home: "阿根廷", away: "英格兰" },
+];
+/** 全部有盘口/预测意义的赛程（16 强 + 8 强 + 半决赛），供赛程板与成绩单统一遍历。 */
+export const ALL_FIXTURES: Fixture[] = [...R16_FIXTURES, ...QF_FIXTURES, ...SF_FIXTURES];
 
 /** 各队在已录淘汰赛里的攻防（进球/失球每场），用于给每场比赛做轻度队伍微调。 */
 export function teamStrengths(ms: KnockoutMatch[]) {
@@ -447,6 +452,12 @@ export const DEFAULT_MATCH_ODDS: Record<string, MatchOdds> = {
   f_ar_ch: {
     ou: { "2.5": { o: 2.25, u: 1.67 } },
     win: { h: 1.69, d: 3.55, a: 5.50 },
+  },
+  // 半决赛 · 法国 vs 西班牙（hag050 真盘；大小球=HK+1，独赢/波胆本就是十进制）
+  f_fr_es: {
+    ou: { "2": { o: 1.43, u: 2.81 }, "2.5": { o: 1.95, u: 1.91 }, "3": { o: 2.61, u: 1.50 } },
+    win: { h: 2.39, d: 3.20, a: 3.20 },
+    cs: { "1-0": 8.8, "2-0": 13.5, "2-1": 8.2, "3-0": 29, "3-1": 16.0, "3-2": 21, "0-0": 11.0, "1-1": 6.5, "2-2": 12.0, "0-1": 11.0, "0-2": 19.0, "1-2": 11.0, "1-3": 29, "2-3": 26 },
   },
 };
 
