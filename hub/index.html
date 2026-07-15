@@ -487,7 +487,11 @@
       bkmsg.textContent = '正在恢复…';
       try {
         await applyBundle(bundle);
-        bkmsg.textContent = '恢复完成，正在刷新…';
+        // 关键：把导入的数据立刻写回磁盘并对齐 diskSyncedAt——否则重载后自动同步会把磁盘上的旧数据又拉回来、
+        // 覆盖掉这次导入（用户看到的“导入没反应”）。新版读旧备份没问题，之前只是被同步冲掉了。
+        const r = await autoSave('manual');
+        if (r && r.ok && r.savedAt) localStorage.setItem('home.diskSyncedAt', String(r.savedAt));
+        bkmsg.textContent = (r && r.readonly) ? '本版本为只读（磁盘上是更新版本的数据），导入未写盘。' : '恢复完成，正在刷新…';
         setTimeout(() => location.reload(), 700);
       } catch (e) { bkmsg.textContent = '恢复出错：' + (e && e.message || e); }
     }
@@ -579,7 +583,9 @@
       try { const res = await fetch('/api/backup/latest'); if (res.status === 204) { toast('本机还没有自动备份'); return; } latest = await res.json(); } catch (e) { toast('读取本机备份失败'); return; }
       if (!latest || !latest.__home_backup) { toast('本机备份无法识别'); return; }
       if (!confirm(`用本机最近一次自动备份（${fmtTime(latest.savedAt)}）替换当前全部数据？`)) return;
-      await applyBundle(latest); location.reload();
+      await applyBundle(latest);
+      if (latest.savedAt) localStorage.setItem('home.diskSyncedAt', String(latest.savedAt));  // 对齐，免得重载又多恢复一次
+      location.reload();
     }
     async function initHomeVersion() {
       try {
