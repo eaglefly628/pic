@@ -43,8 +43,12 @@ export const QF_2026: KnockoutMatch[] = [
   { id: "wc26_no_en", round: "QF", date: "2026-07-11", home: "挪威", away: "英格兰", hg: 1, ag: 1, aet: true, note: "90分钟1-1·贝林厄姆加时绝杀·英格兰2-1晋级" },
   { id: "wc26_ar_ch", round: "QF", date: "2026-07-11", home: "阿根廷", away: "瑞士", hg: 1, ag: 1, aet: true, note: "90分钟1-1·瑞士10人·阿根廷加时3-1晋级(阿尔瓦雷斯/劳塔罗)" },
 ];
-/** 本届淘汰赛已知的全部真实比分（R32 + 已完赛的 16 强 + 8 强…），作为默认数据。 */
-export const SEED_2026: KnockoutMatch[] = [...R32_2026, ...R16_2026, ...QF_2026];
+/** 2026 世界杯半决赛（4 强）已完赛的 90′ 真实比分。 */
+export const SF_2026: KnockoutMatch[] = [
+  { id: "wc26_fr_es", round: "SF", date: "2026-07-14", home: "法国", away: "西班牙", hg: 0, ag: 2, note: "奥亚萨瓦尔点球+波罗·西班牙进决赛" },
+];
+/** 本届淘汰赛已知的全部真实比分（R32 + 16 强 + 8 强 + 半决赛…），作为默认数据。 */
+export const SEED_2026: KnockoutMatch[] = [...R32_2026, ...R16_2026, ...QF_2026, ...SF_2026];
 
 export const DEFAULT_PRIOR_LAMBDA = 2.35; // 近几届淘汰赛 90 分钟场均总进球（低于小组赛，约 2.2~2.4）
 export const DEFAULT_PRIOR_WEIGHT = 20;   // 先验等效场次（锚定强度，可调）
@@ -283,7 +287,7 @@ export const QF_FIXTURES: Fixture[] = [
 /** 半决赛（4 强）赛程。 */
 export const SF_FIXTURES: Fixture[] = [
   { id: "f_fr_es", round: "SF", date: "2026-07-14", home: "法国", away: "西班牙" },
-  { id: "f_ar_en", round: "SF", date: "2026-07-15", home: "阿根廷", away: "英格兰" },
+  { id: "f_en_ar", round: "SF", date: "2026-07-15", home: "英格兰", away: "阿根廷" },
 ];
 /** 全部有盘口/预测意义的赛程（16 强 + 8 强 + 半决赛），供赛程板与成绩单统一遍历。 */
 export const ALL_FIXTURES: Fixture[] = [...R16_FIXTURES, ...QF_FIXTURES, ...SF_FIXTURES];
@@ -458,6 +462,12 @@ export const DEFAULT_MATCH_ODDS: Record<string, MatchOdds> = {
     ou: { "2": { o: 1.43, u: 2.81 }, "2.5": { o: 1.95, u: 1.91 }, "3": { o: 2.61, u: 1.50 } },
     win: { h: 2.39, d: 3.20, a: 3.20 },
     cs: { "1-0": 8.8, "2-0": 13.5, "2-1": 8.2, "3-0": 29, "3-1": 16.0, "3-2": 21, "0-0": 11.0, "1-1": 6.5, "2-2": 12.0, "0-1": 11.0, "0-2": 19.0, "1-2": 11.0, "1-3": 29, "2-3": 26 },
+  },
+  // 半决赛 · 英格兰 vs 阿根廷（hag050 真盘；书本以英格兰为主队）
+  f_en_ar: {
+    ou: { "1.5": { o: 1.42, u: 2.85 }, "2": { o: 1.76, u: 2.11 }, "2.5": { o: 2.44, u: 1.57 } },
+    win: { h: 2.65, d: 2.95, a: 3.05 },
+    cs: { "1-0": 7.7, "2-0": 13.0, "2-1": 10.0, "3-0": 41, "3-1": 23, "3-2": 31, "0-0": 7.5, "1-1": 6.0, "2-2": 15.0, "0-1": 8.5, "0-2": 16.0, "1-2": 11.0, "1-3": 31, "2-3": 31 },
   },
 };
 
