@@ -86,6 +86,10 @@ def app_channel() -> str:
 APP_VERSION = app_version()
 APP_CHANNEL = app_channel()
 APP_LABEL = APP_VERSION + ("-dev" if APP_CHANNEL == "dev" else "")   # 开发版带 -dev 后缀，一眼区分
+# 数据结构版本：改动数据形状、且旧版本 App 读不了/会写坏时 +1。
+# 保证兼容的规矩：① 存盘时打上这个版本号；② 旧入口(DATA_VERSION 更小)绝不覆盖磁盘上更高版本写的数据。
+# 这样「开发版」和「安装版」即使一时不同步，也不会互相把对方的新数据写坏。
+DATA_VERSION = 1
 DATA_DIR = data_dir()
 
 
@@ -102,7 +106,6 @@ def backup_save(raw: bytes) -> dict:
     bundle = json.loads(raw)
     if not isinstance(bundle, dict) or not bundle.get("__home_backup"):
         return {"ok": False, "error": "不是本系统的备份数据"}
-    # 内容没变就不更新时间戳——否则多入口(安装版 / VSCode)会因时间戳变化互相触发无谓的“恢复”。
     def _content(b):
         return json.dumps({"localStorage": b.get("localStorage"), "indexedDB": b.get("indexedDB")}, sort_keys=True, ensure_ascii=False)
     new_content = _content(bundle)
@@ -110,10 +113,18 @@ def backup_save(raw: bytes) -> dict:
     if old_raw is not None:
         try:
             old = json.loads(old_raw)
+        except Exception:
+            old = None
+        if isinstance(old, dict):
+            # 兼容护栏：磁盘上是更高数据版本(更新的 App)写的 → 本(旧)入口拒绝覆盖，避免写坏
+            stored_dv = int(old.get("dataVersion") or 0)
+            if stored_dv > DATA_VERSION:
+                return {"ok": False, "error": "reject-downgrade", "storedDataVersion": stored_dv, "myDataVersion": DATA_VERSION,
+                        "hint": "磁盘上的数据是更新版本的 App 写的，本入口版本偏旧、已拒绝覆盖。请把本入口也更新到最新。"}
+            # 内容没变就不更新时间戳——否则多入口会因时间戳变化互相触发无谓的“恢复”。
             if _content(old) == new_content:
                 return {"ok": True, "savedAt": old.get("savedAt"), "bytes": len(old_raw), "dir": str(DATA_DIR), "unchanged": True}
-        except Exception:
-            pass
+    bundle["dataVersion"] = DATA_VERSION
     bundle["appVersion"] = APP_VERSION
     bundle["appChannel"] = APP_CHANNEL
     bundle["savedAt"] = int(time.time() * 1000)
@@ -530,7 +541,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send_json(body)
         if bare == "/api/version":
             return self._send_json({"ok": True, "version": APP_VERSION, "channel": APP_CHANNEL,
-                                    "label": APP_LABEL, "dir": str(DATA_DIR)})
+                                    "label": APP_LABEL, "dataVersion": DATA_VERSION, "dir": str(DATA_DIR)})
         if bare == "/api/backup/latest":
             data = backup_latest()
             if not data:

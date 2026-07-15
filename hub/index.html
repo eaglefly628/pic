@@ -497,6 +497,7 @@
 
     // ── 本机自动备份（防丢失）+ 版本号 ──────────────────────────────
     let HOME_VERSION = '';        // 由 /api/version 覆盖成服务端真实版本
+    let HOME_DATA_VERSION = 0;    // 本入口支持的数据结构版本（来自 /api/version）
     let lastSig = '';
     const verlabel = document.getElementById('verlabel');
     const bkstatus = document.getElementById('bkstatus');
@@ -532,6 +533,7 @@
         if (sig === lastSig && reason !== 'manual') return null;   // 没变化就不重复写
         const r = await fetch('/api/backup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((x) => x.json()).catch(() => null);
         if (r && r.ok) { lastSig = sig; if (r.savedAt) localStorage.setItem('home.diskSyncedAt', String(r.savedAt)); if (bkstatus) bkstatus.textContent = `已自动存到本机 · ${fmtTime(r.savedAt)}（磁盘保留最近 40 份历史）`; if (bkdir) bkdir.textContent = '目录：' + r.dir; }
+        else if (r && r.error === 'reject-downgrade') { if (bkstatus) bkstatus.textContent = '⚠️ ' + (r.hint || '本入口版本偏旧，数据未写入（磁盘上是更新版本写的）。请更新本入口。'); }
         return r;
       } catch (e) { return null; }
     }
@@ -541,6 +543,11 @@
       let latest = null;
       try { const res = await fetch('/api/backup/latest'); if (res.status === 204) return false; latest = await res.json(); } catch (e) { return false; }
       if (!latest || !latest.__home_backup) return false;
+      // 兼容护栏：磁盘上的数据是更新版本 App 写的 → 本入口偏旧，别读进来又写回去弄坏；提示更新。
+      if (Number(latest.dataVersion || 0) > HOME_DATA_VERSION) {
+        if (bkstatus) bkstatus.textContent = '⚠️ 本机数据是更新版本的 App 写的，本入口偏旧。请先更新本入口(git pull + 重建)再用，以免弄坏数据。';
+        return false;
+      }
       let has = false;
       try { const dbs = (await indexedDB.databases()) || []; const names = new Set(dbs.map((d) => d.name)); for (const d of (latest.indexedDB || [])) if (names.has(d.name)) { has = true; break; } } catch (e) { }
       if (!has) for (const k of Object.keys(latest.localStorage || {})) if (k !== 'home.bio' && localStorage.getItem(k) != null) { has = true; break; }
@@ -565,6 +572,7 @@
         const r = await fetch('/api/version').then((x) => x.json());
         if (r && r.version) {
           HOME_VERSION = r.version;                 // 原始号(如 0.3.0)，用于备份元数据
+          HOME_DATA_VERSION = Number(r.dataVersion || 0);
           if (verlabel) {
             const dev = r.channel === 'dev';
             verlabel.textContent = 'v' + (r.label || r.version) + (dev ? ' · 开发版' : ' · 发布版');
