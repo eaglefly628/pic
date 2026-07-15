@@ -114,6 +114,21 @@ export interface Bet {
   updatedAt: number;
 }
 
+// ── 临时小记账 · 只记开销（把赌球赢的钱花出去） ─────────────────
+/** 一笔开销：花了多少、买了什么。没有收入——这本账就是往外花钱的。 */
+export interface SpendItem {
+  id: string;
+  amount: number;      // 花了多少（正数）
+  label: string;       // 买了什么
+  date: string;        // YYYY-MM-DD
+  createdAt: number;
+}
+export interface SpendLog {
+  title?: string;      // 这本小账的名字（默认「赌球花账」）
+  pot?: number;        // 彩金池 / 预算（赢来的钱），可选；设了就显示还剩多少
+  items: SpendItem[];
+}
+
 // ── 看球 · 世界杯淘汰赛数据模型（大小球 / 波胆 统计） ─────────────
 export interface KnockoutMatch {
   id: string;
@@ -163,6 +178,7 @@ export interface DevData {
   invoices: Invoice[];            // 公司：发票 / 报销记录
   bets: Bet[];                    // 看球：下注台账
   wc?: WcModel;                   // 看球：世界杯淘汰赛数据模型
+  spend?: SpendLog;               // 临时小记账（只记开销）
   settings: DevSettings;
   updatedAt: number;
 }

@@ -34,7 +34,7 @@ function normalize(d: Partial<DevData>): DevData {
   return {
     tasks: d.tasks ?? [], notes: d.notes ?? [], snippets: d.snippets ?? [], links: d.links ?? [],
     collections: d.collections ?? [], lifeItems: d.lifeItems ?? [], secrets: d.secrets ?? [], accounts: d.accounts ?? [],
-    company: d.company ?? {}, invoices: d.invoices ?? [], bets: d.bets ?? [], wc: d.wc,
+    company: d.company ?? {}, invoices: d.invoices ?? [], bets: d.bets ?? [], wc: d.wc, spend: d.spend,
     settings: d.settings ?? { autoLockMin: 5 }, updatedAt: d.updatedAt ?? Date.now(),
   };
 }
