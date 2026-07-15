@@ -114,19 +114,29 @@ export interface Bet {
   updatedAt: number;
 }
 
-// ── 临时小记账 · 只记开销（把赌球赢的钱花出去） ─────────────────
-/** 一笔开销：花了多少、买了什么。没有收入——这本账就是往外花钱的。 */
+// ── 意外资金池 · 花光计划（只记开销，把意外之财一池一池花掉） ──────
+/** 一个意外资金池（赌球赢的 / 奖金 / 回款…），目标是把它花完。 */
+export interface FundPool {
+  id: string;
+  name: string;        // 池子名（赌球赢的钱 / 年终奖 …）
+  amount: number;      // 这池有多少钱（意外之财）
+  targetDate?: string; // YYYY-MM-DD 打算花完的日期（规划）
+  createdAt: number;
+}
+/** 一笔开销：属于某个资金池，花了多少、买了什么。没有收入——只往外花。 */
 export interface SpendItem {
   id: string;
+  poolId: string;      // 归属哪个资金池
   amount: number;      // 花了多少（正数）
   label: string;       // 买了什么
   date: string;        // YYYY-MM-DD
   createdAt: number;
 }
 export interface SpendLog {
-  title?: string;      // 这本小账的名字（默认「赌球花账」）
-  pot?: number;        // 彩金池 / 预算（赢来的钱），可选；设了就显示还剩多少
+  pools: FundPool[];
   items: SpendItem[];
+  pot?: number;        // @deprecated 旧单池格式，迁移用
+  title?: string;      // @deprecated
 }
 
 // ── 看球 · 世界杯淘汰赛数据模型（大小球 / 波胆 统计） ─────────────
