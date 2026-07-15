@@ -102,6 +102,18 @@ def backup_save(raw: bytes) -> dict:
     bundle = json.loads(raw)
     if not isinstance(bundle, dict) or not bundle.get("__home_backup"):
         return {"ok": False, "error": "不是本系统的备份数据"}
+    # 内容没变就不更新时间戳——否则多入口(安装版 / VSCode)会因时间戳变化互相触发无谓的“恢复”。
+    def _content(b):
+        return json.dumps({"localStorage": b.get("localStorage"), "indexedDB": b.get("indexedDB")}, sort_keys=True, ensure_ascii=False)
+    new_content = _content(bundle)
+    old_raw = backup_latest()
+    if old_raw is not None:
+        try:
+            old = json.loads(old_raw)
+            if _content(old) == new_content:
+                return {"ok": True, "savedAt": old.get("savedAt"), "bytes": len(old_raw), "dir": str(DATA_DIR), "unchanged": True}
+        except Exception:
+            pass
     bundle["appVersion"] = APP_VERSION
     bundle["appChannel"] = APP_CHANNEL
     bundle["savedAt"] = int(time.time() * 1000)

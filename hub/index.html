@@ -507,7 +507,7 @@
 
     // 整屋打包（各库数据在浏览器里本就已加密，这里只是把密文原样收进一个对象）
     async function buildBundle() {
-      const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k === 'home.bio') continue; ls[k] = localStorage.getItem(k); }
+      const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k === 'home.bio' || k === 'home.diskSyncedAt') continue; ls[k] = localStorage.getItem(k); }
       let dbs = []; try { dbs = (await indexedDB.databases()) || []; } catch (e) { dbs = []; }
       const idb = []; for (const info of dbs) if (info.name) idb.push(await dumpDB(info.name));
       return { __home_backup: 1, v: 1, appVersion: HOME_VERSION, origin: location.origin, localStorage: ls, indexedDB: idb };
@@ -531,22 +531,25 @@
         const sig = sigOf(body);
         if (sig === lastSig && reason !== 'manual') return null;   // 没变化就不重复写
         const r = await fetch('/api/backup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((x) => x.json()).catch(() => null);
-        if (r && r.ok) { lastSig = sig; if (bkstatus) bkstatus.textContent = `已自动存到本机 · ${fmtTime(r.savedAt)}（磁盘保留最近 40 份历史）`; if (bkdir) bkdir.textContent = '目录：' + r.dir; }
+        if (r && r.ok) { lastSig = sig; if (r.savedAt) localStorage.setItem('home.diskSyncedAt', String(r.savedAt)); if (bkstatus) bkstatus.textContent = `已自动存到本机 · ${fmtTime(r.savedAt)}（磁盘保留最近 40 份历史）`; if (bkdir) bkdir.textContent = '目录：' + r.dir; }
         return r;
       } catch (e) { return null; }
     }
-    // 开机若发现本机是“全新/被清空”的，就从磁盘上的最新备份自动恢复（有任何本机数据则绝不覆盖）
+    // 开机把本机与「本机磁盘上的整屋备份」对齐：本机空 → 恢复；磁盘上有更新的版本(另一个入口存的) → 拉过来。
+    // 这样「安装版 App」和「VSCode 里 python run.py」两个入口，数据都以同一个磁盘目录为准、自动同步(后动的为准)。
     async function maybeAutoRestore() {
-      if (sessionStorage.getItem('home.autorestored')) return false;
       let latest = null;
       try { const res = await fetch('/api/backup/latest'); if (res.status === 204) return false; latest = await res.json(); } catch (e) { return false; }
       if (!latest || !latest.__home_backup) return false;
       let has = false;
       try { const dbs = (await indexedDB.databases()) || []; const names = new Set(dbs.map((d) => d.name)); for (const d of (latest.indexedDB || [])) if (names.has(d.name)) { has = true; break; } } catch (e) { }
       if (!has) for (const k of Object.keys(latest.localStorage || {})) if (k !== 'home.bio' && localStorage.getItem(k) != null) { has = true; break; }
-      if (has) return false;
-      sessionStorage.setItem('home.autorestored', '1');
+      const syncedAt = Number(localStorage.getItem('home.diskSyncedAt') || 0);
+      const newer = (latest.savedAt || 0) > syncedAt;   // 磁盘比“我上次同步到的”更新 = 另一个入口存过更新的
+      if (has && !newer) return false;                  // 本机已有数据、磁盘也不比我新 → 不动
+      // diskSyncedAt 追踪已能防重复恢复的死循环，无需 sessionStorage 守卫，这样同一会话里也能再同步。
       await applyBundle(latest);
+      localStorage.setItem('home.diskSyncedAt', String(latest.savedAt || Date.now()));
       location.reload();
       return true;
     }
