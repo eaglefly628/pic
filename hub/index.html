@@ -525,7 +525,23 @@
     // 便宜的内容指纹：只在数据真的变了才写盘，避免反复重写
     const sigOf = (s) => { let h = 0; const step = Math.max(1, s.length >> 12); for (let i = 0; i < s.length; i += step) h = (h * 131 + s.charCodeAt(i)) >>> 0; return s.length + ':' + h; };
 
+    // 磁盘数据由「更新版本」写入时，本(旧)版本进入只读：能查看，但不写盘、不覆盖它。
+    let READ_ONLY_NEWER = false;
+    function enterReadOnly() {
+      if (READ_ONLY_NEWER) return;
+      READ_ONLY_NEWER = true;
+      if (bkstatus) bkstatus.textContent = '👁 只读：本机数据由更新版本的 App 写入。可以查看，但本(旧)版本的改动不会保存、也不会覆盖它。要编辑请把本入口更新到最新版。';
+      if (!document.getElementById('roBanner')) {
+        const b = document.createElement('div');
+        b.id = 'roBanner';
+        b.textContent = '👁 只读模式 · 本机数据由更新版本的 App 写入：可查看，改动不会保存（也不会覆盖它）。请更新本入口后再编辑。';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#ff9500;color:#fff;font-size:12.5px;font-weight:600;text-align:center;padding:7px 12px;box-shadow:0 1px 6px rgba(0,0,0,.15)';
+        document.body.appendChild(b);
+      }
+    }
+
     async function autoSave(reason) {
+      if (READ_ONLY_NEWER) return { ok: false, readonly: true };   // 只读态：绝不写盘（免得用旧结构覆盖新数据）
       try {
         const bundle = await buildBundle();
         const body = JSON.stringify(bundle);
@@ -543,17 +559,15 @@
       let latest = null;
       try { const res = await fetch('/api/backup/latest'); if (res.status === 204) return false; latest = await res.json(); } catch (e) { return false; }
       if (!latest || !latest.__home_backup) return false;
-      // 兼容护栏：磁盘上的数据是更新版本 App 写的 → 本入口偏旧，别读进来又写回去弄坏；提示更新。
-      if (Number(latest.dataVersion || 0) > HOME_DATA_VERSION) {
-        if (bkstatus) bkstatus.textContent = '⚠️ 本机数据是更新版本的 App 写的，本入口偏旧。请先更新本入口(git pull + 重建)再用，以免弄坏数据。';
-        return false;
-      }
+      // 磁盘数据由更新版本写入：仍然「打开/查看」它（新→旧可读），但进入只读态、不写盘覆盖它。
+      const diskNewer = Number(latest.dataVersion || 0) > HOME_DATA_VERSION;
       let has = false;
       try { const dbs = (await indexedDB.databases()) || []; const names = new Set(dbs.map((d) => d.name)); for (const d of (latest.indexedDB || [])) if (names.has(d.name)) { has = true; break; } } catch (e) { }
       if (!has) for (const k of Object.keys(latest.localStorage || {})) if (k !== 'home.bio' && localStorage.getItem(k) != null) { has = true; break; }
       const syncedAt = Number(localStorage.getItem('home.diskSyncedAt') || 0);
       const newer = (latest.savedAt || 0) > syncedAt;   // 磁盘比“我上次同步到的”更新 = 另一个入口存过更新的
-      if (has && !newer) return false;                  // 本机已有数据、磁盘也不比我新 → 不动
+      if (has && !newer) { if (diskNewer) enterReadOnly(); return false; }   // 不需要拉；若磁盘是更新版本写的→只读态
+      if (diskNewer) enterReadOnly();                   // 要把更新版本的数据读进来查看 → 先标记只读，读进来后也不会写回去
       // diskSyncedAt 追踪已能防重复恢复的死循环，无需 sessionStorage 守卫，这样同一会话里也能再同步。
       await applyBundle(latest);
       localStorage.setItem('home.diskSyncedAt', String(latest.savedAt || Date.now()));

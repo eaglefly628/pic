@@ -86,10 +86,12 @@ def app_channel() -> str:
 APP_VERSION = app_version()
 APP_CHANNEL = app_channel()
 APP_LABEL = APP_VERSION + ("-dev" if APP_CHANNEL == "dev" else "")   # 开发版带 -dev 后缀，一眼区分
-# 数据结构版本：改动数据形状、且旧版本 App 读不了/会写坏时 +1。
-# 保证兼容的规矩：① 存盘时打上这个版本号；② 旧入口(DATA_VERSION 更小)绝不覆盖磁盘上更高版本写的数据。
-# 这样「开发版」和「安装版」即使一时不同步，也不会互相把对方的新数据写坏。
-DATA_VERSION = 1
+# 数据结构版本：改动数据形状（加/改字段）时 +1。配套的兼容规矩：
+#   ① 存盘时打上这个版本号；
+#   ② 新版写的数据，老版能「只读打开」查看（不认识的新字段忽略、不删）；
+#   ③ 老版保存时，服务端拒绝用较低版本覆盖磁盘上更高版本的数据（护栏，见 backup_save）。
+# 这样开发版 / 安装版即使一时新旧不一，也只会「后者只读、不互相写坏」。
+DATA_VERSION = 2
 DATA_DIR = data_dir()
 
 
