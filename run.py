@@ -91,7 +91,7 @@ APP_LABEL = APP_VERSION + ("-dev" if APP_CHANNEL == "dev" else "")   # 开发版
 #   ② 新版写的数据，老版能「只读打开」查看（不认识的新字段忽略、不删）；
 #   ③ 老版保存时，服务端拒绝用较低版本覆盖磁盘上更高版本的数据（护栏，见 backup_save）。
 # 这样开发版 / 安装版即使一时新旧不一，也只会「后者只读、不互相写坏」。
-DATA_VERSION = 2
+DATA_VERSION = 3
 DATA_DIR = data_dir()
 
 

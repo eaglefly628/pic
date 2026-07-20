@@ -52,3 +52,29 @@ export function SectionTitle({ children, note }: { children: React.ReactNode; no
 }
 
 export const uid = (p: string): string => p + "_" + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
+
+/** 单序列折线趋势图（体重/血压等按日期打点）。点数 &lt;2 时显示提示而不是空图。 */
+export function LineChart({ points, height = 120, color = "var(--accent)", unit = "" }: {
+  points: { x: number; y: number }[]; height?: number; color?: string; unit?: string;
+}) {
+  const W = 640;
+  if (points.length < 2) return <div style={{ fontSize: 12, color: "var(--text-tertiary)", padding: "22px 0", textAlign: "center" }}>再记一次就能看到趋势线</div>;
+  const padL = 40, padR = 10, padT = 12, padB = 20;
+  const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY0 = Math.min(...ys), maxY0 = Math.max(...ys);
+  const pad = (maxY0 - minY0) * 0.12 || 1;
+  const minY = minY0 - pad, maxY = maxY0 + pad;
+  const X = (x: number) => padL + (maxX > minX ? (x - minX) / (maxX - minX) : 0.5) * (W - padL - padR);
+  const Y = (y: number) => padT + (1 - (y - minY) / (maxY - minY)) * (height - padT - padB);
+  const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${height}`} style={{ width: "100%", height, display: "block" }}>
+      <line x1={padL} y1={height - padB} x2={W - padR} y2={height - padB} stroke="var(--separator)" strokeWidth={1} />
+      <path d={path} fill="none" stroke={color} strokeWidth={2} />
+      {points.map((p, i) => <circle key={i} cx={X(p.x)} cy={Y(p.y)} r={2.6} fill={color} />)}
+      <text x={2} y={padT + 4} fontSize={10} fill="var(--text-tertiary)">{maxY0.toFixed(1)}{unit}</text>
+      <text x={2} y={height - padB + 3} fontSize={10} fill="var(--text-tertiary)">{minY0.toFixed(1)}{unit}</text>
+    </svg>
+  );
+}

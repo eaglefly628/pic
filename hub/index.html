@@ -183,9 +183,9 @@
     <!-- 男主世界 -->
     <div id="male" class="screen hide">
       <button class="back" data-go="home">← 回入口</button>
-      <div class="whead"><h2>男主的世界 🎣</h2><p>他喜欢的，都在这儿 · 点开「开发世界」已经能用，其它陆续做</p></div>
+      <div class="whead"><h2>男主的世界 🧭</h2><p>爱车·健身·健康·旅游计划，都已经能用</p></div>
       <div class="grid" id="malegrid"></div>
-      <div class="foot">想先做哪个？告诉我，就像开发世界那样做扎实。</div>
+      <div class="foot">还想加点什么？告诉我，就像这几个一样做扎实。</div>
     </div>
 
     <!-- 女主世界 -->
@@ -243,20 +243,10 @@
     // 男主：中年男人的爱好全家桶（开发世界已实装，其余为占位）
     const MALE = [
       { icon: '👨‍💻', name: '开发世界', desc: '任务·日程·笔记·片段·书签·密钥', app: 'dev', grad: 'linear-gradient(160deg,#1d1d1f,#5E5CE6)' },
-      { icon: '🎣', name: '钓鱼', desc: '钓点·渔获·装备·潮汐天气' },
-      { icon: '🚗', name: '爱车', desc: '保养·油耗·里程·违章·改装' },
-      { icon: '🀄', name: '麻将牌局', desc: '牌友·约局·输赢账·番种' },
-      { icon: '📿', name: '文玩盘玩', desc: '手串·核桃·葫芦·包浆进度' },
-      { icon: '🍵', name: '茶 · 茶具', desc: '茶叶库存·紫砂壶·品鉴笔记' },
-      { icon: '🥃', name: '酒柜 · 雪茄', desc: '白酒·红酒·威士忌·年份' },
-      { icon: '🪙', name: '收藏', desc: '邮票·钱币·纪念币·老物件' },
-      { icon: '⌚', name: '腕表', desc: '收藏·佩戴轮换·保养上链' },
-      { icon: '📷', name: '摄影', desc: '器材·镜头·作品·参数' },
-      { icon: '⚽', name: '看球', desc: '赛程·主队·竞猜小账' },
-      { icon: '♟️', name: '棋友', desc: '象棋·围棋·棋谱·对局' },
-      { icon: '⛺', name: '户外露营', desc: '路线·装备·自驾游' },
-      { icon: '🪴', name: '盆景花草', desc: '浇水提醒·养护档案' },
-      { icon: '🫖', name: '养生健康', desc: '血压·步数·作息·枸杞' },
+      { icon: '🚗', name: '爱车', desc: '油耗·保养·里程记录', app: 'dev', tab: 'vehicle', grad: 'linear-gradient(160deg,#3b6fb0,#2f7d6b)' },
+      { icon: '🏃', name: '健身', desc: '体重·体脂·目标管理', app: 'dev', tab: 'fitness', grad: 'linear-gradient(160deg,#4a7a3a,#8a6a3a)' },
+      { icon: '🩺', name: '健康记录', desc: '血压·血脂·饮食', app: 'dev', tab: 'health', grad: 'linear-gradient(160deg,#c0392b,#8a6a3a)' },
+      { icon: '🗺️', name: '旅游计划', desc: '世界景点·地图·计划', app: 'dev', tab: 'travel', grad: 'linear-gradient(160deg,#3a6b7a,#5a6470)' },
     ];
     // 女主：爱好全家桶
     const FEMALE = [
@@ -288,7 +278,8 @@
     function tile(item, i, pal) {
       const soon = !item.app;
       const bg = item.grad || grad(i, pal);
-      return `<button class="tile ${soon ? 'soon' : ''}" ${item.app ? `data-go="${item.app}"` : 'data-soon="' + item.name + '"'}>
+      const go = item.app ? (item.tab ? `${item.app}#${item.tab}` : item.app) : '';
+      return `<button class="tile ${soon ? 'soon' : ''}" ${item.app ? `data-go="${go}"` : 'data-soon="' + item.name + '"'}>
         <div class="tico" style="background:${bg}">${item.icon}</div>
         <div class="tname">${item.name}</div>
         <div class="tdesc">${item.desc}</div>
@@ -319,20 +310,23 @@
     }
 
     function nav(target) {
-      if (target === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; refreshGateBio(); setTimeout(() => gpw.focus(), 50); return; }
-      if (screens[target]) {
+      // target 可能带子页深链后缀，如 "dev#vehicle"（男主世界的卡片直接跳进开发世界的某个 tab）。
+      const [app, tab] = target.split('#');
+      if (app === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; refreshGateBio(); setTimeout(() => gpw.focus(), 50); return; }
+      if (screens[app]) {
         Object.values(screens).forEach(s => s.classList.add('hide'));
-        screens[target].classList.remove('hide');
+        screens[app].classList.remove('hide');
         frame.classList.remove('show');
-        setActive(target);
-        document.body.className = 'scene-' + target;
-        history.replaceState(null, '', '#' + target);
-      } else if (SRC[target]) {
-        if (frame.dataset.app !== target) { loadFrame(SRC[target]); frame.dataset.app = target; }
+        setActive(app);
+        document.body.className = 'scene-' + app;
+        history.replaceState(null, '', '#' + app);
+      } else if (SRC[app]) {
+        const url = SRC[app] + (tab ? '#' + tab : '');
+        if (frame.dataset.app !== target) { loadFrame(url); frame.dataset.app = target; }
         Object.values(screens).forEach(s => s.classList.add('hide'));
         frame.classList.add('show');
-        setActive(target === 'dev' ? 'male' : 'home');
-        history.replaceState(null, '', '#' + target);
+        setActive(app === 'dev' ? 'male' : 'home');
+        history.replaceState(null, '', '#' + app);
       }
     }
     document.addEventListener('click', (e) => {

@@ -30,13 +30,17 @@ export const useVault = () => {
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 const emptyData = (): DevData => ({ tasks: [], notes: [], snippets: [], links: [], collections: [], lifeItems: [], secrets: [], accounts: [], company: {}, invoices: [], bets: [], settings: { autoLockMin: 5 }, updatedAt: 0 });
+// 用「默认值 + 覆盖」而不是逐字段白名单重建：白名单会把这个版本不认识的字段(比如更新版本新加的)
+// 悄悄丢掉——以后这个（旧）版本一旦保存，就把那些字段从数据里抹掉了。改成 spread 后，不认识的字段
+// 原样透传、不认识也不会丢，保存回去时还在。这是「老版本不覆盖新版本数据」在应用层的落地。
 function normalize(d: Partial<DevData>): DevData {
   return {
-    tasks: d.tasks ?? [], notes: d.notes ?? [], snippets: d.snippets ?? [], links: d.links ?? [],
-    collections: d.collections ?? [], lifeItems: d.lifeItems ?? [], secrets: d.secrets ?? [], accounts: d.accounts ?? [],
-    company: d.company ?? {}, invoices: d.invoices ?? [], bets: d.bets ?? [], wc: d.wc, spend: d.spend,
-    settings: d.settings ?? { autoLockMin: 5 }, updatedAt: d.updatedAt ?? Date.now(),
-  };
+    ...emptyData(),
+    ...d,
+    company: { ...emptyData().company, ...d.company },
+    settings: { autoLockMin: 5, ...d.settings },
+    updatedAt: d.updatedAt ?? Date.now(),
+  } as DevData;
 }
 
 // 开发世界不再单独设密码：固定内部口令自动解锁/初始化（备份统一在大厅做）
