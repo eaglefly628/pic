@@ -9,11 +9,12 @@ import Dashboard from "./Dashboard";
 import Accounts, { type AccMode } from "./Accounts";
 import Detail from "./Detail";
 import { InterestView } from "./Interest";
+import { RetirementView } from "./Retirement";
 import { AccountEditor, SnapshotEditor } from "./editors";
 import { Btn, Field, Modal, TextField } from "../ui";
 import { IconKey, IconChevron, IconArrowRight } from "../icons";
 
-type Sub = "dashboard" | "accounts" | "detail" | "interest";
+type Sub = "dashboard" | "accounts" | "detail" | "interest" | "retirement";
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
 export default function Secret({ onExit }: { onExit: () => void }) {
@@ -95,6 +96,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
               <button onClick={() => setSub("dashboard")} className="fv-tap" style={seg(sub === "dashboard")}>仪表盘</button>
               <button onClick={() => setSub("accounts")} className="fv-tap" style={seg(sub === "accounts")}>账户</button>
               <button onClick={() => setSub("interest")} className="fv-tap" style={seg(sub === "interest")}>利息</button>
+              <button onClick={() => setSub("retirement")} className="fv-tap" style={seg(sub === "retirement")}>退休预测</button>
             </div>
           )
         )}
@@ -110,6 +112,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
             {sub === "dashboard" && <Dashboard view={view} onOpen={open} range={range} setRange={setRange} />}
             {sub === "accounts" && <Accounts view={view} mode={accMode} onModeChange={setAccMode} onOpen={open} onAddAccount={() => setAccEditor({ open: true, editing: false })} />}
             {sub === "interest" && <InterestView dataset={ds} onSetRate={(id, dec) => mutate((d) => { const a = d.accounts.find((x) => x.id === id); if (a) a.rate = dec; })} />}
+            {sub === "retirement" && <RetirementView dataset={ds} onSave={(plan) => mutate((d) => { d.retirement = plan; })} />}
             {sub === "detail" && (
               <Detail
                 view={view}
