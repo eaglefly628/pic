@@ -19,6 +19,7 @@ import http.server
 import json
 import mimetypes
 import os
+import re
 import shutil
 import socketserver
 import subprocess
@@ -398,11 +399,20 @@ def disk_ls(path):
         items.append({"path": full, "label": os.path.basename(full), "bytes": b, "isDir": os.path.isdir(full) and not os.path.islink(full)})
     if not items and stderr.strip():
         return {"ok": False, "error": "读取受限（可能需要在 系统设置→隐私→完全磁盘访问 授权）"}
+    # 从 stderr 里挑出具体是哪些文件夹被拒绝的（macOS du: "du: /x/y: Operation not permitted"），
+    # 给前端一个能直接点名道姓的列表，而不是一句含糊的"有权限问题"。
+    denied_paths = []
+    for line in stderr.splitlines():
+        m = re.match(r"^du:\s*(?:cannot read directory\s*)?'?([^:']+)'?\s*:?\s*(Operation not permitted|Permission denied)", line.strip())
+        if m:
+            p = m.group(1).strip().rstrip(":")
+            if p and p not in denied_paths:
+                denied_paths.append(os.path.basename(p) or p)
     items.sort(key=lambda x: -x["bytes"])
     return {"ok": True, "path": rp, "parent": os.path.dirname(rp), "home": HOME,
             "items": items, "total": total or sum(i["bytes"] for i in items),
             "scanned": sum(i["bytes"] for i in items), "disk": _disk_df(),
-            "partial": partial, "denied": bool(stderr.strip())}
+            "partial": partial, "denied": bool(stderr.strip()), "deniedPaths": denied_paths[:8]}
 
 CLEAN_TARGETS = [
     {"id": "user-caches", "label": "用户缓存（各 App）", "desc": "~/Library/Caches，会自动重建", "paths": ["~/Library/Caches"], "contents": True},

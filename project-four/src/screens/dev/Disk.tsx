@@ -19,6 +19,7 @@ export default function Disk() {
   const [disk, setDisk] = useState<Disk | null>(null);
   const [partial, setPartial] = useState(false);
   const [denied, setDenied] = useState(false);
+  const [deniedPaths, setDeniedPaths] = useState<string[]>([]);
   const [exLoading, setExLoading] = useState(false);
   const [exErr, setExErr] = useState("");
   const [exMsg, setExMsg] = useState("");
@@ -43,6 +44,7 @@ export default function Disk() {
         setDisk(d.disk || null);
         setPartial(!!d.partial);
         setDenied(!!d.denied);
+        setDeniedPaths(Array.isArray(d.deniedPaths) ? d.deniedPaths : []);
       }
     } catch { setExErr("连不上本机服务——这个功能需要通过 run.py 从 http://localhost:5180 进入。"); }
     finally { setExLoading(false); }
@@ -151,13 +153,36 @@ export default function Disk() {
             本层合计 <strong style={{ color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{fmtB(total)}</strong>
             {scanned > 0 && Math.abs(scanned - total) > total * 0.02 && <span>（可见 {fmtB(scanned)}）</span>}
             {partial && <span style={{ color: "var(--orange)" }}> · 目录太大未扫完，仅部分结果</span>}
-            {denied && <span> · 含无权限目录</span>}
             {path === "/" && disk && (
               <div style={{ marginTop: 4 }}>
-                扫描合计通常<strong>小于上面的「已用」</strong>：系统保护目录（需在 系统设置→隐私→<strong>完全磁盘访问</strong> 给浏览器/终端授权才能数全）、
-                APFS <strong>快照</strong>与<strong>可清除空间</strong>（系统数据）无法被逐文件统计——这部分差额是正常的。
+                扫描合计通常<strong>小于上面的「已用」</strong>：APFS <strong>快照</strong>与<strong>可清除空间</strong>（系统数据）
+                无法被逐文件统计——这部分差额是正常的，跟下面的权限问题是两回事。
               </div>
             )}
+          </div>
+        )}
+
+        {/* 权限受限：这是"扫不全/用不了"最常见的原因，给到能直接照做的步骤 */}
+        {denied && (
+          <div style={{ ...card, background: "color-mix(in srgb, var(--orange) 8%, var(--bg-elevated))", border: "0.5px solid color-mix(in srgb, var(--orange) 30%, var(--separator))", padding: "12px 14px", marginBottom: 12 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--orange)", marginBottom: 4 }}>⚠️ 有些文件夹读不到，扫描结果偏少</div>
+            {deniedPaths.length > 0 && (
+              <div style={{ fontSize: 12, color: "var(--text-primary)", marginBottom: 4 }}>
+                这一层具体读不到：<strong>{deniedPaths.join("、")}</strong>
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+              macOS 默认保护 <strong>桌面 / 文稿 / 下载</strong> 等目录，没授权的话程序读不到里面的内容（不会报错，只是数不到、总量偏低）。去
+              <strong> 系统设置 → 隐私与安全性 → 完全磁盘访问权限</strong>，把下面这个打勾：
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-primary)", margin: "6px 0", paddingLeft: 8, lineHeight: 1.8 }}>
+              · 用 <code style={{ background: "var(--fill-q)", padding: "1px 5px", borderRadius: 4 }}>python3 run.py</code> 启动的 → 给 <strong>终端（Terminal）</strong>授权<br />
+              · 用安装版 App 打开的 → 给 <strong>我家里的一切</strong>这个 App 本身授权
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <a href="x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" style={{ fontSize: 12, fontWeight: 600, color: "#fff", background: "var(--orange)", padding: "6px 12px", borderRadius: 7, textDecoration: "none" }}>直接打开系统设置</a>
+              <span style={{ fontSize: 11, color: "var(--text-tertiary)", alignSelf: "center" }}>勾上之后<strong>重启程序</strong>（退出 App 或 Ctrl+C 重跑 run.py）再扫一次才生效。</span>
+            </div>
           </div>
         )}
 
