@@ -37,8 +37,14 @@ function lastBalance(snaps: Snapshot[], id: string): number {
   return 0;
 }
 
+// 某账户「最后更新」是哪一期：优先看 touched（真正被改过的账户），而不是 balances 里
+// 是否有值——一条快照的 balances 里，除了真正被改的账户，还会结转其它账户的上次余额
+// 好保证净值算得对；touched 缺失（导入数据 / 本字段上线前的旧快照）时兜底按老逻辑。
 function lastDate(snaps: Snapshot[], id: string): string | null {
-  for (let i = snaps.length - 1; i >= 0; i--) if (snaps[i].balances[id] != null) return snaps[i].date;
+  for (let i = snaps.length - 1; i >= 0; i--) {
+    const s = snaps[i];
+    if (s.touched ? s.touched.includes(id) : s.balances[id] != null) return s.date;
+  }
   return null;
 }
 

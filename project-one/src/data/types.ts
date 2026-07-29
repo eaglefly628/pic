@@ -25,6 +25,10 @@ export interface Snapshot {
   balances: Record<string, number | null>;
   /** 来源：导入 / 手动 */
   source?: "import" | "manual";
+  /** 这一期里，哪些账户 id 是这次真正被录入/修改的（不含为保持净值完整而结转的其它账户）。
+   *  undefined 表示这条快照没有这个区分（导入数据、或本字段上线前的旧数据）——
+   *  这种情况下 balances 里出现的账户就当作"这期确实有记录"，兼容旧行为。 */
+  touched?: string[];
 }
 
 export interface Dataset {
