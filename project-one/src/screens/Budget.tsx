@@ -1,8 +1,8 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import type { ExpenseItem } from "../vault/types";
-import { buildChart, currentNetWorth, estimateAnnualInterest, netSeries, type ChartGeom } from "../lib/compute";
-import { fmt } from "../lib/format";
+import { currentNetWorth, estimateAnnualInterest, netSeries } from "../lib/compute";
+import { fmt, fmtWan } from "../lib/format";
 import { Btn, Field, Modal, Select, TextField, TextArea, EmptyState, card, uid } from "../ui";
 import { useCountUp, rise } from "../lib/anim";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
@@ -17,6 +17,7 @@ const ym = (d: Date) => `${String(d.getFullYear()).slice(2)}/${String(d.getMonth
 const ymISO = (iso: string) => iso.slice(2, 7).replace("-", "/");
 function addMonths(d: Date, n: number) { const x = new Date(d); x.setDate(1); x.setMonth(x.getMonth() + n); return x; }
 const REAL_TAIL = 12; // 图上展示最近 12 个月真实净值
+const SNAPSHOT_HORIZON_MONTHS = 24; // 只把未来 24 个月内的预测存成快照留作对比，太远的猜测没意义、也不用无限堆积
 
 export default function Budget() {
   const { data, update } = useVault();
@@ -52,19 +53,55 @@ export default function Budget() {
       }
       proj.push({ label: ym(d), v });
     }
-    // 真实段（最近若干个月的实际净值）
-    const real = netSeries(data.dataset).slice(-REAL_TAIL).map((p) => ({ label: ymISO(p.date), v: p.v }));
-    const series = [...real, ...proj.slice(1)];
+    // 真实段（最近若干个月的实际净值）；同时把这个月「当初预测过」的值(如果有)一起带上，
+    // 好在真实值旁边画出那条本该保留的历史虚线，而不是被真实值一覆盖就消失。
+    const predMap = new Map((data.forecastHistory ?? []).map((f) => [f.forMonth, f.predictedNet] as const));
+    const real = netSeries(data.dataset).slice(-REAL_TAIL).map((p) => {
+      const label = ymISO(p.date);
+      return { label, real: p.v, pred: predMap.get(label) };
+    });
+    // 预测段（未来、且还没有真实值的月份）。proj 是按"今天"往后算的，不会管某个月是不是
+    // 已经补录过真实值——万一提前给未来某个月记过真实余额(比如把 real 补到了比系统日期更晚)，
+    // 这个月要从"未来预测"里排掉，不然会跟 real 里那个月重复出现，还会在下面 toPersist 那一步
+    // 用重新算出来的"新预测"把已经冻结的历史预测值覆盖掉。
+    const realLabels = new Set(real.map((p) => p.label));
+    const futureProj = proj.slice(1).filter((p) => !realLabels.has(p.label));
+    const future = futureProj.map((p) => ({ label: p.label, real: undefined as number | undefined, pred: p.v }));
+    const series = [...real, ...future];
     const boundary = Math.max(0, real.length - 1); // 真实/预测分界（今天）
-    return { net0, monthlyIncome, recurringMonthly, monthlyInterest, monthlyNet, series, boundary, annualInterest };
+    // 只有「未来、还没变成现实」的部分才值得存成快照——存太远的没意义，见 SNAPSHOT_HORIZON_MONTHS
+    const toPersist = futureProj.slice(0, SNAPSHOT_HORIZON_MONTHS);
+    return { net0, monthlyIncome, recurringMonthly, monthlyInterest, monthlyNet, series, boundary, annualInterest, toPersist };
   }, [data, incomes, expenses, withInterest, years]);
 
+  // 把「未来若干月」的预测冻结存盘：该月还没有真实记录时持续用最新假设覆写；
+  // 一旦这个月有了真实记录，proj 就不会再生成它，写入自然停止——最后一次的值就此冻结，
+  // 留作跟真实值对比的历史虚线（不再像以前那样，实际值一出现，旧预测就凭空消失）。
+  useEffect(() => {
+    if (!data || !calc) return;
+    const existing = data.forecastHistory ?? [];
+    const changed = calc.toPersist.filter((p) => {
+      const ex = existing.find((f) => f.forMonth === p.label);
+      return !ex || ex.predictedNet !== p.v;
+    });
+    if (!changed.length) return;
+    update((d) => {
+      d.forecastHistory = d.forecastHistory ?? [];
+      const now = Date.now();
+      for (const p of changed) {
+        const ex = d.forecastHistory.find((f) => f.forMonth === p.label);
+        if (ex) { ex.predictedNet = p.v; ex.updatedAt = now; }
+        else d.forecastHistory.push({ forMonth: p.label, predictedNet: p.v, updatedAt: now });
+      }
+    });
+  }, [calc, data, update]);
+
   if (!data || !calc) return null;
-  const chart = buildChart(calc.series.map((p) => p.v), 600, 200, 56, 8, 16, 30);
   const n = calc.series.length;
+  const xAt = (i: number) => (n <= 1 ? 56 : 56 + (i * (600 - 56 - 8)) / (n - 1));
   const idxs = Array.from(new Set([0, 1, 2, 3, 4, 5, 6].map((k) => Math.round((k * (n - 1)) / 6))));
-  const xLabels = idxs.map((i) => ({ x: chart.pts[i].x.toFixed(1), label: calc.series[i].label }));
-  const at = (m: number) => calc.series[Math.min(calc.boundary + m, calc.series.length - 1)].v;
+  const xLabels = idxs.map((i) => ({ x: xAt(i).toFixed(1), label: calc.series[i].label }));
+  const at = (m: number) => { const p = calc.series[Math.min(calc.boundary + m, calc.series.length - 1)]; return p.pred ?? p.real ?? 0; };
 
   const remove = (id: string) => update((d) => { d.expenses = (d.expenses ?? []).filter((x) => x.id !== id); });
 
@@ -94,9 +131,9 @@ export default function Budget() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 4 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--text-secondary)" }}><span style={{ width: 14, height: 3, borderRadius: 2, background: "var(--green)" }} />真实净值</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--text-secondary)" }}><span style={{ width: 14, height: 0, borderTop: "2px dashed var(--accent)" }} />预测</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--text-secondary)" }}><span style={{ width: 14, height: 0, borderTop: "2px dashed var(--accent)" }} />预测（含历史对比）</span>
         </div>
-        <ForecastChart chart={chart} series={calc.series} xLabels={xLabels} boundary={calc.boundary} />
+        <ForecastChart series={calc.series} xLabels={xLabels} boundary={calc.boundary} />
       </div>
 
       {/* 开销列表 */}
@@ -137,61 +174,91 @@ export default function Budget() {
   );
 }
 
-function ForecastChart({ chart, series, xLabels, boundary }: { chart: ChartGeom; series: { label: string; v: number }[]; xLabels: { x: string; label: string }[]; boundary: number }) {
+type FPoint = { label: string; real?: number; pred?: number };
+
+// 净资产预测图：真实值(实线) + 预测值(虚线)。跟以前不一样的地方——预测虚线不再是
+// "还没发生的部分才画"，而是只要存过预测快照，哪怕这个月已经有真实值了，虚线也继续画在
+// 真实线旁边，方便直接对比"当初预测的"和"后来实际发生的"。两条线的取值可能不同，
+// 所以坐标系要按两条线的值一起算，不能只按其中一条来定量程范围。
+function ForecastChart({ series, xLabels, boundary }: { series: FPoint[]; xLabels: { x: string; label: string }[]; boundary: number }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState<{ i: number; px: number; py: number } | null>(null);
-  const pts = chart.pts;
+  const [hover, setHover] = useState<number | null>(null);
+  const W = 600, H = 200, padL = 56, padR = 8, padT = 16, padB = 30;
+  const n = series.length;
+
+  const X = (i: number) => (n <= 1 ? padL : padL + (i * (W - padL - padR)) / (n - 1));
+  const allVals = series.flatMap((p) => [p.real, p.pred]).filter((v): v is number => v != null);
+  const min = allVals.length ? Math.min(...allVals) : 0;
+  const max = allVals.length ? Math.max(...allVals) : 0;
+  const span = max - min || 1;
+  const lo = min - span * 0.18, hi = max + span * 0.18;
+  const Y = (v: number) => H - padB - ((v - lo) / (hi - lo)) * (H - padT - padB);
+  const grid = [0, 1, 2, 3].map((k) => { const gv = hi - ((hi - lo) * k) / 3; return { y: Y(gv), label: fmtWan(Math.round(gv / 1000) * 1000) }; });
+
   const onMove = (e: React.MouseEvent) => {
     const el = ref.current;
-    if (!el || pts.length === 0) return;
+    if (!el || n === 0) return;
     const rect = el.getBoundingClientRect();
-    const xv = ((e.clientX - rect.left) * 600) / rect.width;
+    const xv = ((e.clientX - rect.left) * W) / rect.width;
     let best = 0, bd = Infinity;
-    pts.forEach((p, i) => { const d = Math.abs(p.x - xv); if (d < bd) { bd = d; best = i; } });
-    setHover({ i: best, px: (pts[best].x * rect.width) / 600, py: (pts[best].y * rect.height) / 200 });
+    for (let i = 0; i < n; i++) { const d = Math.abs(X(i) - xv); if (d < bd) { bd = d; best = i; } }
+    setHover(best);
   };
-  const hp = hover ? pts[hover.i] : null;
-  const tipLeft = hover ? Math.min(Math.max(hover.px, 56), (ref.current?.clientWidth ?? 600) - 56) : 0;
-  const tipTop = hover ? (hover.py > 56 ? hover.py - 50 : hover.py + 14) : 0;
 
-  const pathOf = (arr: { x: number; y: number }[]) => arr.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
-  const realPts = pts.slice(0, boundary + 1);
-  const predPts = pts.slice(boundary); // 含分界点以连接
-  const bx = pts[boundary]?.x ?? 0;
-  const isReal = hover ? hover.i <= boundary : false;
+  // 真实段：0..boundary，天然连续
+  const realPath = series.slice(0, boundary + 1).map((p, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.real!).toFixed(1)).join(" ");
+  // 预测虚线：全区间里只要有 pred 就连，中间断档(没存过快照的月份)就断开另起一段，不瞎连
+  let predPath = "", prevI: number | null = null;
+  series.forEach((p, i) => {
+    if (p.pred == null) return;
+    predPath += (prevI === null || i !== prevI + 1 ? "M" : "L") + X(i).toFixed(1) + " " + Y(p.pred).toFixed(1) + " ";
+    prevI = i;
+  });
+  // 面积底色：真实段 + 未来预测段（历史对比虚线不重复参与填色，避免视觉上叠两层）
+  const areaMain = series.map((p, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(i <= boundary ? p.real! : p.pred!).toFixed(1)).join(" ");
+  const area = n ? areaMain + ` L${X(n - 1).toFixed(1)} ${H - padB} L${X(0).toFixed(1)} ${H - padB} Z` : "";
+  const bx = X(boundary);
+
+  const hp = hover != null ? series[hover] : null;
+  const hx = hover != null ? X(hover) : 0;
+  const tipLeft = hover != null ? Math.min(Math.max((hx * (ref.current?.clientWidth ?? W)) / W, 56), (ref.current?.clientWidth ?? W) - 56) : 0;
+  const hy = hp ? Y(hp.real ?? hp.pred ?? 0) : 0;
+  const tipTop = hover != null ? (((hy * (ref.current?.clientHeight ?? H)) / H) > 56 ? ((hy * (ref.current?.clientHeight ?? H)) / H) - (hp?.real != null && hp?.pred != null ? 66 : 50) : ((hy * (ref.current?.clientHeight ?? H)) / H) + 14) : 0;
 
   return (
     <div ref={ref} style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-      <svg viewBox="0 0 600 200" preserveAspectRatio="none" style={{ width: "100%", height: 200, display: "block", overflow: "visible" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: H, display: "block", overflow: "visible" }}>
         <defs>
           <linearGradient id="fvBudget" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.18" />
             <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        {chart.grid.map((g, i) => (
+        {grid.map((g, i) => (
           <g key={i}>
-            <line x1="56" x2="600" y1={g.y} y2={g.y} stroke="var(--separator)" strokeWidth="1" />
-            <text x="50" y={g.ty} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
+            <line x1={padL} x2={W} y1={g.y} y2={g.y} stroke="var(--separator)" strokeWidth="1" />
+            <text x={padL - 6} y={g.y + 3.5} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
           </g>
         ))}
-        <path key={"a" + chart.area} className="fv-fade-in" d={chart.area} fill="url(#fvBudget)" />
+        {area && <path key={"a" + area} className="fv-fade-in" d={area} fill="url(#fvBudget)" />}
         {/* 今天分界线 */}
         {boundary > 0 && <line x1={bx} x2={bx} y1={16} y2={170} stroke="var(--separator-strong)" strokeWidth="1" />}
         {boundary > 0 && <text x={bx} y={13} textAnchor="middle" fontSize="10" fill="var(--text-tertiary)">今天</text>}
-        {/* 真实段（实线绿）+ 预测段（虚线蓝） */}
-        {realPts.length > 1 && <path key={"r" + pathOf(realPts)} className="fv-draw-line" pathLength={1} d={pathOf(realPts)} fill="none" stroke="var(--green)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />}
-        {predPts.length > 1 && <path key={"p" + pathOf(predPts)} className="fv-fade-in" d={pathOf(predPts)} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeDasharray="5 4" strokeLinecap="round" strokeLinejoin="round" />}
-        {hp && <line x1={hp.x} x2={hp.x} y1={16} y2={170} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />}
-        {hp && <circle cx={hp.x} cy={hp.y} r="4.5" fill={isReal ? "var(--green)" : "var(--accent)"} stroke="var(--bg-card)" strokeWidth="2.5" />}
+        {/* 真实段（实线绿）+ 预测（虚线蓝，历史对比 + 未来投影都在内） */}
+        {boundary > 0 && <path key={"r" + realPath} className="fv-draw-line" pathLength={1} d={realPath} fill="none" stroke="var(--green)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />}
+        {predPath && <path key={"p" + predPath} className="fv-fade-in" d={predPath} fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeDasharray="5 4" strokeLinecap="round" strokeLinejoin="round" />}
+        {hp && hp.real != null && <circle cx={hx} cy={Y(hp.real)} r="4.5" fill="var(--green)" stroke="var(--bg-card)" strokeWidth="2.5" />}
+        {hp && hp.pred != null && <circle cx={hx} cy={Y(hp.pred)} r="4.5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2.5" />}
+        {hover != null && <line x1={hx} x2={hx} y1={16} y2={170} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />}
         {xLabels.map((x, i) => (
           <text key={i} x={x.x} y="198" textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{x.label}</text>
         ))}
       </svg>
-      {hover && hp && (
+      {hp && (
         <div style={{ position: "absolute", left: tipLeft, top: tipTop, transform: "translateX(-50%)", pointerEvents: "none", background: "var(--bg-card)", border: "0.5px solid var(--separator-strong)", boxShadow: "var(--card-shadow)", borderRadius: 8, padding: "6px 10px", whiteSpace: "nowrap", zIndex: 2 }}>
-          <div style={{ fontSize: 10.5, color: isReal ? "var(--green)" : "var(--accent)", fontWeight: 600 }}>{series[hover.i].label} · {isReal ? "真实" : "预测"}</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{fmt(series[hover.i].v)}</div>
+          <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", fontWeight: 600, marginBottom: 2 }}>{hp.label}</div>
+          {hp.real != null && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--green)", fontVariantNumeric: "tabular-nums" }}>真实 {fmt(hp.real)}</div>}
+          {hp.pred != null && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--accent)", fontVariantNumeric: "tabular-nums" }}>预测{hp.real != null ? "(当时)" : ""} {fmt(hp.pred)}</div>}
         </div>
       )}
     </div>

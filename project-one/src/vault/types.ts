@@ -74,6 +74,15 @@ export interface MarketConfig {
   watch: WatchItem[];
 }
 
+/** 某个月份的预测净值快照。该月还没有真实记录时，每次都会用最新假设覆写；
+ *  一旦这个月有了真实记录，就不再被写入——最后一次的值被"冻结"下来，
+ *  留作虚线，跟后来的真实值对比参考。 */
+export interface ForecastPoint {
+  forMonth: string;   // "YY/MM"，预测目标月份（与图表月份标签同格式）
+  predictedNet: number;
+  updatedAt: number;
+}
+
 /** 解锁后内存中的完整金库数据 */
 export interface VaultData {
   dataset: Dataset; // 资金账户与历史快照
@@ -88,6 +97,8 @@ export interface VaultData {
   expenses?: ExpenseItem[];
   /** 财经行情：自选清单与 API key */
   markets?: MarketConfig;
+  /** 资产预测的历史快照（按月冻结），用于预测 vs 现实的对比虚线 */
+  forecastHistory?: ForecastPoint[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
