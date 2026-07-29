@@ -213,7 +213,7 @@ export interface DietEntry {
 }
 export interface HealthData { bp: BPReading[]; lipids: LipidReading[]; diet: DietEntry[] }
 
-// ── 旅游计划 · 世界景点清单 + 示意地图 ─────────────────────────────
+// ── 旅游计划 · 世界景点清单 + 真实地图 + 行程/预算 ───────────────────
 export type TravelStatus = "wishlist" | "planned" | "done";
 export interface TravelSpot {
   id: string;
@@ -227,7 +227,32 @@ export interface TravelSpot {
   note?: string;
   createdAt: number;
 }
-export interface TravelData { spots: TravelSpot[] }
+/** 行程里的一站：引用某个景点，可选给个计划到访日期，按数组顺序就是游览顺序。 */
+export interface TripStop {
+  spotId: string;
+  date?: string; // YYYY-MM-DD
+}
+/** 一趟行程：把想去的景点串起来、定个时间范围，配一个预算。 */
+export interface Trip {
+  id: string;
+  name: string;         // "日本关西 7 日游"
+  startDate?: string;
+  endDate?: string;
+  stops: TripStop[];    // 按顺序 = 游览顺序
+  budget?: number;      // 这趟行程的预算
+  note?: string;
+  createdAt: number;
+}
+/** 一笔行程花费。只记开销，跟预算对比。 */
+export interface TripExpense {
+  id: string;
+  tripId: string;
+  amount: number;
+  label: string;
+  date?: string; // YYYY-MM-DD
+  createdAt: number;
+}
+export interface TravelData { spots: TravelSpot[]; trips?: Trip[]; tripExpenses?: TripExpense[] }
 
 // ── 看球 · 世界杯淘汰赛数据模型（大小球 / 波胆 统计） ─────────────
 export interface KnockoutMatch {
