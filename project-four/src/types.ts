@@ -8,6 +8,7 @@ export interface DevTask {
   status: TaskStatus;
   priority: TaskPriority;
   due?: string;        // YYYY-MM-DD
+  dueTime?: string;    // HH:MM，可选的到期具体时间（不填就只到"天"）
   tags?: string[];
   note?: string;
   createdAt: number;

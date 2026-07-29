@@ -11,7 +11,6 @@ import Life from "./screens/dev/Life";
 import Secrets from "./screens/dev/Secrets";
 import Accounts from "./screens/dev/Accounts";
 import Company from "./screens/dev/Company";
-import Sports from "./screens/dev/Sports";
 import Spend from "./screens/dev/Spend";
 import VehicleScreen from "./screens/dev/Vehicle";
 import Fitness from "./screens/dev/Fitness";
@@ -22,10 +21,10 @@ import Calendar from "./screens/dev/Calendar";
 import CommandPalette from "./screens/dev/CommandPalette";
 import { IconTerminal, IconSearch } from "./icons";
 
-type View = "overview" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "accounts" | "company" | "sports" | "spend" | "vehicle" | "fitness" | "health" | "travel" | "secrets" | "disk" | "settings";
+type View = "overview" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "accounts" | "company" | "spend" | "vehicle" | "fitness" | "health" | "travel" | "secrets" | "disk" | "settings";
 const TABS: { v: View; l: string }[] = [
   { v: "overview", l: "概览" }, { v: "tasks", l: "任务" }, { v: "calendar", l: "日程" }, { v: "notes", l: "笔记" },
-  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "accounts", l: "账户" }, { v: "company", l: "公司" }, { v: "sports", l: "看球" }, { v: "spend", l: "记账" },
+  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "accounts", l: "账户" }, { v: "company", l: "公司" }, { v: "spend", l: "记账" },
   { v: "vehicle", l: "爱车" }, { v: "fitness", l: "健身" }, { v: "health", l: "健康" }, { v: "travel", l: "旅游" },
   { v: "secrets", l: "密钥" }, { v: "disk", l: "磁盘" }, { v: "settings", l: "设置" },
 ];
@@ -80,7 +79,6 @@ export default function App() {
           {view === "life" && <Life data={data} mut={update} />}
           {view === "accounts" && <Accounts data={data} mut={update} />}
           {view === "company" && <Company data={data} mut={update} />}
-          {view === "sports" && <Sports data={data} mut={update} />}
           {view === "spend" && <Spend data={data} mut={update} />}
           {view === "vehicle" && <VehicleScreen data={data} mut={update} />}
           {view === "fitness" && <Fitness data={data} mut={update} />}

@@ -28,6 +28,8 @@ export function fmtDue(due?: string): { text: string; tone: "over" | "today" | "
   if (diff <= 6) return { text: `${diff} 天后`, tone: "soon" };
   return { text: `${d.getMonth() + 1}月${d.getDate()}日`, tone: "none" };
 }
+/** 到期文字后面要不要缀上具体时间，如"今天到期 · 15:00"——没设时间就不显示。 */
+export const dueTimeSuffix = (t: { dueTime?: string }) => (t.dueTime ? ` · ${t.dueTime}` : "");
 export const dueColor = (tone: string) =>
   tone === "over" ? "var(--red)" : tone === "today" ? "var(--orange)" : tone === "soon" ? "var(--accent)" : "var(--text-tertiary)";
 

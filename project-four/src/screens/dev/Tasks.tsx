@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import type { DevData, DevTask, TaskPriority } from "../../types";
 import { Btn, TextField, Select, card } from "../../ui";
 import { IconPlus, IconTrash, IconBack, IconArrowRight } from "../../icons";
-import { PRIORITY, STATUS, STATUS_ORDER, fmtDue, dueColor, Tag, IconBtn, uid } from "./shared";
+import { PRIORITY, STATUS, STATUS_ORDER, fmtDue, dueTimeSuffix, dueColor, Tag, IconBtn, uid } from "./shared";
 
 type Mut = (fn: (d: DevData) => void) => void;
 
@@ -10,13 +10,14 @@ export default function Tasks({ data, mut }: { data: DevData; mut: Mut }) {
   const [title, setTitle] = useState("");
   const [prio, setPrio] = useState<TaskPriority>("med");
   const [due, setDue] = useState("");
+  const [dueTime, setDueTime] = useState("");
 
   const add = () => {
     const t = title.trim();
     if (!t) return;
-    const task: DevTask = { id: uid("t"), title: t, status: "todo", priority: prio, due: due || undefined, createdAt: Date.now(), updatedAt: Date.now() };
+    const task: DevTask = { id: uid("t"), title: t, status: "todo", priority: prio, due: due || undefined, dueTime: due && dueTime ? dueTime : undefined, createdAt: Date.now(), updatedAt: Date.now() };
     mut((d) => { d.tasks.unshift(task); });
-    setTitle(""); setDue("");
+    setTitle(""); setDue(""); setDueTime("");
   };
   const move = (id: string, dir: -1 | 1) =>
     mut((d) => { const t = d.tasks.find((x) => x.id === id); if (!t) return; const i = STATUS_ORDER.indexOf(t.status) + dir; if (i >= 0 && i < STATUS_ORDER.length) { t.status = STATUS_ORDER[i]; t.updatedAt = Date.now(); } });
@@ -28,6 +29,7 @@ export default function Tasks({ data, mut }: { data: DevData; mut: Mut }) {
         <TextField value={title} onChange={(e) => setTitle(e.target.value)} placeholder="新建任务…" onKeyDown={(e) => { if (e.key === "Enter") add(); }} style={{ flex: 1, minWidth: 160 }} />
         <div style={{ width: 100 }}><Select value={prio} onChange={(e) => setPrio(e.target.value as TaskPriority)} options={[{ value: "high", label: "高优先" }, { value: "med", label: "中优先" }, { value: "low", label: "低优先" }]} /></div>
         <TextField type="date" value={due} onChange={(e) => setDue(e.target.value)} style={{ width: 150 }} />
+        {due && <TextField type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} title="到期具体时间（可选）" style={{ width: 110 }} />}
         <Btn onClick={add}><IconPlus size={15} />添加</Btn>
       </div>
 
@@ -66,7 +68,7 @@ function TaskCard({ t, onMove, onDel }: { t: DevTask; onMove: (id: string, d: -1
       </div>
       {(due.text || (t.tags && t.tags.length > 0)) && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", margin: "8px 0 0 16px" }}>
-          {due.text && !done && <span style={{ fontSize: 11, fontWeight: 600, color: dueColor(due.tone) }}>{due.text}</span>}
+          {due.text && !done && <span style={{ fontSize: 11, fontWeight: 600, color: dueColor(due.tone) }}>{due.text}{dueTimeSuffix(t)}</span>}
           {t.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
         </div>
       )}
