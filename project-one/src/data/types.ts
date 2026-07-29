@@ -31,6 +31,14 @@ export interface Snapshot {
   touched?: string[];
 }
 
+/** 退休消耗预测：手填"退休日期"+"从退休到现在一共花了多少"，据此倒推月均消耗速度，
+ *  往后画一条平滑的下降曲线，预测余额降到 0 大概是什么时候。 */
+export interface RetirementPlan {
+  date?: string;              // YYYY-MM-DD 退休日期
+  spentSinceRetire?: number;  // 从退休到现在，一共消耗了多少（正数）
+  withInterest?: boolean;     // 是否叠加账户自身利率抵消一部分消耗
+}
+
 export interface Dataset {
   vaultName: string;
   userName: string;
@@ -41,4 +49,6 @@ export interface Dataset {
   real?: boolean;
   /** 「每月变化量」备注：YYYY-MM -> 该月主要原因 */
   monthNotes?: Record<string, string>;
+  /** 退休消耗预测的设定 */
+  retirement?: RetirementPlan;
 }

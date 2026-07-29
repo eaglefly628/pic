@@ -5,8 +5,8 @@ import { fmt } from "../lib/format";
 import { useCountUp, rise } from "../lib/anim";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
 
-export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAccount }: {
-  view: View; onAddSnapshot: () => void; onEditAccount: () => void; onDeleteAccount: () => void;
+export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAccount, onDeleteSnapshot }: {
+  view: View; onAddSnapshot: () => void; onEditAccount: () => void; onDeleteAccount: () => void; onDeleteSnapshot: (date: string) => void;
 }) {
   const d = view.detail;
   const balAnim = useCountUp(d.balanceRaw);
@@ -92,14 +92,20 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
           <span style={{ flex: 1, textAlign: "right" }}>余额</span>
           <span style={{ width: 130, textAlign: "right" }}>较上次</span>
           <span style={{ width: 80, textAlign: "right" }}>来源</span>
+          <span style={{ width: 32 }} />
         </div>
         {d.snapshots.map((s, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", padding: "12px 22px", borderTop: "0.5px solid var(--separator)", fontSize: 13 }}>
+          <div key={i} className="fv-row" style={{ display: "flex", alignItems: "center", padding: "12px 22px", borderTop: "0.5px solid var(--separator)", fontSize: 13 }}>
             <span style={{ width: 120, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{s.date}</span>
             <span style={{ flex: 1, textAlign: "right", fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{s.amount}</span>
             <span style={{ width: 130, textAlign: "right", fontWeight: 600, color: s.changeColor, fontVariantNumeric: "tabular-nums" }}>{s.change}</span>
             <span style={{ width: 80, textAlign: "right" }}>
               <span style={{ fontSize: 10.5, color: "var(--text-tertiary)", border: "0.5px solid var(--separator-strong)", borderRadius: 5, padding: "1px 6px" }}>{s.source}</span>
+            </span>
+            <span style={{ width: 32, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => { if (confirm(`删除 ${s.date} 这条快照记录？`)) onDeleteSnapshot(s.rawDate); }} title="删除这条快照" className="fv-icnbtn" style={{ width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, background: "transparent", border: "none", cursor: "pointer" }}>
+                <IconTrash size={13} stroke="var(--text-tertiary)" />
+              </button>
             </span>
           </div>
         ))}

@@ -346,6 +346,7 @@ export function buildView(ds: Dataset, ui: UIState) {
       const realIdx = ds2.length - 1 - idx;
       const change = realIdx > 0 ? ds2[realIdx].v - ds2[realIdx - 1].v : null;
       return {
+        rawDate: p.date, // 原始 ISO 日期，删除这条快照时要用
         date: p.date.replace(/-/g, " / "),
         amount: fmt(p.v),
         change: change == null ? "—" : fmtSigned(change),

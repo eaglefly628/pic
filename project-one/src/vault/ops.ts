@@ -56,6 +56,18 @@ export function addSnapshot(ds: Dataset, accId: string, date: string, amount: nu
   snaps.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/** 删除某账户在指定日期的一条快照记录（比如手滑记错了、想撤销）。只删这个账户在
+ *  这一期的数据，不影响同一期里结转的其它账户；如果这一期删完后不再有任何账户的
+ *  数据了，这条快照本身也顺手清掉，不留空壳。 */
+export function deleteSnapshotEntry(ds: Dataset, accId: string, date: string) {
+  const snap = ds.snapshots.find((s) => s.date === date);
+  if (!snap) return;
+  delete snap.balances[accId];
+  if (snap.touched) snap.touched = snap.touched.filter((id) => id !== accId);
+  const hasAny = Object.values(snap.balances).some((v) => v != null);
+  if (!hasAny) ds.snapshots = ds.snapshots.filter((s) => s !== snap);
+}
+
 /** 空的「私房钱」独立数据集 */
 export function emptyDataset(name: string, userName: string): Dataset {
   return { vaultName: name, userName, real: false, accounts: [], snapshots: [] };

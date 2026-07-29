@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { buildView, type RangeKey } from "../lib/compute";
-import { addAccount, addSnapshot, deleteAccount, updateAccount } from "../vault/ops";
+import { addAccount, addSnapshot, deleteAccount, deleteSnapshotEntry, updateAccount } from "../vault/ops";
 import { hasSecret, createSecret, unlockSecret, saveSecret, changeSecretPassword, clearSecret } from "../vault/secretStore";
 import { passwordStrength, type UnlockedKeys } from "../lib/crypto";
 import type { Dataset } from "../data/types";
@@ -116,6 +116,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
                 onAddSnapshot={() => setSnapEditor(true)}
                 onEditAccount={() => setAccEditor({ open: true, editing: true })}
                 onDeleteAccount={() => { if (currentAcc && confirm(`删除「${currentAcc.name}」及其全部快照？`)) { mutate((d) => deleteAccount(d, currentAcc.id)); setSub("accounts"); } }}
+                onDeleteSnapshot={(date) => { if (currentAcc) mutate((d) => deleteSnapshotEntry(d, currentAcc.id, date)); }}
               />
             )}
           </div>

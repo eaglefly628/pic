@@ -3,7 +3,7 @@ import { useVault } from "./vault/VaultContext";
 import { useTheme } from "./lib/theme";
 import { buildView, type RangeKey } from "./lib/compute";
 import type { VaultData } from "./vault/types";
-import { addAccount, addSnapshot, deleteAccount, updateAccount } from "./vault/ops";
+import { addAccount, addSnapshot, deleteAccount, deleteSnapshotEntry, updateAccount } from "./vault/ops";
 import {
   IconShield, IconDashboard, IconCard, IconLock, IconUser, IconImport, IconGear, IconChevron, IconSearch, IconKey,
   IconPercent, IconWallet, IconChartUp, IconMarkets,
@@ -178,6 +178,7 @@ function Shell({ data }: { data: VaultData }) {
                     setScreen("accounts");
                   }
                 }}
+                onDeleteSnapshot={(date) => { if (currentAcc) update((d) => deleteSnapshotEntry(d.dataset, currentAcc.id, date)); }}
               />
             )}
             {screen === "passwords" && <Passwords />}
