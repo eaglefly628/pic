@@ -6,7 +6,7 @@ import { hasSecret, createSecret, unlockSecret, saveSecret, changeSecretPassword
 import { passwordStrength, type UnlockedKeys } from "../lib/crypto";
 import type { Dataset } from "../data/types";
 import Dashboard from "./Dashboard";
-import Accounts from "./Accounts";
+import Accounts, { type AccMode } from "./Accounts";
 import Detail from "./Detail";
 import { InterestView } from "./Interest";
 import { AccountEditor, SnapshotEditor } from "./editors";
@@ -29,6 +29,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
   const [sub, setSub] = useState<Sub>("dashboard");
   const [selectedId, setSelectedId] = useState("");
   const [range, setRange] = useState<RangeKey>("1y");
+  const [accMode, setAccMode] = useState<AccMode>("group");
   const [accEditor, setAccEditor] = useState<{ open: boolean; editing: boolean }>({ open: false, editing: false });
   const [snapEditor, setSnapEditor] = useState(false);
   const [cpwOpen, setCpwOpen] = useState(false);
@@ -107,7 +108,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
         <>
           <div className="fv-scroll" style={{ flex: 1, overflowY: "auto" }}>
             {sub === "dashboard" && <Dashboard view={view} onOpen={open} range={range} setRange={setRange} />}
-            {sub === "accounts" && <Accounts view={view} onOpen={open} onAddAccount={() => setAccEditor({ open: true, editing: false })} />}
+            {sub === "accounts" && <Accounts view={view} mode={accMode} onModeChange={setAccMode} onOpen={open} onAddAccount={() => setAccEditor({ open: true, editing: false })} />}
             {sub === "interest" && <InterestView dataset={ds} onSetRate={(id, dec) => mutate((d) => { const a = d.accounts.find((x) => x.id === id); if (a) a.rate = dec; })} />}
             {sub === "detail" && (
               <Detail

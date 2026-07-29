@@ -311,6 +311,13 @@ export function buildView(ds: Dataset, ui: UIState) {
 
   // ---- 全部账户（按金额排序，不分组）----
   const flatAccounts = accs.slice().sort(byAbs).map(mkAcc);
+  // ---- 全部账户（按最后更新时间排序，最近的在前；没记录过的排最后）----
+  const byUpdated = [...flatAccounts].sort((a, b) => {
+    if (a.updated === "—" && b.updated === "—") return 0;
+    if (a.updated === "—") return 1;
+    if (b.updated === "—") return -1;
+    return b.updated.localeCompare(a.updated);
+  });
 
   // ---- 账户详情 ----
   const da = accs.find((a) => a.id === ui.selectedId) || accs[0] ||
@@ -374,6 +381,7 @@ export function buildView(ds: Dataset, ui: UIState) {
     recent,
     groups,
     flatAccounts,
+    byUpdated,
     monthlyChanges,
     detail: {
       id: da.id,

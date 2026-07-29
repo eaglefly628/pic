@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { View } from "../lib/compute";
 import { Btn, card, Segmented } from "../ui";
 import { fmt } from "../lib/format";
@@ -6,13 +5,17 @@ import { useCountUp, rise } from "../lib/anim";
 import { IconChevron, IconPlus } from "../icons";
 
 type AccVM = View["groups"][number]["accounts"][number];
+export type AccMode = "group" | "flat" | "updated";
 
-export default function Accounts({ view, onOpen, onAddAccount }: { view: View; onOpen: (id: string) => void; onAddAccount: () => void }) {
+// mode 由外层(Shell)托管、当 props 传进来——账户列表进详情页再退出时组件会被卸载重挂载，
+// 排序方式如果放在这个组件自己的 state 里就会跟着丢、变回默认"按分类"，这里改成受控。
+export default function Accounts({ view, mode, onModeChange, onOpen, onAddAccount }: {
+  view: View; mode: AccMode; onModeChange: (m: AccMode) => void; onOpen: (id: string) => void; onAddAccount: () => void;
+}) {
   const t = view.totals;
   const netA = useCountUp(t.netRaw);
   const aA = useCountUp(t.assetsRaw);
   const lA = useCountUp(t.liabRaw);
-  const [mode, setMode] = useState<"group" | "flat">("group");
 
   return (
     <div style={{ padding: "24px 32px 40px" }}>
@@ -36,8 +39,8 @@ export default function Accounts({ view, onOpen, onAddAccount }: { view: View; o
       </div>
 
       <div className="fv-rise" style={{ ...rise(70), display: "flex", alignItems: "center", marginBottom: 16 }}>
-        <Segmented value={mode} onChange={(m) => setMode(m as "group" | "flat")} style={{ width: 200 }}
-          options={[{ value: "group", label: "按分类" }, { value: "flat", label: "全部排序" }]} />
+        <Segmented value={mode} onChange={(m) => onModeChange(m as AccMode)} style={{ width: 300 }}
+          options={[{ value: "group", label: "按分类" }, { value: "flat", label: "全部排序" }, { value: "updated", label: "按更新时间" }]} />
       </div>
 
       {mode === "group" ? (
@@ -54,7 +57,7 @@ export default function Accounts({ view, onOpen, onAddAccount }: { view: View; o
         ))
       ) : (
         <div className="fv-rise" style={{ ...rise(140), ...card, overflow: "hidden" }}>
-          {view.flatAccounts.map((acc) => <AccountRow key={acc.id} acc={acc} onOpen={onOpen} showCat />)}
+          {(mode === "flat" ? view.flatAccounts : view.byUpdated).map((acc) => <AccountRow key={acc.id} acc={acc} onOpen={onOpen} showCat />)}
         </div>
       )}
     </div>

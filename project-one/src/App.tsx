@@ -10,7 +10,7 @@ import {
 } from "./icons";
 import Unlock from "./screens/Unlock";
 import Dashboard from "./screens/Dashboard";
-import Accounts from "./screens/Accounts";
+import Accounts, { type AccMode } from "./screens/Accounts";
 import Detail from "./screens/Detail";
 import Passwords from "./screens/Passwords";
 import Info from "./screens/Info";
@@ -58,6 +58,7 @@ function Shell({ data }: { data: VaultData }) {
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [selectedId, setSelectedId] = useState<string>(data.dataset.accounts[0]?.id ?? "");
   const [range, setRange] = useState<RangeKey>("1y");
+  const [accMode, setAccMode] = useState<AccMode>("group"); // 提到这一层，进详情页再退出不会丢排序方式
   const navRef = useRef<HTMLElement>(null);
   const [navInd, setNavInd] = useState<{ top: number; height: number; left: number; width: number } | null>(null);
   useLayoutEffect(() => {
@@ -165,7 +166,7 @@ function Shell({ data }: { data: VaultData }) {
 
           <div className="fv-scroll" style={{ flex: 1, overflowY: "auto" }}>
             {screen === "dashboard" && <Dashboard view={view} onOpen={open} range={range} setRange={setRange} />}
-            {screen === "accounts" && <Accounts view={view} onOpen={open} onAddAccount={() => setAccEditor({ open: true, editing: false })} />}
+            {screen === "accounts" && <Accounts view={view} mode={accMode} onModeChange={setAccMode} onOpen={open} onAddAccount={() => setAccEditor({ open: true, editing: false })} />}
             {screen === "detail" && (
               <Detail
                 view={view}
