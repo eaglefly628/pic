@@ -5,6 +5,21 @@ let _n = 0;
 const id = (p: string) => p + "_" + (Date.now() + _n++).toString(36);
 const f = (label: string, type: FieldDef["type"], extra: Partial<FieldDef> = {}): FieldDef => ({ id: id("f"), label, type, ...extra });
 
+/** 独立导出：收货地址集合的字段格式（新用户随预置集合一起给；老用户由 Life.tsx 补建）。 */
+export function addressCollection(): CollectionDef {
+  const now = Date.now();
+  return {
+    id: id("c"), name: "收货地址", emoji: "📍", color: "#FF375F", createdAt: now, updatedAt: now,
+    fields: [
+      f("收件人", "text"),
+      f("电话", "phone"),
+      f("地址", "location"),
+      f("标签", "select", { options: ["家", "公司", "学校", "父母家", "其它"] }),
+      f("默认地址", "bool"),
+    ],
+  };
+}
+
 export function presetCollections(): { collections: CollectionDef[]; items: LifeItem[] } {
   const now = Date.now();
   const cols: CollectionDef[] = [];
@@ -16,6 +31,8 @@ export function presetCollections(): { collections: CollectionDef[]; items: Life
   const add = (c: CollectionDef, title: string, values: Record<string, unknown>, extra: Partial<LifeItem> = {}) => {
     items.push({ id: id("i"), collectionId: c.id, title, values: values as LifeItem["values"], createdAt: now, updatedAt: now, ...extra });
   };
+
+  cols.push(addressCollection());
 
   // 🍜 餐厅
   const fCuisine = f("菜系", "select", { options: ["火锅", "川菜", "粤菜", "日料", "西餐", "快餐", "烧烤", "其它"] });
