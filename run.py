@@ -397,17 +397,28 @@ def disk_ls(path):
         if os.path.dirname(full) != rp:
             continue
         items.append({"path": full, "label": os.path.basename(full), "bytes": b, "isDir": os.path.isdir(full) and not os.path.islink(full)})
-    if not items and stderr.strip():
-        return {"ok": False, "error": "读取受限（可能需要在 系统设置→隐私→完全磁盘访问 授权）"}
     # 从 stderr 里挑出具体是哪些文件夹被拒绝的（macOS du: "du: /x/y: Operation not permitted"），
-    # 给前端一个能直接点名道姓的列表，而不是一句含糊的"有权限问题"。
+    # 给前端一个能直接点名道姓的列表，而不是一句含糊的"有权限问题"。这一步要在"items 是否为空"
+    # 判断之前做——因为「这一层整个都读不到」（比如直接点进桌面/文稿）时 items 会是空的，
+    # 以前会在下面提前 return 一个干巴巴的错误字符串，白白扔掉这里本能给出的具体文件夹名单。
     denied_paths = []
     for line in stderr.splitlines():
         m = re.match(r"^du:\s*(?:cannot read directory\s*)?'?([^:']+)'?\s*:?\s*(Operation not permitted|Permission denied)", line.strip())
         if m:
             p = m.group(1).strip().rstrip(":")
-            if p and p not in denied_paths:
-                denied_paths.append(os.path.basename(p) or p)
+            if not p:
+                continue
+            label = "这一层本身" if p == rp else (os.path.basename(p) or p)
+            if label not in denied_paths:
+                denied_paths.append(label)
+    if not items and stderr.strip():
+        if denied_paths:
+            # 整层都读不到，但至少能点名道姓——照样走"成功但受限"的返回形状，
+            # 让前端画那条可操作的权限横幅，而不是丢一句用户没法照做的错误文案。
+            return {"ok": True, "path": rp, "parent": os.path.dirname(rp), "home": HOME,
+                    "items": [], "total": 0, "scanned": 0, "disk": _disk_df(),
+                    "partial": partial, "denied": True, "deniedPaths": denied_paths[:8]}
+        return {"ok": False, "error": "读取受限（可能需要在 系统设置→隐私→完全磁盘访问 授权），且没能定位到具体是哪个文件夹"}
     items.sort(key=lambda x: -x["bytes"])
     return {"ok": True, "path": rp, "parent": os.path.dirname(rp), "home": HOME,
             "items": items, "total": total or sum(i["bytes"] for i in items),

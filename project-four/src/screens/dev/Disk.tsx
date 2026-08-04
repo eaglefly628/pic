@@ -187,7 +187,7 @@ export default function Disk() {
         )}
 
         {exErr && <div style={{ fontSize: 12.5, color: "var(--orange)", marginTop: 8 }}>{exErr}</div>}
-        {entries && entries.length === 0 && !exErr && <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", padding: "10px 0" }}>这个文件夹是空的。</div>}
+        {entries && entries.length === 0 && !exErr && !denied && <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", padding: "10px 0" }}>这个文件夹是空的。</div>}
 
         {entries && entries.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
