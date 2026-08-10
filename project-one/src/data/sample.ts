@@ -6,16 +6,16 @@ import type { AccountMeta, Dataset, Snapshot } from "./types";
 type SampleAcc = AccountMeta & { comp: string; latest: number };
 
 const ACCS: SampleAcc[] = [
-  { id: "cmb",    name: "招商银行储蓄卡", cat: "liquid", type: "储蓄/活期", comp: "现金及银行", institution: "招商银行", owner: "爸爸", color: "#FF2D55", latest: 128500 },
-  { id: "icbc",   name: "工商银行储蓄卡", cat: "liquid", type: "储蓄/活期", comp: "现金及银行", institution: "工商银行", owner: "妈妈", color: "#FF6482", latest: 86200 },
-  { id: "wechat", name: "微信零钱",       cat: "liquid", type: "现金/支付", comp: "现金及银行", institution: "微信支付", owner: "妈妈", color: "#34C759", latest: 8750 },
-  { id: "cash",   name: "家庭现金",       cat: "liquid", type: "现金",      comp: "现金及银行", institution: "—",        owner: "全家", color: "#8E8E93", latest: 12000 },
-  { id: "stock",  name: "招商证券",       cat: "invest", type: "证券/股票", comp: "股票",       institution: "招商证券", owner: "爸爸", color: "#30D158", latest: 234000 },
-  { id: "bond",   name: "国债 · 三年定期", cat: "invest", type: "定期",     comp: "理财/固收", institution: "中国银行", owner: "妈妈", color: "#FF9500", latest: 200000 },
-  { id: "fund",   name: "华夏基金定投",   cat: "invest", type: "基金",      comp: "基金",       institution: "华夏基金", owner: "爸爸", color: "#5E5CE6", latest: 156800 },
-  { id: "alipay", name: "支付宝 · 余额宝", cat: "invest", type: "理财",     comp: "理财/固收", institution: "支付宝",   owner: "爸爸", color: "#30B0C7", latest: 45300 },
-  { id: "house",  name: "自住房产",       cat: "estate", type: "房产",      comp: "房产",       institution: "—",        owner: "全家", color: "#007AFF", latest: 3200000 },
-  { id: "loan",   name: "住房贷款",       cat: "debt",   type: "负债/房贷", comp: "负债",       institution: "招商银行", owner: "全家", color: "#FF3B30", latest: -1450000 },
+  { id: "cmb",    name: "招商银行储蓄卡", cat: "liquid", type: "储蓄/活期", comp: "现金及银行", institution: "招商银行", owner: "爸爸", color: "#ae431e", latest: 128500 },
+  { id: "icbc",   name: "工商银行储蓄卡", cat: "liquid", type: "储蓄/活期", comp: "现金及银行", institution: "工商银行", owner: "妈妈", color: "#c2603a", latest: 86200 },
+  { id: "wechat", name: "微信零钱",       cat: "liquid", type: "现金/支付", comp: "现金及银行", institution: "微信支付", owner: "妈妈", color: "#008a62", latest: 8750 },
+  { id: "cash",   name: "家庭现金",       cat: "liquid", type: "现金",      comp: "现金及银行", institution: "—",        owner: "全家", color: "#8a7a6e", latest: 12000 },
+  { id: "stock",  name: "招商证券",       cat: "invest", type: "证券/股票", comp: "股票",       institution: "招商证券", owner: "爸爸", color: "#7d8a1e", latest: 234000 },
+  { id: "bond",   name: "国债 · 三年定期", cat: "invest", type: "定期",     comp: "理财/固收", institution: "中国银行", owner: "妈妈", color: "#be850c", latest: 200000 },
+  { id: "fund",   name: "华夏基金定投",   cat: "invest", type: "基金",      comp: "基金",       institution: "华夏基金", owner: "爸爸", color: "#a964ba", latest: 156800 },
+  { id: "alipay", name: "支付宝 · 余额宝", cat: "invest", type: "理财",     comp: "理财/固收", institution: "支付宝",   owner: "爸爸", color: "#0f7f74", latest: 45300 },
+  { id: "house",  name: "自住房产",       cat: "estate", type: "房产",      comp: "房产",       institution: "—",        owner: "全家", color: "#005b9b", latest: 3200000 },
+  { id: "loan",   name: "住房贷款",       cat: "debt",   type: "负债/房贷", comp: "负债",       institution: "招商银行", owner: "全家", color: "#a03a63", latest: -1450000 },
 ];
 
 // 设计稿的 12 个月净值曲线，用于按比例反推每个账户的历史余额

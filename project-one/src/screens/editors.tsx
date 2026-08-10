@@ -12,7 +12,12 @@ const CATS: { value: Category; label: string }[] = [
 ];
 const COMPS = ["现金及银行", "股票", "理财/固收", "基金", "黄金", "房产", "养老金", "公积金", "其他固定资产", "负债", "其他"].map((v) => ({ value: v, label: v }));
 const OWNERS = ["本人", "配偶", "全家", "父亲", "母亲", "孩子"];
-const PALETTE = ["#FF2D55", "#FF6482", "#FF9500", "#FFD60A", "#34C759", "#30D158", "#30B0C7", "#64D2FF", "#007AFF", "#5E5CE6", "#BF5AF2", "#8E8E93"];
+// 账户配色盘：给人手动挑的，不是编码用的分类色，所以不跑 CVD 全对校验。
+// 取暖象牙 register（比原 iOS 色板更闷一档），前 5 个与 --cat-1..5 同源，挑到就跟环形图一致。
+const PALETTE = [
+  "#ae431e", "#c2603a", "#be850c", "#9a7b16", "#7d8a1e", "#008a62",
+  "#0f7f74", "#005b9b", "#5e7fb5", "#a964ba", "#a03a63", "#8a7a6e",
+];
 
 // 宽松解析金额：整数、小数、负数均可（自动去掉 ¥、逗号、空格等）
 function parseNum(s: string): number {

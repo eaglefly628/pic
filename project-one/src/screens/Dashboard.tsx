@@ -14,13 +14,28 @@ function greetingWord() {
   if (h < 18) return "下午好";
   return "晚上好";
 }
-function greetingEmoji() {
+// 问候语旁的时段标记。与 icons.tsx 同规格：24×24、细线、currentColor、圆头圆角接。
+function GreetingMark({ size = 19 }: { size?: number }) {
   const h = new Date().getHours();
-  if (h < 6) return "🌙";
-  if (h < 11) return "🌅";
-  if (h < 14) return "☀️";
-  if (h < 18) return "⛅";
-  return "🌆";
+  const base = {
+    width: size, height: size, viewBox: "0 0 24 24", fill: "none",
+    stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const,
+  };
+  if (h < 6) return (                                    // 夜深了：月牙
+    <svg {...base}><path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.6 8.6 0 1 0 10.2 10.2Z" /></svg>
+  );
+  if (h < 11) return (                                   // 早上好：日出
+    <svg {...base}><path d="M12 4v2.4M5.6 7.6l1.7 1.7M18.4 7.6l-1.7 1.7M3 16h3M18 16h3" /><path d="M8 16a4 4 0 0 1 8 0" /><path d="M2.5 20h19" /></svg>
+  );
+  if (h < 14) return (                                   // 中午好：太阳
+    <svg {...base}><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></svg>
+  );
+  if (h < 18) return (                                   // 下午好：多云
+    <svg {...base}><circle cx="8.5" cy="8.5" r="3" /><path d="M8.5 2.8v1.4M4.2 4.2l1 1M2.8 8.5h1.4M12.8 4.2l-1 1" /><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7 4.6 4.6 0 0 0-8.8 1.2A3 3 0 0 0 9 19Z" /></svg>
+  );
+  return (                                               // 晚上好：日落
+    <svg {...base}><path d="M12 3.5v2.4M5.6 8.6l1.7 1.7M18.4 8.6l-1.7 1.7M3 17h3M18 17h3" /><path d="M8 17a4 4 0 0 1 8 0" /><path d="M2.5 21h19" /><path d="m9.4 4.6 2.6 2.6 2.6-2.6" /></svg>
+  );
 }
 export default function Dashboard({ view, onOpen, range, setRange }: { view: View; onOpen: (id: string) => void; range: RangeKey; setRange: (r: RangeKey) => void }) {
   const { update } = useVault();
@@ -39,7 +54,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
     <div style={{ padding: "28px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}><span style={{ marginRight: 8 }}>{greetingEmoji()}</span>{greetingWord()}，{view.meta.userName}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}><span style={{ display: "inline-flex", color: "var(--accent)" }}><GreetingMark /></span>{greetingWord()}，{view.meta.userName}</div>
           <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 3 }}>{today} · {view.meta.vaultName}{view.meta.real ? "" : " · 示例数据"}</div>
         </div>
       </div>
@@ -47,9 +62,8 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
       <div className="fv-rise" style={{ ...rise(70), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
         <MetricCard label="总资产" value={t.assetsRaw} chip="资产合计" chipNote={`${view.meta.accountCount} 个账户`} chipColor="var(--green)" />
         <MetricCard label="总负债" value={t.liabRaw} chip="含信用卡/贷款" chipNote="负债合计" chipColor="var(--red)" />
-        <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #5E5CE6)", borderRadius: 14, padding: "20px 22px", boxShadow: "0 10px 26px -8px var(--accent-soft)", color: "#fff" }}>
+        <div className="fv-sweep" style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #b08a5e)", borderRadius: 14, padding: "20px 22px", boxShadow: "0 10px 26px -8px var(--accent-soft)", color: "#fff" }}>
           <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 85% at 88% 0%, rgba(255,255,255,0.30), transparent 58%)", pointerEvents: "none" }} />
-          <div aria-hidden className="fv-sheen" />
           <div style={{ position: "relative" }}>
             <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>净资产</div>
             <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.01em", marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{fmt(netAnim)}</div>

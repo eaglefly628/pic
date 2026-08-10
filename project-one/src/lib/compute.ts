@@ -15,18 +15,20 @@ export const CAT_TITLE: Record<Category, string> = {
 };
 export const CAT_ORDER: Category[] = ["liquid", "invest", "estate", "fixed", "debt"];
 
-// 资产构成分组的展示颜色（与设计稿色板一致）
+// 资产构成分组的展示颜色。走 CSS 变量，跟着明暗主题各用一套（见 styles.css 的 --cat-*）。
+// 核心 5 类是经 CVD/对比度校验的「全对可分」组；实际数据也正好落在这 5 类里。
+// 后面几类很少与核心类同时出现，且环形图右侧有图例（名称+数值）做二次编码，故复用核心色相。
 const COMP_COLOR: Record<string, string> = {
-  房产: "#007AFF",
-  股票: "#34C759",
-  "理财/固收": "#FF9500",
-  基金: "#5E5CE6",
-  现金及银行: "#FF2D55",
-  黄金: "#FFD60A",
-  养老金: "#5AC8FA",
-  公积金: "#AF52DE",
-  其他固定资产: "#A2845E",
-  其他: "#8E8E93",
+  现金及银行: "var(--cat-1)",
+  "理财/固收": "var(--cat-2)",
+  股票: "var(--cat-3)",
+  房产: "var(--cat-4)",
+  基金: "var(--cat-5)",
+  黄金: "var(--cat-2)",
+  养老金: "var(--cat-4)",
+  公积金: "var(--cat-5)",
+  其他固定资产: "var(--cat-other)",
+  其他: "var(--cat-other)",
 };
 
 function lastBalance(snaps: Snapshot[], id: string): number {

@@ -59,7 +59,7 @@ function PwUnlock({ onUnlocked }: { onUnlocked: (s: NonNullable<ReturnType<typeo
   return (
     <div style={{ padding: "60px 32px", display: "flex", justifyContent: "center" }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, width: 300 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 15, background: "linear-gradient(160deg,var(--accent),#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={26} stroke="#fff" /></div>
+        <div style={{ width: 56, height: 56, borderRadius: 15, background: "linear-gradient(160deg,var(--accent),#b08a5e)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={26} stroke="#fff" /></div>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>密码保险箱已锁定</div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>已开启二次验证，请输入独立密码</div>

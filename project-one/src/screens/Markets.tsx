@@ -236,7 +236,7 @@ function FxView() {
               <div style={{ flex: 1 }} />
               <Segmented value={range} onChange={(v) => setRange(v as Range)} style={{ width: 248 }} options={RANGES} />
             </div>
-            <TrendChart series={series} color="#007AFF" gradId="fxgrad" loading={loading} />
+            <TrendChart series={series} color="var(--accent)" gradId="fxgrad" loading={loading} />
           </div>
         </>
       )}

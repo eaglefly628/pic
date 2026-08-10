@@ -101,7 +101,7 @@ function Shell({ data }: { data: VaultData }) {
             ))}
           </div>
           <div style={{ padding: "4px 16px 16px", display: "flex", alignItems: "center", gap: 11 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: "linear-gradient(160deg,var(--accent),#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px var(--accent-soft)" }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: "linear-gradient(160deg,var(--accent),#b08a5e)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px var(--accent-soft)" }}>
               <IconShield size={18} />
             </div>
             <div style={{ lineHeight: 1.2, minWidth: 0 }}>
@@ -131,7 +131,7 @@ function Shell({ data }: { data: VaultData }) {
 
           <div style={{ padding: "10px 12px 12px", borderTop: "0.5px solid var(--separator)" }}>
             <button onClick={() => setScreen("info")} className={"fv-nav" + (screen === "info" ? " active" : "")} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", cursor: "pointer", padding: "6px 9px", borderRadius: 9, background: screen === "info" ? "var(--accent-soft)" : "transparent" }}>
-              <span style={{ width: 28, height: 28, borderRadius: "50%", flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(160deg,#0A84FF,#5E5CE6)", color: "#fff", fontSize: 12, fontWeight: 700 }}>{userInitial}</span>
+              <span style={{ width: 28, height: 28, borderRadius: "50%", flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(160deg,var(--accent),#b08a5e)", color: "#fff", fontSize: 12, fontWeight: 700 }}>{userInitial}</span>
               <div style={{ lineHeight: 1.25, minWidth: 0, textAlign: "left" }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{view.meta.userName}</div>
                 <div style={{ fontSize: 10.5, color: "var(--text-tertiary)" }}>户主 · 管理员</div>
@@ -157,7 +157,11 @@ function Shell({ data }: { data: VaultData }) {
               <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-tertiary)", border: "0.5px solid var(--separator-strong)", borderRadius: 4, padding: "1px 4px" }}>⌘K</span>
             </div>
             <button onClick={toggle} title="切换外观" className="fv-icnbtn" style={{ width: 30, height: 30, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-secondary)" }}>
-              <span>{theme === "light" ? "🌙" : "☀️"}</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round">
+                {theme === "light"
+                  ? <path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.6 8.6 0 1 0 10.2 10.2Z" />
+                  : <><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>}
+              </svg>
             </button>
             <button onClick={lock} className="fv-btn" style={{ display: "flex", alignItems: "center", gap: 6, height: 30, padding: "0 12px", borderRadius: 8, background: "var(--accent)", border: "none", cursor: "pointer", color: "#fff", fontSize: 12.5, fontWeight: 500 }}>
               <IconLock size={14} stroke="currentColor" />锁定

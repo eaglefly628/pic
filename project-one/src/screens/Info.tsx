@@ -5,7 +5,7 @@ import { Btn, Field, Modal, Select, TextField, TextArea, card, uid } from "../ui
 import { IconLock, IconUser, IconEdit, IconTrash, IconPlus } from "../icons";
 
 const TYPES = ["实名信息", "身份证", "银行卡", "护照", "社保/医保", "驾驶证", "保险单", "会员卡", "WiFi", "紧急联系人", "其他"];
-const MEMBER_COLORS = ["#0A84FF", "#FF2D55", "#FF9500", "#30D158", "#BF5AF2", "#64D2FF"];
+const MEMBER_COLORS = ["#ae431e", "#be850c", "#008a62", "#005b9b", "#a964ba", "#a03a63"];
 
 export default function Info() {
   const { data, update } = useVault();
@@ -23,7 +23,7 @@ export default function Info() {
       initial: o.slice(0, 1), color: MEMBER_COLORS[i % MEMBER_COLORS.length],
       access: o === "本人" ? "完全控制" : o === "全家" ? "共有" : "可编辑",
     }));
-    return list.length ? list : [{ name: userName, role: "户主 · 管理员", initial: userInitial, color: "#0A84FF", access: "完全控制" }];
+    return list.length ? list : [{ name: userName, role: "户主 · 管理员", initial: userInitial, color: "#ae431e", access: "完全控制" }];
   }, [data?.dataset.accounts, userName, userInitial]);
 
   const [open, setOpen] = useState(false);
@@ -35,9 +35,9 @@ export default function Info() {
   return (
     <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease" }}>
       <div style={{ ...card, borderRadius: 16, overflow: "hidden", marginBottom: 18 }}>
-        <div style={{ height: 88, background: "linear-gradient(120deg, var(--accent), #5E5CE6 70%, #AF52DE)" }} />
+        <div style={{ height: 88, background: "linear-gradient(120deg, var(--accent), #b08a5e 70%, #c9a274)" }} />
         <div style={{ padding: "0 26px 22px", display: "flex", alignItems: "flex-end", gap: 18, marginTop: -34 }}>
-          <span style={{ width: 78, height: 78, borderRadius: 22, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(160deg,#0A84FF,#5E5CE6)", color: "#fff", fontSize: 30, fontWeight: 700, border: "4px solid var(--bg-card)", boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>{userInitial}</span>
+          <span style={{ width: 78, height: 78, borderRadius: 22, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(160deg,var(--accent),#b08a5e)", color: "#fff", fontSize: 30, fontWeight: 700, border: "4px solid var(--bg-card)", boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>{userInitial}</span>
           <div style={{ flex: 1, minWidth: 0, paddingBottom: 4 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <h1 style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)" }}>{userName}</h1>

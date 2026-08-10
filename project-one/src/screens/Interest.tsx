@@ -31,7 +31,7 @@ export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRa
   return (
     <div style={{ padding: "24px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
-        <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #5E5CE6)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 8px 20px -6px var(--accent-soft)" }}>
+        <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #b08a5e)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 8px 20px -6px var(--accent-soft)" }}>
           <div aria-hidden className="fv-sheen" />
           <div style={{ position: "relative" }}>
             <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>预计年利息合计</div>

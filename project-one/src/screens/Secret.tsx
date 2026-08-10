@@ -83,7 +83,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
     <div style={{ position: "absolute", inset: 0, zIndex: 40, display: "flex", flexDirection: "column", background: "var(--bg-content)", animation: "fvRise .2s ease" }}>
       <div style={{ height: 52, flex: "none", display: "flex", alignItems: "center", gap: 12, padding: "0 18px", background: "var(--bg-toolbar)", backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)", borderBottom: "0.5px solid var(--separator)" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--text-primary)", fontWeight: 600, fontSize: 14 }}>
-          <span style={{ width: 22, height: 22, borderRadius: 6, background: "linear-gradient(160deg,#8E8E93,#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={13} stroke="#fff" /></span>
+          <span style={{ width: 22, height: 22, borderRadius: 6, background: "linear-gradient(160deg,var(--text-tertiary),#b08a5e)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={13} stroke="#fff" /></span>
           独立管理
         </span>
         {status === "unlocked" && view && (
@@ -145,7 +145,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
         // 私房钱独立密码：创建 / 解锁
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, width: 300 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 15, background: "linear-gradient(160deg,#8E8E93,#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={26} stroke="#fff" /></div>
+            <div style={{ width: 56, height: 56, borderRadius: 15, background: "linear-gradient(160deg,var(--text-tertiary),#b08a5e)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={26} stroke="#fff" /></div>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>{onboard ? "设置独立管理密码" : "独立管理已锁定"}</div>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>{onboard ? "与主密码不同，独立加密保存" : "输入独立管理密码"}</div>

@@ -34,7 +34,7 @@ export default function Unlock() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--wallpaper)", padding: 32 }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18, width: 320, animation: "fvRise .3s ease" }}>
-        <div style={{ width: 64, height: 64, borderRadius: 17, background: "linear-gradient(160deg,var(--accent),#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 10px 30px var(--accent-soft)" }}>
+        <div style={{ width: 64, height: 64, borderRadius: 17, background: "linear-gradient(160deg,var(--accent),#b08a5e)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 10px 30px var(--accent-soft)" }}>
           <IconShield size={30} stroke="#fff" />
         </div>
         <div style={{ textAlign: "center" }}>
