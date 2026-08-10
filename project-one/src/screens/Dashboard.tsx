@@ -5,6 +5,7 @@ import { Btn, TextField, card, Segmented } from "../ui";
 import { useVault } from "../vault/VaultContext";
 import { fmt } from "../lib/format";
 import { useCountUp, rise, reduceMotion } from "../lib/anim";
+import { useBreakpoint } from "../lib/breakpoint";
 
 function greetingWord() {
   const h = new Date().getHours();
@@ -39,6 +40,7 @@ function GreetingMark({ size = 19 }: { size?: number }) {
 }
 export default function Dashboard({ view, onOpen, range, setRange }: { view: View; onOpen: (id: string) => void; range: RangeKey; setRange: (r: RangeKey) => void }) {
   const { update } = useVault();
+  const phone = useBreakpoint() === "phone";
   const [editKey, setEditKey] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const today = new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" });
@@ -50,39 +52,46 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
     update((d) => { if (!d.dataset.monthNotes) d.dataset.monthNotes = {}; if (text) d.dataset.monthNotes[editKey] = text; else delete d.dataset.monthNotes[editKey]; });
     setEditKey(null);
   };
+  // 手机：净资产整宽大卡置顶（34px 数字），总资产/总负债降为并排两张小卡，图表单栏
+  const netCard = (
+    <div className="fv-sweep" style={{ flex: "none", position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #b08a5e)", borderRadius: 14, padding: phone ? "22px 20px" : "20px 22px", boxShadow: "0 10px 26px -8px var(--accent-soft)", color: "#fff" }}>
+      <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 85% at 88% 0%, rgba(255,255,255,0.30), transparent 58%)", pointerEvents: "none" }} />
+      <div style={{ position: "relative" }}>
+        <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>净资产</div>
+        <div style={{ fontSize: phone ? 34 : 27, fontWeight: 700, letterSpacing: "-0.01em", marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{fmt(netAnim)}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(255,255,255,0.22)", padding: "2px 7px", borderRadius: 6 }}>{t.netDelta}</span>
+          <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.8)" }}>较上期</span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div style={{ padding: "28px 32px 40px" }}>
+    <div style={{ padding: phone ? "18px 14px 28px" : "28px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}><span style={{ display: "inline-flex", color: "var(--accent)" }}><GreetingMark /></span>{greetingWord()}，{view.meta.userName}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: phone ? 18 : 20, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}><span style={{ display: "inline-flex", color: "var(--accent)" }}><GreetingMark /></span>{greetingWord()}，{view.meta.userName}</div>
           <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 3 }}>{today} · {view.meta.vaultName}{view.meta.real ? "" : " · 示例数据"}</div>
         </div>
       </div>
 
-      <div className="fv-rise" style={{ ...rise(70), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
-        <MetricCard label="总资产" value={t.assetsRaw} chip="资产合计" chipNote={`${view.meta.accountCount} 个账户`} chipColor="var(--green)" />
-        <MetricCard label="总负债" value={t.liabRaw} chip="含信用卡/贷款" chipNote="负债合计" chipColor="var(--red)" />
-        <div className="fv-sweep" style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #b08a5e)", borderRadius: 14, padding: "20px 22px", boxShadow: "0 10px 26px -8px var(--accent-soft)", color: "#fff" }}>
-          <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 85% at 88% 0%, rgba(255,255,255,0.30), transparent 58%)", pointerEvents: "none" }} />
-          <div style={{ position: "relative" }}>
-            <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>净资产</div>
-            <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: "-0.01em", marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{fmt(netAnim)}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(255,255,255,0.22)", padding: "2px 7px", borderRadius: 6 }}>{t.netDelta}</span>
-              <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.8)" }}>较上期</span>
-            </div>
-          </div>
-        </div>
+      {phone && <div className="fv-rise" style={{ ...rise(50), marginBottom: 14 }}>{netCard}</div>}
+
+      <div className="fv-rise fv-keep-cols" style={{ ...rise(70), display: "grid", gridTemplateColumns: phone ? "1fr 1fr" : "repeat(3,1fr)", gap: phone ? 12 : 16, marginBottom: phone ? 14 : 18 }}>
+        <MetricCard label="总资产" value={t.assetsRaw} chip="资产合计" chipNote={`${view.meta.accountCount} 个账户`} chipColor="var(--green)" compact={phone} />
+        <MetricCard label="总负债" value={t.liabRaw} chip="含信用卡/贷款" chipNote="负债合计" chipColor="var(--red)" compact={phone} />
+        {!phone && netCard}
       </div>
 
-      <div className="fv-rise" style={{ ...rise(140), display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 16, marginBottom: 18 }}>
-        <div style={{ ...card, padding: "20px 22px 14px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+      <div className="fv-rise" style={{ ...rise(140), display: "grid", gridTemplateColumns: phone ? "1fr" : "1.55fr 1fr", gap: phone ? 14 : 16, marginBottom: phone ? 14 : 18 }}>
+        <div style={{ ...card, padding: phone ? "18px 16px 12px" : "20px 22px 14px" }}>
+          <div style={{ display: "flex", alignItems: phone ? "flex-start" : "center", justifyContent: "space-between", gap: 10, marginBottom: 4, flexDirection: phone ? "column" : "row" }}>
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap" }}>净资产趋势</div>
               <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 2 }}>{view.trend.caption}</div>
             </div>
-            <Segmented value={range} onChange={(r) => setRange(r as RangeKey)} style={{ width: 212 }}
+            <Segmented value={range} onChange={(r) => setRange(r as RangeKey)} style={{ width: phone ? "100%" : 212 }}
               options={[{ value: "3m", label: "近3月" }, { value: "1y", label: "近1年" }, { value: "all", label: "全部" }]} />
           </div>
           <TrendChart view={view} />
@@ -92,15 +101,15 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
       </div>
 
       {view.monthlyChanges.length > 0 && (
-        <div className="fv-rise" style={{ ...card, ...rise(210), padding: "18px 22px", marginBottom: 18 }}>
+        <div className="fv-rise" style={{ ...card, ...rise(210), padding: phone ? "16px 16px" : "18px 22px", marginBottom: 18 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>
             每月变化量<span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 8 }}>近 12 期净资产变化</span>
           </div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, minHeight: 134 }}>
+          <div className="fv-scroll" style={{ display: "flex", alignItems: "flex-end", gap: 8, minHeight: 134, overflowX: phone ? "auto" : "visible", paddingBottom: phone ? 4 : 0 }}>
             {view.monthlyChanges.map((c, i) => {
               const editing = editKey === c.key;
               return (
-                <div key={c.key} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
+                <div key={c.key} style={{ flex: phone ? "none" : 1, width: phone ? 46 : undefined, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
                   {c.note ? (
                     <button onClick={() => { setEditKey(c.key); setDraft(c.note); }} title={c.note}
                       style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0, maxWidth: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -255,15 +264,16 @@ function DonutCard({ donut }: { donut: View["donut"] }) {
   );
 }
 
-function MetricCard({ label, value, chip, chipNote, chipColor }: { label: string; value: number; chip: string; chipNote: string; chipColor: string }) {
+function MetricCard({ label, value, chip, chipNote, chipColor, compact }: { label: string; value: number; chip: string; chipNote: string; chipColor: string; compact?: boolean }) {
   const n = useCountUp(value);
   return (
-    <div style={{ ...card, padding: "20px 22px" }}>
+    <div style={{ ...card, padding: compact ? "16px 14px" : "20px 22px", minWidth: 0 }}>
       <div style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 500 }}>{label}</div>
-      <div style={{ fontSize: 27, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em", marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{fmt(n)}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 12, fontWeight: 600, color: chipColor, background: `color-mix(in srgb, ${chipColor} 13%, transparent)`, padding: "2px 7px", borderRadius: 6 }}>{chip}</span>
-        <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>{chipNote}</span>
+      <div style={{ fontSize: compact ? 20 : 27, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em", marginTop: compact ? 6 : 9, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmt(n)}</div>
+      {/* 手机上两张并排，塞不下第二行说明，只留主色标签 */}
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: compact ? 7 : 9, minWidth: 0 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: compact ? 11 : 12, fontWeight: 600, color: chipColor, background: `color-mix(in srgb, ${chipColor} 13%, transparent)`, padding: "2px 7px", borderRadius: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{chip}</span>
+        {!compact && <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>{chipNote}</span>}
       </div>
     </div>
   );

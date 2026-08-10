@@ -318,3 +318,40 @@ body { background: #f5efe4; }
   .fv-lift:hover, .fv-lift:active, .fv-press:active { transform: none; }
   .fv-edge:hover::before { transform: scaleY(1); }
 }
+
+/* ── 手机：弹窗改底部抽屉 ─────────────────────────────── */
+@keyframes fvSheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  [style*="fvSheetUp"] { animation: none !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   手机（<768）：把还没逐页改造的网格收敛掉，保证不横向溢出。
+   这些页面的样式都是 inline style，所以必须 !important 才盖得过。
+   仪表盘、资金账户已在各自组件里按设计稿单独适配，不受这里影响。
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* 指标卡：3 列 / 4 列 一律降成 2 列 */
+  .fv-root [style*="repeat(3,1fr)"]:not(.fv-keep-cols),
+  .fv-root [style*="repeat(4,1fr)"]:not(.fv-keep-cols) { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+
+  /* 内容型非对称双栏 → 单栏 */
+  .fv-root [style*="1.25fr 1fr"]:not(.fv-keep-cols),
+  .fv-root [style*="1.55fr 1fr"]:not(.fv-keep-cols),
+  .fv-root [style*="1fr 160px"],
+  .fv-root [style*="1fr 1fr 1.2fr"] { grid-template-columns: 1fr !important; }
+
+  /* 表单里的双列输入 → 单列，免得输入框被挤到没法点 */
+  .fv-root [style*="1fr 1fr"]:not([style*="1.2fr"]):not([style*="1.4fr"]):not(.fv-keep-cols) { grid-template-columns: 1fr !important; }
+
+  /* 表格：列比例不动（表头要和数据行对齐），整块横向滚动 */
+  .fv-root [style*="1.4fr 1fr 1fr"],
+  .fv-root [style*="1.4fr 1fr"] { min-width: 400px; }
+  .fv-root [style*="var(--bg-card)"]:has([style*="1.4fr 1fr"]) { overflow-x: auto; }
+
+  /* 页面主体留白收一档 */
+  .fv-root [style*="padding: 28px 32px"] { padding: 18px 14px 28px !important; }
+
+  /* 手机上可点区域不低于 44px */
+  .fv-root button { min-height: 32px; }
+}
