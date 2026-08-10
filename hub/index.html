@@ -7,123 +7,183 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
-    --accent: #007AFF; --text: #1d1d1f; --text2: #6e6e73; --text3: #a1a1a6;
-    --card: rgba(255,255,255,0.80); --sep: rgba(0,0,0,0.08);
+    --accent: #a4633a; --text: #241f18; --text2: rgba(48,38,26,0.74); --text3: rgba(48,38,26,0.56);
+    --card: #fffaf1; --tile: #ece3d3; --sep: rgba(120,96,64,0.18);
+    --paper: #f5efe4;
+    --text-secondary: var(--text2); --text-tertiary: var(--text3); --fill: var(--tile);
+    --serif: "Songti SC", "STSong", "SimSun", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
   }
   html, body { height: 100%; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased; color: var(--text);
-    background: linear-gradient(150deg, #e7d8ef 0%, #d3e0f6 46%, #d9efe7 100%);
-    display: flex; flex-direction: column; overflow: hidden; transition: background .4s ease;
+    font-family: var(--sans); -webkit-font-smoothing: antialiased; color: var(--text);
+    background: var(--paper);
+    display: flex; flex-direction: column; overflow: hidden;
   }
-  body.scene-male   { background: linear-gradient(150deg, #dde7f0 0%, #d7e8e2 52%, #e3ebf1 100%); }
-  body.scene-female { background: linear-gradient(150deg, #f6e0ea 0%, #efe1f4 50%, #f8eadf 100%); }
-  /* 顶部菜单 */
+  body.scene-male, body.scene-female, body.scene-home { background: var(--paper); }
+
+  /* 顶栏 */
   #bar {
-    height: 50px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px;
-    background: rgba(255,255,255,0.6); backdrop-filter: blur(30px) saturate(180%);
-    -webkit-backdrop-filter: blur(30px) saturate(180%); border-bottom: 0.5px solid var(--sep); z-index: 10;
+    height: 54px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 26px;
+    background: var(--paper); border-bottom: 0.5px solid var(--sep); z-index: 10;
   }
-  .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; margin-right: 14px; cursor: pointer; }
-  .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(160deg, var(--accent), #5E5CE6); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 800; }
-  .tab { border: none; background: transparent; cursor: pointer; font-size: 13.5px; font-weight: 500; color: var(--text2); padding: 7px 14px; border-radius: 9px; }
-  .tab:hover { background: rgba(0,0,0,0.05); }
-  .tab.active { background: var(--accent); color: #fff; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 500; font-size: 15px; letter-spacing: 1.6px; margin-right: 26px; cursor: pointer; }
+  .logo { width: 26px; height: 26px; border-radius: 7px; background: none; border: 0.5px solid rgba(140,106,69,0.5); display: flex; align-items: center; justify-content: center; color: var(--accent); font-family: var(--serif); font-size: 12px; font-weight: 500; }
+  .tab { border: none; background: transparent; cursor: pointer; font-size: 13px; font-weight: 400; color: var(--text2); padding: 8px 0; margin-right: 22px; border-radius: 0; border-bottom: 1px solid transparent; }
+  .tab:hover { background: transparent; color: var(--text); }
+  .tab.active { background: transparent; color: var(--text); font-weight: 500; border-bottom-color: var(--accent); }
   .spacer { flex: 1; }
-  .hint { font-size: 11.5px; color: var(--text3); }
+  .hint { font-size: 11px; letter-spacing: 1.4px; color: var(--text3); margin-right: 16px; }
+  .barbtn, .lockbtn { border: none; background: transparent; cursor: pointer; font-size: 12.5px; font-weight: 400; color: var(--text2); padding: 6px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; }
+  .barbtn:hover, .lockbtn:hover { background: var(--tile); color: var(--text); }
+  .lockbtn { display: none; } .lockbtn.show { display: inline-flex; }
+
   /* 主区 */
   #stage { flex: 1; position: relative; min-height: 0; }
   iframe { width: 100%; height: 100%; border: none; display: none; background: #fff; }
   iframe.show { display: block; }
-  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; overflow: auto; padding: 40px 32px 48px; }
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; overflow: auto; padding: 54px 40px 56px; }
   .screen.hide { display: none; }
+  .wrap { width: 100%; max-width: 1060px; }
 
-  /* 首页：两扇门 */
-  #home { justify-content: center; gap: 30px; }
-  .welcome { text-align: center; }
-  .welcome h1 { font-size: 27px; letter-spacing: -0.01em; }
-  .welcome p { color: var(--text2); font-size: 14px; margin-top: 8px; }
-  .doors { display: flex; gap: 22px; width: 100%; max-width: 880px; }
-  .door {
-    flex: 1; min-height: 320px; border: none; cursor: pointer; border-radius: 24px; padding: 30px 28px;
-    color: #fff; text-align: left; display: flex; flex-direction: column; position: relative; overflow: hidden;
-    box-shadow: 0 18px 50px -18px rgba(20,20,40,0.45); transition: transform .18s, box-shadow .18s;
+  /* 首页页头 */
+  #home { justify-content: flex-start; gap: 0; }
+  .welcome { width: 100%; max-width: 1060px; display: flex; align-items: flex-end; justify-content: space-between; }
+  .welcome h1 { font-family: var(--serif); font-size: 32px; font-weight: 500; letter-spacing: 3px; line-height: 1.2; }
+  .welcome .eyebrow { font-size: 10.5px; letter-spacing: 3.4px; color: var(--text3); margin-bottom: 12px; }
+  .welcome p { color: var(--text3); font-size: 11.5px; font-family: var(--serif); letter-spacing: 1px; margin: 0; }
+
+  /* 分节标题 */
+  .sec-head { width: 100%; max-width: 1060px; display: flex; align-items: center; gap: 16px; margin: 46px 0 18px; }
+  .sec-head .lbl { font-size: 10.5px; letter-spacing: 3.4px; color: var(--text2); white-space: nowrap; }
+  .sec-head .rule { flex: 1; height: 0.5px; background: var(--sep); }
+  .sec-head .aside { font-size: 11px; color: var(--text3); white-space: nowrap; }
+
+  /* 家庭公用：三张大卡 */
+  .sharedrow { width: 100%; max-width: 1060px; }
+  .sharedcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .scard {
+    background: var(--card); border: 0.5px solid var(--sep); border-radius: 22px; padding: 26px;
+    cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; gap: 0;
+    text-align: left; min-height: 236px; transition: border-color .35s, transform .35s cubic-bezier(.16,.84,.3,1);
   }
-  .door:hover { transform: translateY(-4px); box-shadow: 0 26px 64px -20px rgba(20,20,40,0.55); }
-  .door.male   { background: linear-gradient(155deg, #3b6fb0 0%, #2f7d6b 60%, #274c5e 100%); }
-  .door.female { background: linear-gradient(155deg, #e683a4 0%, #c77fd8 58%, #b66ab0 100%); }
-  .door .demoji { font-size: 46px; }
-  .door .dtag { margin-top: auto; font-size: 13px; opacity: 0.85; font-weight: 600; letter-spacing: 0.04em; }
-  .door .dtitle { font-size: 30px; font-weight: 800; margin-top: 4px; letter-spacing: -0.01em; }
-  .door .dsub { font-size: 13px; opacity: 0.92; margin-top: 12px; line-height: 1.7; }
-  .door .denter { margin-top: 18px; font-size: 14px; font-weight: 700; }
-  .door .glow { position: absolute; right: -40px; top: -40px; width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,0.16); }
+  .scard:hover { transform: translateY(-3px); border-color: var(--accent); }
+  .scard .ico {
+    width: 44px; height: 44px; border-radius: 0; display: flex; align-items: center; justify-content: flex-start;
+    flex: none; margin-bottom: auto;
+    background: none !important; color: var(--accent) !important;
+  }
+  .scard .ico svg, .tico svg { width: 100%; height: 100%; display: block; }
+  .scard h4 { font-family: var(--serif); font-size: 20px; font-weight: 500; letter-spacing: 1.5px; margin-top: 22px; }
+  .scard .d { font-size: 12px; color: var(--text2); margin-top: 9px; line-height: 1.75; }
 
-  .sharedrow { width: 100%; max-width: 880px; }
-  .sharedlabel { font-size: 12px; color: var(--text3); font-weight: 600; margin-bottom: 10px; letter-spacing: 0.04em; }
-  .sharedcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .scard { background: var(--card); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 0.5px solid var(--sep); border-radius: 14px; padding: 14px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; text-align: left; transition: transform .15s; }
-  .scard:hover { transform: translateY(-2px); }
-  .scard .ico { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; flex: none; }
-  .scard h4 { font-size: 14px; } .scard .d { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  /* 两个世界：细长次要入口 */
+  .doors { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; width: 100%; max-width: 1060px; }
+  .door {
+    min-height: 0; border: 0.5px solid var(--sep); cursor: pointer; border-radius: 18px; padding: 20px 24px;
+    background: transparent; color: var(--text); text-align: left; display: flex; flex-direction: column;
+    position: relative; overflow: hidden; box-shadow: none;
+    transition: border-color .35s, background .35s;
+  }
+  .door:hover { transform: none; box-shadow: none; border-color: var(--accent); background: var(--card); }
+  .door.male, .door.female { background: transparent; }
+  .door .glow, .door .demoji { display: none; }
+  .door .dtag { margin-top: 0; font-size: 10px; letter-spacing: 2.6px; color: var(--text3); font-weight: 400; order: -1; }
+  .door .dtitle { font-family: var(--serif); font-size: 19px; font-weight: 500; letter-spacing: 1.5px; margin-top: 10px; }
+  .door .dsub { font-size: 11.5px; color: var(--text2); margin-top: 8px; line-height: 1.7; opacity: 1; }
+  .door .denter { margin-top: 14px; font-size: 12px; font-weight: 400; color: var(--accent); }
 
   /* 男主 / 女主世界 */
-  .back { align-self: flex-start; border: none; background: rgba(255,255,255,0.7); border: 0.5px solid var(--sep); cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text2); padding: 7px 14px; border-radius: 10px; margin-bottom: 18px; }
-  .back:hover { background: #fff; }
-  .whead { text-align: center; margin-bottom: 26px; }
-  .whead h2 { font-size: 25px; letter-spacing: -0.01em; }
-  .whead p { color: var(--text2); font-size: 13.5px; margin-top: 7px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 14px; width: 100%; max-width: 920px; }
+  .back { align-self: flex-start; border: none; background: transparent; cursor: pointer; font-size: 12.5px; font-weight: 400; color: var(--text2); padding: 6px 0; border-radius: 0; margin-bottom: 26px; }
+  .back:hover { background: transparent; color: var(--text); }
+  .whead { text-align: left; width: 100%; max-width: 1060px; margin-bottom: 30px; }
+  .whead h2 { font-family: var(--serif); font-size: 27px; font-weight: 500; letter-spacing: 2.4px; }
+  .whead p { color: var(--text3); font-size: 12px; margin-top: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; width: 100%; max-width: 1060px; }
   .tile {
-    position: relative; background: var(--card); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border: 0.5px solid var(--sep); border-radius: 16px; padding: 16px; cursor: pointer; text-align: left;
-    box-shadow: 0 8px 24px -14px rgba(20,20,40,0.3); transition: transform .15s, box-shadow .15s; display: flex; flex-direction: column;
+    position: relative; background: var(--card); border: 0.5px solid var(--sep); border-radius: 16px; padding: 18px;
+    cursor: pointer; text-align: left; box-shadow: none; display: flex; flex-direction: column;
+    transition: border-color .35s, transform .35s cubic-bezier(.16,.84,.3,1);
   }
-  .tile:hover { transform: translateY(-3px); box-shadow: 0 16px 36px -16px rgba(20,20,40,0.42); }
-  .tile.soon { cursor: default; }
-  .tile.soon:hover { transform: none; box-shadow: 0 8px 24px -14px rgba(20,20,40,0.3); }
-  .tico { width: 46px; height: 46px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; margin-bottom: 12px; }
-  .tname { font-size: 15px; font-weight: 700; }
-  .tdesc { font-size: 11.5px; color: var(--text2); margin-top: 5px; line-height: 1.55; min-height: 34px; }
-  .badge { margin-top: 11px; align-self: flex-start; font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
-  .badge.soon { background: rgba(0,0,0,0.05); color: var(--text3); }
-  .badge.live { background: rgba(0,122,255,0.12); color: var(--accent); }
-  .foot { font-size: 12px; color: var(--text3); margin-top: 30px; text-align: center; }
+  .tile:hover { transform: translateY(-3px); box-shadow: none; border-color: var(--accent); }
+  .tile.soon { cursor: default; opacity: 0.62; }
+  .tile.soon:hover { transform: none; box-shadow: none; border-color: var(--sep); }
+  .tico {
+    width: 30px; height: 30px; border-radius: 0; display: flex; align-items: center; justify-content: flex-start;
+    margin-bottom: 16px;
+    background: none !important; color: var(--accent) !important;
+  }
+  .tname { font-family: var(--serif); font-size: 15px; font-weight: 500; letter-spacing: 1px; }
+  .tdesc { font-size: 11px; color: var(--text2); margin-top: 6px; line-height: 1.6; min-height: 34px; }
+  .badge { margin-top: 12px; align-self: flex-start; font-size: 10px; font-weight: 400; letter-spacing: 1.2px; padding: 2px 0; border-radius: 0; }
+  .badge.soon { background: transparent; color: var(--text3); }
+  .badge.live { background: transparent; color: var(--accent); }
+  .foot { font-size: 11px; font-family: var(--serif); letter-spacing: 1px; color: var(--text3); margin-top: 46px; text-align: center; }
+
+  .tile.add {
+    background: transparent; border: 0.5px dashed var(--sep); align-items: center; justify-content: center;
+    color: var(--text3); min-height: 148px; gap: 10px;
+  }
+  .tile.add:hover { border-color: var(--accent); border-style: dashed; color: var(--accent); transform: none; }
+  .tile.add .plus { font-size: 20px; line-height: 1; font-weight: 300; }
+  .tile.add .lb { font-size: 12px; letter-spacing: 1.4px; }
+  .emptyhint { width: 100%; max-width: 1060px; font-size: 12px; color: var(--text3); line-height: 1.9; margin-bottom: 18px; }
+
+  #library { position: fixed; inset: 0; z-index: 95; display: none; align-items: center; justify-content: center; background: rgba(58,46,32,0.3); backdrop-filter: blur(3px); }
+  #library.show { display: flex; }
+  #library .lcard { width: 560px; max-width: 92%; max-height: 84%; display: flex; flex-direction: column; background: var(--card); border-radius: 20px; padding: 26px 28px; box-shadow: 0 24px 70px rgba(80,62,40,0.22); }
+  #library h3 { font-family: var(--serif); font-size: 18px; font-weight: 500; letter-spacing: 1.6px; }
+  #library .lsub { font-size: 11.5px; color: var(--text2); margin: 7px 0 18px; line-height: 1.7; }
+  #library .llist { overflow: auto; display: flex; flex-direction: column; }
+  #library .lrow { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-top: 0.5px solid var(--sep); }
+  #library .lrow:first-child { border-top: none; }
+  #library .lico { width: 22px; height: 22px; flex: none; color: var(--accent); }
+  #library .lico svg { width: 100%; height: 100%; display: block; }
+  #library .lname { font-family: var(--serif); font-size: 15px; font-weight: 500; letter-spacing: 1px; }
+  #library .ldesc { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  #library .lbtn { margin-left: auto; border: 0.5px solid var(--sep); background: transparent; color: var(--text2); border-radius: 9px; padding: 7px 15px; font-size: 12px; cursor: pointer; flex: none; }
+  #library .lbtn:hover { border-color: var(--accent); color: var(--accent); }
+  #library .lbtn.on { background: var(--tile); border-color: transparent; color: var(--text2); }
+  #library .lclose { float: right; border: none; background: transparent; cursor: pointer; color: var(--text3); line-height: 0; padding: 2px; }
+  #library .lclose:hover { color: var(--text); }
+
   /* toast */
-  #toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1d1d1f; color: #fff; font-size: 13px; padding: 10px 18px; border-radius: 11px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 50; }
+  #toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--paper); font-size: 12.5px; padding: 11px 20px; border-radius: 10px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 50; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  /* 大厅主密码门 */
-  #gate { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(150deg, #e7d8ef 0%, #d3e0f6 46%, #d9efe7 100%); }
+
+  /* 主密码门 */
+  #gate { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center; background: var(--paper); }
   #gate .gcard { width: 320px; max-width: 90%; display: flex; flex-direction: column; align-items: center; gap: 15px; }
-  #gate .glogo { width: 62px; height: 62px; border-radius: 17px; background: linear-gradient(160deg,var(--accent),#5E5CE6); display:flex; align-items:center; justify-content:center; color:#fff; font-size:28px; font-weight:800; box-shadow: 0 10px 30px rgba(94,92,230,0.32); }
-  #gate h2 { font-size: 18px; } #gate .gsub { font-size: 12.5px; color: var(--text2); margin-top: 5px; text-align:center; }
-  #gate input { width: 100%; height: 40px; padding: 0 14px; font-size: 14px; border-radius: 11px; border: 0.5px solid var(--sep); background: rgba(255,255,255,0.72); outline: none; }
-  #gate .gbtn { width: 100%; height: 40px; border: none; border-radius: 11px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
-  #gate .gbtn:disabled { opacity: 0.6; cursor: default; }
-  #gate .gerr { font-size: 12px; color: #FF3B30; min-height: 15px; text-align: center; }
-  #gate .gnote { font-size: 11px; color: var(--text3); text-align: center; line-height: 1.6; max-width: 280px; }
-  .lockbtn { border: none; background: rgba(0,0,0,0.05); cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text2); padding: 6px 12px; border-radius: 9px; display: none; align-items: center; gap: 5px; }
-  .lockbtn.show { display: inline-flex; }
-  .barbtn { border: none; background: rgba(0,0,0,0.05); cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text2); padding: 6px 12px; border-radius: 9px; display: inline-flex; align-items: center; gap: 5px; }
+  #gate .glogo { width: 58px; height: 58px; border-radius: 16px; background: none; border: 0.5px solid rgba(140,106,69,0.5); display:flex; align-items:center; justify-content:center; color: var(--accent); font-family: var(--serif); font-size:24px; font-weight:500; box-shadow: none; }
+  #gate h2 { font-family: var(--serif); font-size: 18px; font-weight: 500; letter-spacing: 1.6px; }
+  #gate .gsub { font-size: 12px; color: var(--text2); margin-top: 7px; text-align:center; line-height: 1.6; }
+  #gate input { width: 100%; height: 42px; padding: 0 14px; font-size: 14px; border-radius: 11px; border: 0.5px solid var(--sep); background: var(--card); outline: none; }
+  #gate input:focus { border-color: var(--accent); }
+  #gate .gbtn { width: 100%; height: 42px; border: none; border-radius: 11px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; }
+  #gate .gbtn:disabled { opacity: 0.5; cursor: default; }
+  #gate .gerr { font-size: 12px; color: #a8443c; min-height: 15px; text-align: center; }
+  #gate .gnote { font-size: 10.5px; color: var(--text3); text-align: center; line-height: 1.8; max-width: 290px; }
+
   /* 设置 · 数据 */
-  #settings { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.32); backdrop-filter: blur(3px); }
+  #settings { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; background: rgba(58,46,32,0.3); backdrop-filter: blur(3px); }
   #settings.show { display: flex; }
-  #settings .scard2 { width: 470px; max-width: 92%; max-height: 86%; overflow: auto; background: #fff; border-radius: 18px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(20,20,40,0.4); }
-  #settings h3 { font-size: 17px; }
-  #settings .ssub { font-size: 12px; color: var(--text2); margin: 4px 0 16px; }
-  #settings .sec { border-top: 0.5px solid var(--sep); padding: 15px 0; }
+  #settings .scard2 { width: 480px; max-width: 92%; max-height: 86%; overflow: auto; background: var(--card); border-radius: 20px; padding: 26px 28px; box-shadow: 0 24px 70px rgba(80,62,40,0.22); }
+  #settings h3 { font-family: var(--serif); font-size: 18px; font-weight: 500; letter-spacing: 1.6px; }
+  #settings .ssub { font-size: 11.5px; color: var(--text2); margin: 7px 0 20px; }
+  #settings .sec { border-top: 0.5px solid var(--sep); padding: 18px 0; }
   #settings .sec:first-of-type { border-top: none; padding-top: 0; }
-  #settings .seclabel { font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 10px; }
-  #settings input.tin { width: 100%; height: 38px; padding: 0 12px; font-size: 14px; border-radius: 10px; border: 0.5px solid var(--sep); background: #f5f5f7; outline: none; }
+  #settings .seclabel { font-size: 11px; font-weight: 500; letter-spacing: 1.6px; color: var(--text2); margin-bottom: 12px; }
+  #settings input.tin { width: 100%; height: 40px; padding: 0 13px; font-size: 14px; border-radius: 10px; border: 0.5px solid var(--sep); background: var(--paper); outline: none; }
+  #settings input.tin:focus { border-color: var(--accent); }
   #settings .row2 { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  #settings .pbtn { border: none; border-radius: 10px; padding: 9px 15px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  #settings .pbtn { border: none; border-radius: 10px; padding: 10px 16px; font-size: 12.5px; font-weight: 500; cursor: pointer; }
   #settings .pbtn.primary { background: var(--accent); color: #fff; }
-  #settings .pbtn.soft { background: rgba(0,0,0,0.05); color: var(--text); }
+  #settings .pbtn.soft { background: var(--tile); color: var(--text); }
   #settings .pbtn.ghost { background: transparent; color: var(--text2); border: 0.5px solid var(--sep); }
-  #settings .pbtn:disabled { opacity: 0.55; cursor: default; }
-  #settings .shint { font-size: 11px; color: var(--text3); margin-top: 9px; line-height: 1.6; }
-  #settings .sclose { float: right; border: none; background: transparent; font-size: 17px; cursor: pointer; color: var(--text3); line-height: 1; }
+  #settings .pbtn:disabled { opacity: 0.5; cursor: default; }
+  #settings .shint { font-size: 10.5px; color: var(--text3); margin-top: 10px; line-height: 1.8; }
+  #settings .sclose { float: right; border: none; background: transparent; cursor: pointer; color: var(--text3); line-height: 0; padding: 2px; }
+  #settings .sclose:hover { color: var(--text); }
 </style>
 </head>
 <body class="scene-home">
@@ -135,7 +195,7 @@
       <input id="gpw2" type="password" placeholder="再次输入" autocomplete="new-password" style="display:none" />
       <div class="gerr" id="gerr"></div>
       <button class="gbtn" id="gbtn">解锁</button>
-      <button id="gbio" style="display:none;width:100%;height:40px;border:0.5px solid var(--accent);border-radius:11px;background:rgba(0,122,255,0.08);color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">🔑 用 Touch ID 解锁</button>
+      <button id="gbio" style="display:none;width:100%;height:40px;border:0.5px solid var(--accent);border-radius:11px;background:rgba(0,122,255,0.08);color:var(--accent);font-size:14px;font-weight:600;cursor:pointer"><span style="display:inline-flex;align-items:center;justify-content:center;gap:7px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10.2 13.2 8.3-8.3M16 7.4l2.2 2.2M13.6 9.8l2.2 2.2"/></svg>用 Touch ID 解锁</span></button>
       <button id="gcancel" style="border:none;background:transparent;color:var(--text2);font-size:12.5px;cursor:pointer">取消</button>
       <div class="gnote">「家庭理财」的主密码。本地加密、只存这台机器，忘了找不回。其它世界进去不用密码。</div>
     </div>
@@ -147,51 +207,59 @@
     <button class="tab" data-go="female">女主</button>
     <span class="spacer"></span>
     <span class="hint">本地 · 私密 · 不上传</span>
-    <button class="barbtn" id="setbtn">⚙ 设置</button>
-    <button class="lockbtn" id="lockbtn">🔒 锁定</button>
+    <button class="barbtn" id="setbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.4a1.5 1.5 0 0 0 .3 1.7l.1.1a1.8 1.8 0 1 1-2.6 2.6l-.1-.1a1.5 1.5 0 0 0-1.7-.3 1.5 1.5 0 0 0-.9 1.4v.2a1.8 1.8 0 1 1-3.6 0v-.1a1.5 1.5 0 0 0-1-1.4 1.5 1.5 0 0 0-1.7.3l-.1.1a1.8 1.8 0 1 1-2.6-2.6l.1-.1a1.5 1.5 0 0 0 .3-1.7 1.5 1.5 0 0 0-1.4-.9h-.2a1.8 1.8 0 1 1 0-3.6h.1a1.5 1.5 0 0 0 1.4-1 1.5 1.5 0 0 0-.3-1.7l-.1-.1a1.8 1.8 0 1 1 2.6-2.6l.1.1a1.5 1.5 0 0 0 1.7.3h.1a1.5 1.5 0 0 0 .9-1.4v-.2a1.8 1.8 0 1 1 3.6 0v.1a1.5 1.5 0 0 0 .9 1.4 1.5 1.5 0 0 0 1.7-.3l.1-.1a1.8 1.8 0 1 1 2.6 2.6l-.1.1a1.5 1.5 0 0 0-.3 1.7v.1a1.5 1.5 0 0 0 1.4.9h.2a1.8 1.8 0 1 1 0 3.6h-.1a1.5 1.5 0 0 0-1.4.9Z"/></svg>设置</button>
+    <button class="lockbtn" id="lockbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><rect x="4" y="10.5" width="16" height="10.5" rx="2.4"/><path d="M7.8 10.5V7.8a4.2 4.2 0 0 1 8.4 0v2.7"/></svg>锁定</button>
   </div>
 
   <div id="stage">
     <!-- 首页：两扇门 -->
     <div id="home" class="screen">
-      <div class="welcome"><h1>我家里的一切</h1><p>他和她的世界 · 各进各的门</p></div>
+      <div class="welcome">
+        <div>
+          <div class="eyebrow">本 地 · 私 密 · 离 线 可 用</div>
+          <h1>我家里的一切</h1>
+        </div>
+        <p>数据全部保存在本机 · 不联网、不上传</p>
+      </div>
+
+      <div class="sec-head"><span class="lbl">家 庭 公 用</span><span class="rule"></span><span class="aside">两个人都在用</span></div>
+      <div class="sharedrow">
+        <div class="sharedcards" id="sharedcards"></div>
+      </div>
+
+      <div class="sec-head"><span class="lbl">个 人 空 间</span><span class="rule"></span><span class="aside">各进各的门</span></div>
       <div class="doors">
         <button class="door male" data-go="male">
           <span class="glow"></span>
-          <div class="demoji">🎣</div>
-          <div class="dtag">男主入口</div>
+          <div class="dtag">男 主</div>
           <div class="dtitle">他的世界</div>
-          <div class="dsub">开发 · 钓鱼 · 爱车 · 麻将 · 文玩盘玩 · 茶 · 酒柜 · 收藏 · 腕表 · 看球 …</div>
+          <div class="dsub">开发 · 钓鱼 · 爱车 · 麻将 · 文玩 · 茶 · 酒柜 · 收藏 · 腕表 · 看球</div>
           <div class="denter">进入 →</div>
         </button>
         <button class="door female" data-go="female">
           <span class="glow"></span>
-          <div class="demoji">💄</div>
-          <div class="dtag">女主入口</div>
+          <div class="dtag">女 主</div>
           <div class="dtitle">她的世界</div>
-          <div class="dsub">彩妆 · 护肤保养 · 珠宝鉴赏 · 衣橱穿搭 · 包包 · 香水 · 美甲 · 烘焙 · 花艺 …</div>
+          <div class="dsub">彩妆 · 护肤 · 珠宝 · 穿搭 · 包包 · 香水 · 美甲 · 烘焙 · 花艺</div>
           <div class="denter">进入 →</div>
         </button>
       </div>
-      <div class="sharedrow">
-        <div class="sharedlabel">家里共用</div>
-        <div class="sharedcards" id="sharedcards"></div>
-      </div>
+
       <div class="foot">数据全部保存在本机，离线可用 · 不联网、不上传</div>
     </div>
 
     <!-- 男主世界 -->
     <div id="male" class="screen hide">
       <button class="back" data-go="home">← 回入口</button>
-      <div class="whead"><h2>男主的世界 🧭</h2><p>爱车·健身·健康·旅游计划，都已经能用</p></div>
+      <div class="whead"><h2><span style="display:inline-flex;align-items:center;gap:12px">男主的世界<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px;flex:none;color:var(--text3)"><path d="M3 12c3-4 7-5.5 11-4.5 2.4.6 4.4 2.2 5.6 4.5-1.2 2.3-3.2 3.9-5.6 4.5C10 17.5 6 16 3 12Z"/><circle cx="8.5" cy="11" r=".9"/></svg></span></h2><p>只放你添上的卡片 · 其余都收在卡片库里</p></div>
       <div class="grid" id="malegrid"></div>
-      <div class="foot">还想加点什么？告诉我，就像这几个一样做扎实。</div>
+      <div class="foot">想先做哪个？告诉我，就像开发世界那样做扎实。</div>
     </div>
 
     <!-- 女主世界 -->
     <div id="female" class="screen hide">
       <button class="back" data-go="home">← 回入口</button>
-      <div class="whead"><h2>女主的世界 💄</h2><p>她喜欢的，都在这儿 · 挑一个先做成真正能用的</p></div>
+      <div class="whead"><h2><span style="display:inline-flex;align-items:center;gap:12px">女主的世界<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px;flex:none;color:var(--text3)"><path d="M9 10.5h6V21H9Z"/><path d="M9.6 10.5V5.6l2.6-2.1 2.2 1.6v5.4"/></svg></span></h2><p>只放你添上的卡片 · 其余都收在卡片库里</p></div>
       <div class="grid" id="femalegrid"></div>
       <div class="foot">想先做哪个？告诉我，就像开发世界那样做扎实。</div>
     </div>
@@ -200,7 +268,7 @@
   </div>
   <div id="settings">
     <div class="scard2">
-      <button class="sclose" id="sclose">✕</button>
+      <button class="sclose" id="sclose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></svg></button>
       <h3>设置 · 数据</h3>
       <div class="ssub">用户、设置、备份都收在大厅这一处。</div>
       <div class="sec">
@@ -236,40 +304,99 @@
       </div>
     </div>
   </div>
+  <div id="library">
+    <div class="lcard">
+      <button class="lclose" id="lclose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" style="width:14px;height:14px"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></svg></button>
+      <h3 id="ltitle">卡片库</h3>
+      <div class="lsub">首页只放你正在用的。想要哪个就从这儿添上，不用的随时移除。</div>
+      <div class="llist" id="llist"></div>
+    </div>
+  </div>
   <div id="toast"></div>
 
   <script>
     const SRC = { finance: '/finance/', gallery: '/gallery/', vault: '/vault/', dev: '/dev/' };
+    // 细线图标：24×24，1.2px 描边，随 CSS color 走
+    const I = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+    const G = {
+      wallet:  '<path d="M3 7.5h14.5A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5H5.5A2.5 2.5 0 0 1 3 17V7.5Z"/><path d="M3 7.5 15.5 4.2"/><circle cx="16" cy="13.5" r="1.1"/>',
+      photo:   '<rect x="3" y="5.5" width="18" height="13" rx="2.4"/><circle cx="8.6" cy="10.4" r="1.5"/><path d="m3.6 16.8 4.6-4.2 4 3.4 3.4-3 4.4 3.8"/>',
+      lock:    '<rect x="4" y="10.5" width="16" height="10.5" rx="2.4"/><path d="M7.8 10.5V7.8a4.2 4.2 0 0 1 8.4 0v2.7"/><circle cx="12" cy="15.6" r="1.1"/>',
+      code:    '<path d="m8.5 8.5-4 3.5 4 3.5"/><path d="m15.5 8.5 4 3.5-4 3.5"/><path d="M13.4 5.6 10.6 18.4"/>',
+      fish:    '<path d="M3 12c3-4 7-5.5 11-4.5 2.4.6 4.4 2.2 5.6 4.5-1.2 2.3-3.2 3.9-5.6 4.5C10 17.5 6 16 3 12Z"/><circle cx="8.5" cy="11" r=".9"/><path d="M19.6 12c1-1.6 1.4-3 1.4-3"/>',
+      dumbbell:'<path d="M6.5 9v6M9.5 7.5v9M14.5 7.5v9M17.5 9v6"/><path d="M9.5 12h5"/><path d="M3.5 10.5v3M20.5 10.5v3"/>',
+      car:     '<path d="M4 15.5h16"/><path d="M5.5 15.5v2.2a.8.8 0 0 1-.8.8H3.8a.8.8 0 0 1-.8-.8v-2.2"/><path d="M21 15.5v2.2a.8.8 0 0 1-.8.8h-.9a.8.8 0 0 1-.8-.8v-2.2"/><path d="M3 15.5v-3.2l2-4.6A1.6 1.6 0 0 1 6.5 6.7h11a1.6 1.6 0 0 1 1.5 1l2 4.6v3.2Z"/><path d="M5.2 12.3h13.6"/>',
+      mahjong: '<rect x="6" y="3.5" width="12" height="17" rx="2"/><path d="M9.2 8h5.6M9.2 12h5.6M9.2 16h5.6"/>',
+      beads:   '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="4.5" r="1.5"/><circle cx="19.5" cy="12" r="1.5"/><circle cx="12" cy="19.5" r="1.5"/><circle cx="4.5" cy="12" r="1.5"/>',
+      tea:     '<path d="M4.5 9h12v5.5a4 4 0 0 1-4 4H8.5a4 4 0 0 1-4-4Z"/><path d="M16.5 10.5h1.8a2.2 2.2 0 0 1 0 4.4h-1.8"/><path d="M8 6c.6-.8.6-1.6 0-2.4M11.5 6c.6-.8.6-1.6 0-2.4"/>',
+      bottle:  '<path d="M10 3.5h4v3l2 2.6V20a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9.1l2-2.6Z"/><path d="M8 13h8"/>',
+      coin:    '<circle cx="9.5" cy="9.5" r="5.5"/><path d="M14.4 6.3a5.5 5.5 0 1 1-4.9 9.4"/>',
+      watch:   '<circle cx="12" cy="12" r="5"/><path d="M9.5 7 9 3.5h6L14.5 7M9.5 17 9 20.5h6L14.5 17"/><path d="M12 10v2.2l1.4 1"/>',
+      camera:  '<path d="M4 8h3l1.4-2h7.2L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13.2" r="3.4"/>',
+      ball:    '<circle cx="12" cy="12" r="8.5"/><path d="m12 7 3.6 2.6-1.4 4.3H9.8L8.4 9.6Z"/><path d="M12 3.5v3.5M4.4 9.6l4 0M19.6 9.6l-4 0M7.6 19.6l2.2-5.7M16.4 19.6l-2.2-5.7"/>',
+      chess:   '<rect x="3.5" y="3.5" width="17" height="17" rx="1.6"/><path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>',
+      tent:    '<path d="m12 4 8.5 15.5H3.5Z"/><path d="M12 4v15.5"/><path d="m12 12.5 4 7M12 12.5l-4 7"/>',
+      plant:   '<path d="M12 20v-7"/><path d="M12 13c0-3-2-5-5-5 0 3 2 5 5 5Z"/><path d="M12 13c0-3.4 2.2-5.6 5.6-5.6 0 3.4-2.2 5.6-5.6 5.6Z"/><path d="M8 20h8"/>',
+      health:  '<path d="M3 12.5h3.6l1.6-3.4 2.6 6.4 2-4.4 1.4 2.4H21"/>',
+      lipstick:'<path d="M9 10.5h6V21H9Z"/><path d="M9.6 10.5V5.6l2.6-2.1 2.2 1.6v5.4"/>',
+      serum:   '<path d="M9.5 3.5h5v2.4H9.5Z"/><path d="M10.2 5.9v2L8 10.6V19a1.5 1.5 0 0 0 1.5 1.5h5A1.5 1.5 0 0 0 16 19v-8.4l-2.2-2.7v-2"/><path d="M8 14h8"/>',
+      gem:     '<path d="m5 9.5 3-4h8l3 4-7 10Z"/><path d="M5 9.5h14M9.2 9.5 12 19.5l2.8-10M8 5.5l1.2 4M16 5.5l-1.2 4"/>',
+      hanger:  '<path d="M12 8.5a2.2 2.2 0 1 1 2.2-2.2"/><path d="M12 8.5v2.2l8 5.2a1.6 1.6 0 0 1-.9 3H4.9a1.6 1.6 0 0 1-.9-3l8-5.2"/>',
+      bag:     '<path d="M4.5 8.5h15L18.6 20H5.4Z"/><path d="M8.6 8.5V6.4a3.4 3.4 0 0 1 6.8 0v2.1"/>',
+      perfume: '<path d="M10 3.5h4v2.6h-4Z"/><rect x="7" y="9" width="10" height="11.5" rx="2"/><path d="M12 6.1V9"/><path d="M17.4 11.5h2.2M18.5 10.4v2.2"/>',
+      nail:    '<path d="M8.5 11V6.2a2 2 0 0 1 4 0V11"/><path d="M12.5 11V8.4a1.8 1.8 0 0 1 3.6 0V13"/><path d="M8.5 11v6.4a3.6 3.6 0 0 0 3.6 3.6h1.4a3.6 3.6 0 0 0 3.6-3.6"/>',
+      cake:    '<path d="M6 11h12l-1.4 9H7.4Z"/><path d="M6 11c0-2.4 2.7-4.2 6-4.2s6 1.8 6 4.2"/><path d="M12 6.8V3.5"/>',
+      yoga:    '<circle cx="12" cy="5" r="2"/><path d="M12 7.5v5.5"/><path d="m12 13 5 3.5M12 13l-5 3.5"/><path d="M6 20h12"/>',
+      flower:  '<circle cx="12" cy="8" r="2.2"/><path d="M12 5.8a2.4 2.4 0 1 1 2.2 2.2M12 5.8a2.4 2.4 0 1 0-2.2 2.2M12 10.2a2.4 2.4 0 1 0 2.2-2.2M12 10.2a2.4 2.4 0 1 1-2.2-2.2"/><path d="M12 10.5V21"/><path d="M12 15c-2.2 0-3.6-1.2-3.6-1.2"/>',
+      coffee:  '<path d="M4.5 8h12v6.5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4Z"/><path d="M16.5 9.5h1.8a2.2 2.2 0 0 1 0 4.4h-1.8"/><path d="M4 21h14"/>',
+      tv:      '<rect x="3" y="7" width="18" height="12" rx="2"/><path d="m8.5 3.5 3.5 3.5 3.5-3.5"/>',
+      plane:   '<path d="M10.5 20.5 12 16l7.5-2.5a1.6 1.6 0 0 0 0-3L12 8l-1.5-4.5L9 4v4.6L3.5 10a1 1 0 0 0 0 1.9L9 13.4V19Z"/>',
+      journal: '<path d="M6 3.5h11a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 17 20.5H6Z"/><path d="M6 3.5A1.5 1.5 0 0 0 4.5 5v14A1.5 1.5 0 0 0 6 20.5"/><path d="M9.5 8h5.5M9.5 12h5.5"/>',
+      cat:     '<path d="M5.5 10 4.5 5l3.6 2.2a7.6 7.6 0 0 1 7.8 0L19.5 5l-1 5"/><path d="M5.5 10a6.5 6.5 0 1 0 13 0"/><circle cx="9.5" cy="13" r=".8"/><circle cx="14.5" cy="13" r=".8"/><path d="M12 15.4v1.2M12 16.6c-.8.9-2 .9-2.8.3M12 16.6c.8.9 2 .9 2.8.3"/>',
+    };
     // 男主：中年男人的爱好全家桶（开发世界已实装，其余为占位）
     const MALE = [
-      { icon: '👨‍💻', name: '开发世界', desc: '任务·日程·笔记·片段·书签·密钥', app: 'dev', grad: 'linear-gradient(160deg,#1d1d1f,#5E5CE6)' },
-      { icon: '🚗', name: '爱车', desc: '油耗·保养·里程记录', app: 'dev', tab: 'vehicle', grad: 'linear-gradient(160deg,#3b6fb0,#2f7d6b)' },
-      { icon: '🏃', name: '健身', desc: '体重·体脂·目标管理', app: 'dev', tab: 'fitness', grad: 'linear-gradient(160deg,#4a7a3a,#8a6a3a)' },
-      { icon: '🩺', name: '健康记录', desc: '血压·血脂·饮食', app: 'dev', tab: 'health', grad: 'linear-gradient(160deg,#c0392b,#8a6a3a)' },
-      { icon: '🗺️', name: '旅游计划', desc: '世界景点·地图·计划', app: 'dev', tab: 'travel', grad: 'linear-gradient(160deg,#3a6b7a,#5a6470)' },
+      { icon: I(G.code), name: '开发世界', desc: '任务·日程·笔记·片段·书签·密钥', app: 'dev' },
+      { icon: I(G.fish), name: '钓鱼', desc: '钓点·渔获·装备·潮汐天气' },
+      { icon: I(G.car), name: '爱车', desc: '保养·油耗·里程·违章·改装', app: 'dev', tab: 'vehicle' },
+      { icon: I(G.dumbbell), name: '健身', desc: '体重·体脂·目标管理', app: 'dev', tab: 'fitness' },
+      { icon: I(G.health), name: '健康记录', desc: '血压·血脂·饮食', app: 'dev', tab: 'health' },
+      { icon: I(G.plane), name: '旅游计划', desc: '世界景点·地图·行程', app: 'dev', tab: 'travel' },
+      { icon: I(G.mahjong), name: '麻将牌局', desc: '牌友·约局·输赢账·番种' },
+      { icon: I(G.beads), name: '文玩盘玩', desc: '手串·核桃·葫芦·包浆进度' },
+      { icon: I(G.tea), name: '茶 · 茶具', desc: '茶叶库存·紫砂壶·品鉴笔记' },
+      { icon: I(G.bottle), name: '酒柜 · 雪茄', desc: '白酒·红酒·威士忌·年份' },
+      { icon: I(G.coin), name: '收藏', desc: '邮票·钱币·纪念币·老物件' },
+      { icon: I(G.watch), name: '腕表', desc: '收藏·佩戴轮换·保养上链' },
+      { icon: I(G.camera), name: '摄影', desc: '器材·镜头·作品·参数' },
+      { icon: I(G.ball), name: '看球', desc: '赛程·主队·竞猜小账' },
+      { icon: I(G.chess), name: '棋友', desc: '象棋·围棋·棋谱·对局' },
+      { icon: I(G.tent), name: '户外露营', desc: '路线·装备·自驾游' },
+      { icon: I(G.plant), name: '盆景花草', desc: '浇水提醒·养护档案' },
+      { icon: I(G.health), name: '养生健康', desc: '血压·步数·作息·枸杞' },
     ];
     // 女主：爱好全家桶
     const FEMALE = [
-      { icon: '💄', name: '彩妆', desc: '库存·色号·保质期·空瓶清单' },
-      { icon: '🧴', name: '护肤保养', desc: '早晚流程·面膜·医美记录' },
-      { icon: '💎', name: '珠宝鉴赏', desc: '黄金·翡翠·钻石·证书·估值' },
-      { icon: '👗', name: '衣橱穿搭', desc: '单品·搭配·换季·购物清单' },
-      { icon: '👜', name: '包包', desc: '收藏·轮换·保养' },
-      { icon: '🌸', name: '香水', desc: '前中后调·场合·库存' },
-      { icon: '💅', name: '美甲', desc: '款式·店铺·打卡' },
-      { icon: '🧁', name: '烘焙美食', desc: '食谱·配方·烘焙记录' },
-      { icon: '🧘‍♀️', name: '瑜伽塑形', desc: '课程·打卡·身材管理' },
-      { icon: '💐', name: '花艺插花', desc: '花材·作品·养护' },
-      { icon: '☕', name: '下午茶探店', desc: '咖啡豆·甜品·探店地图' },
-      { icon: '📺', name: '追剧追星', desc: '片单·爱豆·演唱会' },
-      { icon: '✈️', name: '旅行打卡', desc: '目的地·攻略·拍照点' },
-      { icon: '📔', name: '手账文具', desc: '手帐·胶带·贴纸' },
-      { icon: '🐱', name: '萌宠', desc: '猫狗档案·疫苗·用品' },
+      { icon: I(G.lipstick), name: '彩妆', desc: '库存·色号·保质期·空瓶清单' },
+      { icon: I(G.serum), name: '护肤保养', desc: '早晚流程·面膜·医美记录' },
+      { icon: I(G.gem), name: '珠宝鉴赏', desc: '黄金·翡翠·钻石·证书·估值' },
+      { icon: I(G.hanger), name: '衣橱穿搭', desc: '单品·搭配·换季·购物清单' },
+      { icon: I(G.bag), name: '包包', desc: '收藏·轮换·保养' },
+      { icon: I(G.perfume), name: '香水', desc: '前中后调·场合·库存' },
+      { icon: I(G.nail), name: '美甲', desc: '款式·店铺·打卡' },
+      { icon: I(G.cake), name: '烘焙美食', desc: '食谱·配方·烘焙记录' },
+      { icon: I(G.yoga), name: '瑜伽塑形', desc: '课程·打卡·身材管理' },
+      { icon: I(G.flower), name: '花艺插花', desc: '花材·作品·养护' },
+      { icon: I(G.coffee), name: '下午茶探店', desc: '咖啡豆·甜品·探店地图' },
+      { icon: I(G.tv), name: '追剧追星', desc: '片单·爱豆·演唱会' },
+      { icon: I(G.plane), name: '旅行打卡', desc: '目的地·攻略·拍照点' },
+      { icon: I(G.journal), name: '手账文具', desc: '手帐·胶带·贴纸' },
+      { icon: I(G.cat), name: '萌宠', desc: '猫狗档案·疫苗·用品' },
     ];
     const SHARED = [
-      { icon: '💰', name: '家庭理财', desc: '净资产·账户·预算·保险箱', app: 'finance', grad: 'linear-gradient(160deg,#007AFF,#5E5CE6)' },
-      { icon: '🖼️', name: '家庭影像', desc: '照片视频·归类·去重·相册', app: 'gallery', grad: 'linear-gradient(160deg,#34C759,#30B0C7)' },
-      { icon: '🔐', name: '家庭密码', desc: '账号·银行卡·安全笔记', app: 'vault', grad: 'linear-gradient(160deg,#5E5CE6,#007AFF)' },
+      { icon: I(G.wallet), name: '家庭理财', desc: '净资产·账户·预算·保险箱', app: 'finance' },
+      { icon: I(G.photo), name: '家庭影像', desc: '照片视频·归类·去重·相册', app: 'gallery' },
+      { icon: I(G.lock), name: '家庭密码', desc: '账号·银行卡·安全笔记', app: 'vault' },
     ];
     const MALE_PAL = ['#2f7d6b', '#3b6fb0', '#5a6470', '#4a7a3a', '#8a6a3a', '#3a6b7a', '#6b4a7a', '#7a6b3a'];
     const FEM_PAL = ['#e07a9a', '#c77fd8', '#e0a050', '#d86a8a', '#b07ad0', '#e08a6a', '#cf7fb0', '#c06a9a'];
@@ -278,8 +405,7 @@
     function tile(item, i, pal) {
       const soon = !item.app;
       const bg = item.grad || grad(i, pal);
-      const go = item.app ? (item.tab ? `${item.app}#${item.tab}` : item.app) : '';
-      return `<button class="tile ${soon ? 'soon' : ''}" ${item.app ? `data-go="${go}"` : 'data-soon="' + item.name + '"'}>
+      return `<button class="tile ${soon ? 'soon' : ''}" ${item.app ? `data-go="${item.app}${item.tab ? '#' + item.tab : ''}"` : 'data-soon="' + item.name + '"'}>
         <div class="tico" style="background:${bg}">${item.icon}</div>
         <div class="tname">${item.name}</div>
         <div class="tdesc">${item.desc}</div>
@@ -292,8 +418,53 @@
         <div><h4>${item.name}</h4><div class="d">${item.desc}</div></div>
       </button>`;
     }
-    document.getElementById('malegrid').innerHTML = MALE.map((m, i) => tile(m, i, MALE_PAL)).join('');
-    document.getElementById('femalegrid').innerHTML = FEMALE.map((m, i) => tile(m, i, FEM_PAL)).join('');
+    // ===== 卡片库：首页只显示已添加的，其余收在库里 =====
+    const LIB = { male: MALE, female: FEMALE };
+    const PAL = { male: MALE_PAL, female: FEM_PAL };
+    const CKEY = (w) => 'home.cards.' + w;
+    const DEFAULT_CARDS = { male: ['开发世界', '爱车', '健身', '健康记录', '旅游计划'], female: [] };
+    function myCards(w) {
+      try { const v = JSON.parse(localStorage.getItem(CKEY(w))); if (Array.isArray(v)) return v; } catch (e) {}
+      return DEFAULT_CARDS[w].slice();
+    }
+    function saveCards(w, list) { localStorage.setItem(CKEY(w), JSON.stringify(list)); }
+    function toggleCard(w, name) {
+      const list = myCards(w), i = list.indexOf(name);
+      if (i >= 0) list.splice(i, 1); else list.push(name);
+      saveCards(w, list); renderWorld(w); renderLibrary(w);
+    }
+    function renderWorld(w) {
+      const list = myCards(w), lib = LIB[w];
+      const items = list.map((n) => lib.find((x) => x.name === n)).filter(Boolean);
+      const cards = items.map((m) => tile(m, lib.indexOf(m), PAL[w])).join('');
+      const add = '<button class="tile add" data-lib="' + w + '"><span class="plus">＋</span><span class="lb">添加卡片</span></button>';
+      document.getElementById(w + 'grid').innerHTML = cards + add;
+    }
+    function renderLibrary(w) {
+      const list = myCards(w);
+      document.getElementById('ltitle').textContent = (w === 'male' ? '男主' : '女主') + '的卡片库';
+      document.getElementById('llist').innerHTML = LIB[w].map((m) => {
+        const on = list.includes(m.name);
+        return '<div class="lrow"><span class="lico">' + m.icon + '</span>' +
+          '<span><span class="lname">' + m.name + '</span><div class="ldesc">' + m.desc + (m.app ? '' : ' · 即将开放') + '</div></span>' +
+          '<button class="lbtn' + (on ? ' on' : '') + '" data-card="' + m.name + '" data-world="' + w + '">' + (on ? '移除' : '添加') + '</button></div>';
+      }).join('');
+    }
+    const library = document.getElementById('library');
+    function openLibrary(w) { renderLibrary(w); library.classList.add('show'); }
+    document.getElementById('lclose').addEventListener('click', () => library.classList.remove('show'));
+    library.addEventListener('click', (e) => {
+      if (e.target === library) { library.classList.remove('show'); return; }
+      const b = e.target.closest('[data-card]');
+      if (b) toggleCard(b.dataset.world, b.dataset.card);
+    });
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-lib]');
+      if (a) { e.stopPropagation(); openLibrary(a.dataset.lib); }
+    }, true);
+
+    renderWorld('male');
+    renderWorld('female');
     document.getElementById('sharedcards').innerHTML = SHARED.map(scard).join('');
 
     const frame = document.getElementById('frame');
@@ -310,7 +481,7 @@
     }
 
     function nav(target) {
-      // target 可能带子页深链后缀，如 "dev#vehicle"（男主世界的卡片直接跳进开发世界的某个 tab）。
+      // target 可能带子页深链后缀，如 "dev#vehicle"（卡片直接跳进子应用的某个 tab）。
       const [app, tab] = target.split('#');
       if (app === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; refreshGateBio(); setTimeout(() => gpw.focus(), 50); return; }
       if (screens[app]) {
@@ -481,11 +652,7 @@
       bkmsg.textContent = '正在恢复…';
       try {
         await applyBundle(bundle);
-        // 关键：把导入的数据立刻写回磁盘并对齐 diskSyncedAt——否则重载后自动同步会把磁盘上的旧数据又拉回来、
-        // 覆盖掉这次导入（用户看到的“导入没反应”）。新版读旧备份没问题，之前只是被同步冲掉了。
-        const r = await autoSave('manual');
-        if (r && r.ok && r.savedAt) localStorage.setItem('home.diskSyncedAt', String(r.savedAt));
-        bkmsg.textContent = (r && r.readonly) ? '本版本为只读（磁盘上是更新版本的数据），导入未写盘。' : '恢复完成，正在刷新…';
+        bkmsg.textContent = '恢复完成，正在刷新…';
         setTimeout(() => location.reload(), 700);
       } catch (e) { bkmsg.textContent = '恢复出错：' + (e && e.message || e); }
     }
@@ -528,12 +695,12 @@
     function enterReadOnly() {
       if (READ_ONLY_NEWER) return;
       READ_ONLY_NEWER = true;
-      if (bkstatus) bkstatus.textContent = '👁 只读：本机数据由更新版本的 App 写入。可以查看，但本(旧)版本的改动不会保存、也不会覆盖它。要编辑请把本入口更新到最新版。';
+      if (bkstatus) bkstatus.textContent = '只读：本机数据由更新版本的 App 写入。可以查看，但本(旧)版本的改动不会保存、也不会覆盖它。要编辑请把本入口更新到最新版。';
       if (!document.getElementById('roBanner')) {
         const b = document.createElement('div');
         b.id = 'roBanner';
-        b.textContent = '👁 只读模式 · 本机数据由更新版本的 App 写入：可查看，改动不会保存（也不会覆盖它）。请更新本入口后再编辑。';
-        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#ff9500;color:#fff;font-size:12.5px;font-weight:600;text-align:center;padding:7px 12px;box-shadow:0 1px 6px rgba(0,0,0,.15)';
+        b.textContent = '只读模式 · 本机数据由更新版本的 App 写入：可查看，改动不会保存（也不会覆盖它）。请更新本入口后再编辑。';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c07a1e;color:#fff;font-size:12.5px;font-weight:600;text-align:center;padding:7px 12px;box-shadow:0 1px 6px rgba(70,54,34,.18)';
         document.body.appendChild(b);
       }
     }
@@ -577,9 +744,7 @@
       try { const res = await fetch('/api/backup/latest'); if (res.status === 204) { toast('本机还没有自动备份'); return; } latest = await res.json(); } catch (e) { toast('读取本机备份失败'); return; }
       if (!latest || !latest.__home_backup) { toast('本机备份无法识别'); return; }
       if (!confirm(`用本机最近一次自动备份（${fmtTime(latest.savedAt)}）替换当前全部数据？`)) return;
-      await applyBundle(latest);
-      if (latest.savedAt) localStorage.setItem('home.diskSyncedAt', String(latest.savedAt));  // 对齐，免得重载又多恢复一次
-      location.reload();
+      await applyBundle(latest); location.reload();
     }
     async function initHomeVersion() {
       try {
