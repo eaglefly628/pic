@@ -33,8 +33,10 @@ function clone<T>(v: T): T {
 export function VaultProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
   const [data, setData] = useState<VaultData | null>(null);
+  const dataRef = useRef<VaultData | null>(null); // 与 data 同步：update 基于最新值，避免闭包旧值互相覆盖
   const keysRef = useRef<UnlockedKeys | null>(null);
   const blobRef = useRef<VaultBlob | null>(null);
+  const writeQueue = useRef<Promise<void>>(Promise.resolve()); // 串行写队列：前一次落盘完成才写下一次
   const lastActivity = useRef<number>(Date.now());
 
   const create = useCallback(async (pw: string) => {
@@ -43,6 +45,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     saveBlob(blob);
     blobRef.current = blob;
     keysRef.current = keys;
+    dataRef.current = initial;
     setData(initial);
     lastActivity.current = Date.now();
     setStatus("unlocked");
@@ -58,6 +61,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       const { data: d, keys } = await unlockVault<VaultData>(pw, blob);
       blobRef.current = blob;
       keysRef.current = keys;
+      dataRef.current = d;
       setData(d);
       lastActivity.current = Date.now();
       setStatus("unlocked");
@@ -89,6 +93,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const lock = useCallback(() => {
     keysRef.current = null;
     pwSession.set(null); // 同时锁上密码保险箱的二次验证会话
+    dataRef.current = null;
     setData(null);
     setStatus("locked");
   }, []);
@@ -97,18 +102,26 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     setStatus(hasVault() ? "locked" : "onboard");
     keysRef.current = null;
     pwSession.set(null);
+    dataRef.current = null;
     setData(null);
   }, []);
 
   const update = useCallback(async (mut: (d: VaultData) => void) => {
-    if (!keysRef.current || !data) return;
-    const next = clone(data);
+    const keys = keysRef.current;
+    if (!keys || !dataRef.current) return;
+    const next = clone(dataRef.current); // 基于最新数据克隆，避免并发 update 相互覆盖
     mut(next);
+    dataRef.current = next;
     setData(next);
-    const blob = await sealVault(keysRef.current, next);
-    saveBlob(blob);
-    blobRef.current = blob;
-  }, [data]);
+    // 排进串行队列：前一次写完才写下一次；返回本次持久化完成的 Promise（失败会 reject）
+    const p = writeQueue.current.then(async () => {
+      const blob = await sealVault(keys, next);
+      saveBlob(blob);
+      blobRef.current = blob;
+    });
+    writeQueue.current = p.catch(() => {}); // 单次失败不阻塞后续写入
+    return p;
+  }, []);
 
   const changePassword = useCallback(async (newPw: string) => {
     if (!keysRef.current || !blobRef.current) return;

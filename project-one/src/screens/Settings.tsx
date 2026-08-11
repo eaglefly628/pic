@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { useTheme } from "../lib/theme";
 import { passwordStrength } from "../lib/crypto";
-import { clearVault, listBackups, addBackup, restoreBackup, deleteBackup } from "../lib/storage";
+import { clearVault, clearBackups, listBackups, addBackup, restoreBackup, deleteBackup } from "../lib/storage";
 import { hasPwBox, createPwBox, unlockPwBox, changePwBoxPassword, clearPwBox, pwSession } from "../vault/pwStore";
+import { clearSecret } from "../vault/secretStore";
 import { Btn, Field, Select, TextField, card } from "../ui";
 import { IconDownload, IconCheck } from "../icons";
 
@@ -44,12 +45,16 @@ export default function Settings() {
     setPwBoxMsg("");
     const r = await unlockPwBox(cpw);
     if (!r) return setPwBoxMsg("当前密码错误");
-    update((d) => { d.passwords = r.items; }); // 迁回主金库
+    try {
+      await update((d) => { d.passwords = r.items; }); // 迁回主金库：等真正落盘成功后才清理独立库
+    } catch (e) {
+      return setPwBoxMsg(e instanceof Error ? e.message : "迁回主金库失败，已保留独立加密库");
+    }
     clearPwBox(); pwSession.set(null); setPwOn(false); setCpw(""); setNpw("");
   };
 
   const refreshBk = () => setBackups(listBackups());
-  const createBackup = () => { addBackup(bkLabel.trim() || `备份 ${new Date().toLocaleString("zh-CN")}`); setBkLabel(""); refreshBk(); };
+  const createBackup = () => { try { addBackup(bkLabel.trim() || `备份 ${new Date().toLocaleString("zh-CN")}`); } catch (e) { return alert(e instanceof Error ? e.message : "备份保存失败"); } setBkLabel(""); refreshBk(); };
   const restoreBk = (id: string) => { if (confirm("恢复到该备份？当前数据会被替换（建议先创建一个当前备份）。恢复后需用该备份对应的主密码解锁。")) { restoreBackup(id); reload(); } };
   const deleteBk = (id: string) => { if (confirm("删除该备份？")) { deleteBackup(id); refreshBk(); } };
 
@@ -73,7 +78,8 @@ export default function Settings() {
 
   const resetAll = () => {
     if (!confirm("确定要删除本机金库及全部数据吗？此操作不可恢复（建议先导出备份）。")) return;
-    clearVault();
+    clearVault(); clearPwBox(); clearSecret(); clearBackups(); // 一并清除二次验证库、独立管理与程序内备份，避免新金库被旧门锁死
+    pwSession.set(null);
     reload();
   };
 

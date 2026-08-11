@@ -11,6 +11,7 @@ export default function People({ onOpen }: { onOpen: (list: MediaItem[], i: numb
   const [prog, setProg] = useState<{ done: number; total: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [editing, setEditing] = useState("");
+  const visible = useMemo(() => items.filter((m) => !m.private), [items]);
 
   const avatars = useMemo(() => {
     const m = new Map<string, string>();
@@ -39,7 +40,7 @@ export default function People({ onOpen }: { onOpen: (list: MediaItem[], i: numb
   if (sel) {
     const p = persons.find((x) => x.id === sel);
     if (!p) { setSel(null); return null; }
-    const list = items.filter((i) => i.people?.includes(p.id));
+    const list = visible.filter((i) => i.people?.includes(p.id));
     return (
       <div style={{ padding: "20px 32px 40px", animation: "fvFade 0.3s ease" }}>
         <button onClick={() => setSel(null)} style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13.5, fontWeight: 500, marginBottom: 14 }}>
@@ -67,7 +68,7 @@ export default function People({ onOpen }: { onOpen: (list: MediaItem[], i: numb
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 16 }}>
           {sorted.map((p) => {
-            const cover = items.find((i) => i.people?.includes(p.id));
+            const cover = visible.find((i) => i.people?.includes(p.id));
             return (
               <button key={p.id} onClick={() => { setSel(p.id); setEditing(p.name || ""); }} className="fv-card-int" style={{ ...card, padding: "16px 12px", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 9 }}>
                 <Avatar url={avatars.get(p.id) || (cover ? thumbUrl(cover.id) : undefined)} size={84} />

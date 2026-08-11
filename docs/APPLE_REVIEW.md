@@ -3,6 +3,11 @@
 > 版本基线：v0.3.0（commit 86210cc）· Review 日期：2026-08-11
 > 目标：iPhone（手机）/ iPad（平板）/ Mac（桌面）三端上架 App Store
 > 范围：run.py · hub · desktop(Electron) · project-one(理财) · project-two(影像) · project-three(密码) · project-four(开发世界) · CI/构建链
+>
+> **进度更新（v0.4.x）**：P0-1 的服务器已迁到 Node（desktop/server.js，App 不再依赖系统 Python）；
+> 双入口同步加了过期写/冲突备份/首次同步护栏；第五节「第一批」数据安全修复已全部落地
+> （密码库导入试解密+旧库备份、理财迁移顺序+重置清理+写队列、开发世界 XSS/剪贴板/笔记丢字、
+> 影像元数据落盘+私密过滤补齐）。硬编码 AUTO_PW 与 sessionStorage 主密码属架构决策，仍待第二批。
 
 ---
 

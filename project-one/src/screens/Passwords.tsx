@@ -41,7 +41,7 @@ function PwGate({ clearSec }: { clearSec: number }) {
       clearSec={clearSec}
       onMutate={(fn) => {
         const next = clone(sess.items); fn(next);
-        void savePwBox(sess.keys, next);
+        savePwBox(sess.keys, next).catch((e) => alert(e instanceof Error ? e.message : "保存失败，本次修改未写入磁盘")); // 落盘失败要提示，不能静默丢
         const ns = { keys: sess.keys, items: next };
         pwSession.set(ns); setSess(ns);
       }}

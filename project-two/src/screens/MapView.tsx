@@ -20,7 +20,7 @@ export default function MapView({ onOpen }: { onOpen: (list: MediaItem[], i: num
     let map: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     let cancelled = false;
     (async () => {
-      const geo = items.filter((i) => i.lat != null && i.lng != null);
+      const geo = items.filter((i) => !i.private && i.lat != null && i.lng != null);
       if (geo.length === 0) { setStatus("empty"); return; }
       try {
         await loadCss(CSS);
@@ -43,7 +43,7 @@ export default function MapView({ onOpen }: { onOpen: (list: MediaItem[], i: num
     return () => { cancelled = true; if (map) map.remove(); };
   }, [items]);
 
-  const geoCount = items.filter((i) => i.lat != null).length;
+  const geoCount = items.filter((i) => !i.private && i.lat != null).length;
 
   if (status === "empty") {
     return <div style={{ padding: "40px 32px" }}><EmptyState icon={<IconMap size={28} stroke="var(--text-tertiary)" />} text="还没有带定位信息的照片" /></div>;

@@ -15,6 +15,8 @@ const EMOJI: Record<string, string> = {
 const emojiFor = (a: Account) => EMOJI[a.category ?? ""] ?? (a.domain === "work" ? "💼" : "🧾");
 const KIND_LABEL: Record<AccountKind, string> = { subscription: "订阅", prepaid: "预付" };
 const agoText = (ts?: number) => { if (!ts) return ""; const d = Math.floor((Date.now() - ts) / 86400000); return d <= 0 ? "今天更新" : d === 1 ? "昨天更新" : `${d} 天前更新`; };
+// 与 Bookmarks 一致的 normalize/白名单：无协议补 https://；javascript:/data: 等其他 scheme 一律拒绝（返回 null，渲染成纯文本）
+const safeUrl = (u: string) => { const t = u.trim(); if (/^https?:\/\//i.test(t)) return t; if (!t || /^[a-z][\w+.-]*:/i.test(t)) return null; return "https://" + t; };
 
 export default function Accounts({ data, mut }: { data: import("../../types").DevData; mut: Mut }) {
   const { copy } = useVault();
@@ -88,6 +90,7 @@ export default function Accounts({ data, mut }: { data: import("../../types").De
             const expT = dateTone(expDays);
             const low = a.kind === "prepaid" && a.balance != null && a.lowBalance != null && a.balance <= a.lowBalance;
             const revealed = shown.has(a.id);
+            const urlHref = a.url ? safeUrl(a.url) : null;
             return (
               <div key={a.id} style={{ ...card, padding: "14px 16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
@@ -133,7 +136,9 @@ export default function Accounts({ data, mut }: { data: import("../../types").De
                         <button className="fv-icnbtn" onClick={() => copy(a.secret!, "密码")} title="复制" style={icnBtn}><IconCopy size={13} stroke="currentColor" /></button>
                       </div>
                     )}
-                    {a.url && <a href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--accent)", textDecoration: "none" }}><IconLink size={12} stroke="currentColor" />{a.url.replace(/^https?:\/\//, "")}</a>}
+                    {a.url && (urlHref
+                      ? <a href={urlHref} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--accent)", textDecoration: "none" }}><IconLink size={12} stroke="currentColor" />{a.url.replace(/^https?:\/\//, "")}</a>
+                      : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--text-tertiary)" }}><IconLink size={12} stroke="currentColor" />{a.url}</span>)}
                     {a.phone && <InfoRow label="电话" value={a.phone} onCopy={() => copy(a.phone!, "电话")} />}
                   </div>
                 )}

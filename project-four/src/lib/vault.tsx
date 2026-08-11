@@ -125,14 +125,19 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     await update((d) => { d.settings = { ...d.settings, ...s }; });
   }, [update]);
 
-  const changeMaster = useCallback(async (oldPw: string, newPw: string): Promise<boolean> => {
-    const file = await store.loadVaultFile();
-    if (!file) return false;
-    try { await openVault(oldPw, file); } catch { return false; }
-    const { file: nf, key, salt, iter } = await createVault(newPw, dataRef.current);
-    await store.saveVaultFile(nf);
-    keyRef.current = key; saltRef.current = salt; iterRef.current = iter;
-    return true;
+  // 排进与 update 相同的串行队列：等 in-flight 的旧密钥 persist 落盘后再换钥、重封、落盘，避免旧写入后落盘覆盖新库
+  const changeMaster = useCallback((oldPw: string, newPw: string): Promise<boolean> => {
+    const run = queueRef.current.then(async () => {
+      const file = await store.loadVaultFile();
+      if (!file) return false;
+      try { await openVault(oldPw, file); } catch { return false; }
+      const { file: nf, key, salt, iter } = await createVault(newPw, dataRef.current);
+      await store.saveVaultFile(nf);
+      keyRef.current = key; saltRef.current = salt; iterRef.current = iter;
+      return true;
+    });
+    queueRef.current = run.catch(() => { /* 失败不卡死队列 */ });
+    return run;
   }, []);
 
   const exportVault = useCallback(async () => {
@@ -168,7 +173,9 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       if (toastTimer.current) clearTimeout(toastTimer.current);
       setToast(`已复制${label}`);
       toastTimer.current = window.setTimeout(() => setToast(null), 1800);
+      // 25 秒后清空剪贴板（重复复制先清旧定时器，以最后一次为准）
       if (clipTimer.current) clearTimeout(clipTimer.current);
+      clipTimer.current = window.setTimeout(() => { navigator.clipboard?.writeText("").catch(() => {}); }, 25000);
     }).catch(() => { setToast("复制失败"); setTimeout(() => setToast(null), 1500); });
   }, []);
 

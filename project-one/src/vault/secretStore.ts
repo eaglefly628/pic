@@ -36,7 +36,9 @@ export async function saveSecret(keys: UnlockedKeys, ds: Dataset): Promise<void>
 
 /** 修改独立管理密码：用新密码重新包裹同一数据密钥（需当前已解锁的 keys），返回新 keys */
 export async function changeSecretPassword(keys: UnlockedKeys, newPw: string): Promise<UnlockedKeys> {
-  const cur = JSON.parse(localStorage.getItem(SKEY) as string) as VaultBlob;
+  const s = localStorage.getItem(SKEY);
+  if (!s) throw new Error("未找到独立管理数据，无法修改密码"); // 无此库
+  const cur = JSON.parse(s) as VaultBlob;
   const { blob, keys: nk } = await rewrapVault(keys, cur, newPw);
   localStorage.setItem(SKEY, JSON.stringify(blob));
   return nk;

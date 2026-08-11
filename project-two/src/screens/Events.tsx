@@ -9,7 +9,8 @@ import { IconCalendar, IconChevron, IconPin } from "../icons";
 
 export default function Events({ onOpen }: { onOpen: (list: MediaItem[], i: number) => void }) {
   const { items, thumbUrl, createAlbum, updateItem } = useLibrary();
-  const events = useMemo(() => buildEvents(items), [items]);
+  const visible = useMemo(() => items.filter((m) => !m.private), [items]);
+  const events = useMemo(() => buildEvents(visible), [visible]);
   const [sel, setSel] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 

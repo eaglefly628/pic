@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { VaultData, VaultItem, VaultSettings } from "../types";
-import { createVault, openVault, sealWithKey, isVaultFile, type VaultFile } from "./crypto";
+import { createVault, openVault, sealWithKey, isVaultFile } from "./crypto";
 import * as store from "./store";
 
 type Status = "loading" | "setup" | "locked" | "unlocked";
@@ -18,7 +18,7 @@ interface Ctx {
   changeMaster: (oldPw: string, newPw: string) => Promise<boolean>;
   updateSettings: (s: Partial<VaultSettings>) => Promise<void>;
   exportVault: () => Promise<void>;
-  importVault: (file: File) => Promise<"ok" | "bad">;
+  importVault: (file: File, password: string) => Promise<"ok" | "bad" | "badpass">;
   copy: (text: string, label?: string) => void;
   toast: string | null;
 }
@@ -41,6 +41,8 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const keyRef = useRef<CryptoKey | null>(null);
   const saltRef = useRef<Uint8Array | null>(null);
   const iterRef = useRef<number>(0);
+  const dataRef = useRef<VaultData>(data); // 与 data 同步，避免快速连续操作读到闭包旧值
+  const writeQueue = useRef<Promise<void>>(Promise.resolve()); // 串行落盘队列：前一个写完成才写下一个
   const clipTimer = useRef<number | null>(null);
   const toastTimer = useRef<number | null>(null);
 
@@ -51,21 +53,27 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  const setAll = useCallback((d: VaultData) => { dataRef.current = d; setData(d); }, []);
+
   const persist = useCallback(async (next: VaultData) => {
-    if (!keyRef.current || !saltRef.current) return;
     next.updatedAt = Date.now();
-    const file = await sealWithKey(keyRef.current, saltRef.current, iterRef.current, next);
-    await store.saveVaultFile(file);
-    setData({ ...next });
-  }, []);
+    setAll(next); // 先更新内存态，再排队落盘
+    const p = writeQueue.current.then(async () => {
+      if (!keyRef.current || !saltRef.current) return;
+      const file = await sealWithKey(keyRef.current, saltRef.current, iterRef.current, next);
+      await store.saveVaultFile(file);
+    });
+    writeQueue.current = p.catch(() => {}); // 单次失败不阻塞后续写
+    await p;
+  }, [setAll]);
 
   const setup = useCallback(async (password: string) => {
     const d = emptyData();
     const { file, key, salt, iter } = await createVault(password, d);
     await store.saveVaultFile(file);
     keyRef.current = key; saltRef.current = salt; iterRef.current = iter;
-    setData(d); setStatus("unlocked");
-  }, []);
+    setAll(d); setStatus("unlocked");
+  }, [setAll]);
 
   const unlock = useCallback(async (password: string): Promise<boolean> => {
     const file = await store.loadVaultFile();
@@ -74,37 +82,41 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       const { data: d, key, salt, iter } = await openVault<VaultData>(password, file);
       keyRef.current = key; saltRef.current = salt; iterRef.current = iter;
       if (!d.settings) d.settings = { autoLockMin: 5 };
-      setData(d); setStatus("unlocked");
+      setAll(d); setStatus("unlocked");
       return true;
     } catch {
       return false;
     }
-  }, []);
+  }, [setAll]);
 
   const lock = useCallback(() => {
     keyRef.current = null; saltRef.current = null; iterRef.current = 0;
-    setData(emptyData()); setStatus("locked");
-  }, []);
+    setAll(emptyData()); setStatus("locked");
+  }, [setAll]);
 
   const saveItem = useCallback(async (item: VaultItem) => {
     const now = Date.now();
-    const exists = data.items.some((i) => i.id === item.id);
+    const cur = dataRef.current;
+    const exists = cur.items.some((i) => i.id === item.id);
     const it: VaultItem = { ...item, id: item.id || uid(), updatedAt: now, createdAt: item.createdAt || now };
-    const items = exists ? data.items.map((i) => (i.id === it.id ? it : i)) : [it, ...data.items];
-    await persist({ ...data, items });
-  }, [data, persist]);
+    const items = exists ? cur.items.map((i) => (i.id === it.id ? it : i)) : [it, ...cur.items];
+    await persist({ ...cur, items });
+  }, [persist]);
 
   const deleteItem = useCallback(async (id: string) => {
-    await persist({ ...data, items: data.items.filter((i) => i.id !== id) });
-  }, [data, persist]);
+    const cur = dataRef.current;
+    await persist({ ...cur, items: cur.items.filter((i) => i.id !== id) });
+  }, [persist]);
 
   const toggleFavorite = useCallback(async (id: string) => {
-    await persist({ ...data, items: data.items.map((i) => (i.id === id ? { ...i, favorite: !i.favorite } : i)) });
-  }, [data, persist]);
+    const cur = dataRef.current;
+    await persist({ ...cur, items: cur.items.map((i) => (i.id === id ? { ...i, favorite: !i.favorite } : i)) });
+  }, [persist]);
 
   const updateSettings = useCallback(async (s: Partial<VaultSettings>) => {
-    await persist({ ...data, settings: { ...data.settings, ...s } });
-  }, [data, persist]);
+    const cur = dataRef.current;
+    await persist({ ...cur, settings: { ...cur.settings, ...s } });
+  }, [persist]);
 
   const changeMaster = useCallback(async (oldPw: string, newPw: string): Promise<boolean> => {
     const file = await store.loadVaultFile();
@@ -129,18 +141,18 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, []);
 
-  const importVault = useCallback(async (file: File): Promise<"ok" | "bad"> => {
-    try {
-      const obj = JSON.parse(await file.text());
-      if (!isVaultFile(obj)) return "bad";
-      await store.saveVaultFile(obj as VaultFile);
-      keyRef.current = null; saltRef.current = null; iterRef.current = 0;
-      setData(emptyData()); setStatus("locked");
-      return "ok";
-    } catch {
-      return "bad";
-    }
-  }, []);
+  const importVault = useCallback(async (file: File, password: string): Promise<"ok" | "bad" | "badpass"> => {
+    let obj: unknown;
+    try { obj = JSON.parse(await file.text()); } catch { return "bad"; }
+    if (!isVaultFile(obj)) return "bad";
+    try { await openVault(password, obj); } catch { return "badpass"; } // 先用该文件的主密码试解密，失败不落盘
+    const cur = await store.loadVaultFile();
+    if (cur) await store.saveVaultBackup(cur); // 旧库另存备份键，导错文件也能找回
+    await store.saveVaultFile(obj);
+    keyRef.current = null; saltRef.current = null; iterRef.current = 0;
+    setAll(emptyData()); setStatus("locked");
+    return "ok";
+  }, [setAll]);
 
   const copy = useCallback((text: string, label = "内容") => {
     navigator.clipboard?.writeText(text).then(() => {

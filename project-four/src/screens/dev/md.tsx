@@ -3,6 +3,9 @@ import React from "react";
 
 const codeStyle: React.CSSProperties = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.88em", background: "var(--fill-q)", border: "0.5px solid var(--separator)", borderRadius: 5, padding: "1px 5px" };
 
+// 只放行 http/https/mailto（容忍前导空白、大小写不敏感）；javascript:/data: 等一律不渲染成链接，防存储型 XSS
+const safeHref = (u: string) => (/^\s*(https?:\/\/|mailto:)/i.test(u) ? u.trim() : null);
+
 function inline(s: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\([^)]+\))/g;
@@ -13,7 +16,7 @@ function inline(s: string): React.ReactNode[] {
     if (tok.startsWith("`")) nodes.push(<code key={k++} style={codeStyle}>{tok.slice(1, -1)}</code>);
     else if (tok.startsWith("**")) nodes.push(<strong key={k++}>{tok.slice(2, -2)}</strong>);
     else if (tok.startsWith("*")) nodes.push(<em key={k++}>{tok.slice(1, -1)}</em>);
-    else { const mm = tok.match(/\[([^\]]+)\]\(([^)]+)\)/); if (mm) nodes.push(<a key={k++} href={mm[2]} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>{mm[1]}</a>); }
+    else { const mm = tok.match(/\[([^\]]+)\]\(([^)]+)\)/); if (mm) { const href = safeHref(mm[2]); nodes.push(href ? <a key={k++} href={href} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>{mm[1]}</a> : tok); } }
     last = m.index + tok.length;
   }
   if (last < s.length) nodes.push(s.slice(last));

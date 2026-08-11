@@ -22,7 +22,13 @@ export default function Unlock() {
       if (pw.length < 6) return setErr("主密码至少 6 位");
       if (pw !== pw2) return setErr("两次输入不一致");
       setBusy(true);
-      await vault.create(pw);
+      try {
+        await vault.create(pw); // 失败（如存储写入异常）时提示并恢复按钮
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "创建金库失败，请重试");
+      } finally {
+        setBusy(false);
+      }
     } else {
       setBusy(true);
       const ok = await vault.unlock(pw);

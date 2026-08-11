@@ -15,6 +15,7 @@
 直接运行：  python run.py     （或双击 start.bat）
 数据全部保存在本机，不联网、不上传。按 Ctrl+C 退出。
 """
+import hashlib
 import http.server
 import json
 import mimetypes
@@ -100,15 +101,65 @@ def _atomic_write(path: Path, data: bytes):
     os.replace(tmp, path)   # 原子替换，避免写一半导致的半损坏文件
 
 
+def _rotate_backups():
+    """轮转按修改时间（备份/冲突两种前缀混在一起时按名字排会删错顺序）。"""
+    try:
+        files = sorted((DATA_DIR / "backups").glob("*.home"), key=lambda f: f.stat().st_mtime)
+    except Exception:
+        return
+    for f in files[:-BACKUP_KEEP]:      # 只留最近的若干份
+        try:
+            f.unlink()
+        except Exception:
+            pass
+
+
+def _write_history(prefix: str, data: bytes):
+    (DATA_DIR / "backups").mkdir(parents=True, exist_ok=True)   # 运行中目录被删也能自愈
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    _atomic_write(DATA_DIR / "backups" / f"我家里的一切-{prefix}-{ts}.home", data)
+    _rotate_backups()
+
+
+def _read_meta():
+    try:
+        m = json.loads((DATA_DIR / "meta.json").read_text(encoding="utf-8"))
+        return m if isinstance(m, dict) else None
+    except Exception:
+        return None
+
+
 def backup_save(raw: bytes) -> dict:
     """收下浏览器端打包好的「整屋备份」（各库数据已在浏览器里加密，服务端只当密文存盘）。
     写 current.home（最新），并在 backups/ 里留一份带时间戳的历史，轮转保留最近 BACKUP_KEEP 份。"""
     bundle = json.loads(raw)
     if not isinstance(bundle, dict) or not bundle.get("__home_backup"):
         return {"ok": False, "error": "不是本系统的备份数据"}
+    # 传输层标记（不落盘）：baseSavedAt=客户端上次同步到的磁盘时间戳；force=用户明确要求以这份为准；
+    # conflictOnly=只存成历史备份、不动 current（覆盖前给旧状态留底用）。
+    base_saved_at = bundle.pop("baseSavedAt", None)
+    if not isinstance(base_saved_at, (int, float)):
+        base_saved_at = None
+    force = bool(bundle.pop("force", False))
+    conflict_only = bool(bundle.pop("conflictOnly", False))
     def _content(b):
-        return json.dumps({"localStorage": b.get("localStorage"), "indexedDB": b.get("indexedDB")}, sort_keys=True, ensure_ascii=False)
+        return json.dumps({"localStorage": b.get("localStorage"), "indexedDB": b.get("indexedDB")},
+                          sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    def _stamp():
+        bundle["dataVersion"] = DATA_VERSION
+        bundle["appVersion"] = APP_VERSION
+        bundle["appChannel"] = APP_CHANNEL
+        bundle["savedAt"] = int(time.time() * 1000)
     new_content = _content(bundle)
+    new_hash = hashlib.sha256(new_content.encode("utf-8")).hexdigest()
+    if conflict_only:
+        _stamp()
+        _write_history("冲突", json.dumps(bundle, ensure_ascii=False).encode("utf-8"))
+        return {"ok": True, "conflictOnly": True, "dir": str(DATA_DIR)}
+    # 快路径：meta.json 里存了上次写盘内容的哈希，命中即「没变化」，免去整读整比（省掉热路径三倍序列化）。
+    meta = _read_meta()
+    if meta and meta.get("contentHash") == new_hash and isinstance(meta.get("savedAt"), (int, float)):
+        return {"ok": True, "savedAt": meta["savedAt"], "bytes": meta.get("bytes") or 0, "dir": str(DATA_DIR), "unchanged": True}
     old_raw = backup_latest()
     if old_raw is not None:
         try:
@@ -124,24 +175,22 @@ def backup_save(raw: bytes) -> dict:
             # 内容没变就不更新时间戳——否则多入口会因时间戳变化互相触发无谓的“恢复”。
             if _content(old) == new_content:
                 return {"ok": True, "savedAt": old.get("savedAt"), "bytes": len(old_raw), "dir": str(DATA_DIR), "unchanged": True}
-    bundle["dataVersion"] = DATA_VERSION
-    bundle["appVersion"] = APP_VERSION
-    bundle["appChannel"] = APP_CHANNEL
-    bundle["savedAt"] = int(time.time() * 1000)
+            # 过期写护栏：客户端声明了它基于哪个磁盘版本（baseSavedAt），但磁盘已被另一个入口写过
+            # （时间戳对不上、内容也不同）→ 不覆盖 current，把这份存成「冲突」历史备份，让客户端先拉新数据。
+            if not force and base_saved_at is not None and (old.get("savedAt") or 0) != base_saved_at:
+                _stamp()
+                _write_history("冲突", json.dumps(bundle, ensure_ascii=False).encode("utf-8"))
+                return {"ok": False, "error": "stale-write", "diskSavedAt": old.get("savedAt") or 0, "conflictSaved": True,
+                        "hint": "磁盘上有另一个入口存的更新数据；这份修改已存入历史备份，请先同步最新数据。"}
+    _stamp()
     data = json.dumps(bundle, ensure_ascii=False).encode("utf-8")
-    (DATA_DIR / "backups").mkdir(parents=True, exist_ok=True)   # 运行中目录被删也能自愈
+    (DATA_DIR / "backups").mkdir(parents=True, exist_ok=True)
     _atomic_write(DATA_DIR / "current.home", data)
-    ts = time.strftime("%Y%m%d-%H%M%S")
-    _atomic_write(DATA_DIR / "backups" / f"我家里的一切-备份-{ts}.home", data)
-    files = sorted((DATA_DIR / "backups").glob("*.home"))
-    for f in files[:-BACKUP_KEEP]:      # 只留最近的若干份
-        try:
-            f.unlink()
-        except Exception:
-            pass
+    _write_history("备份", data)
     try:
         (DATA_DIR / "meta.json").write_text(
-            json.dumps({"appVersion": APP_VERSION, "savedAt": bundle["savedAt"], "bytes": len(data)}, ensure_ascii=False),
+            json.dumps({"appVersion": APP_VERSION, "savedAt": bundle["savedAt"], "bytes": len(data),
+                        "dataVersion": DATA_VERSION, "contentHash": new_hash}, ensure_ascii=False),
             encoding="utf-8")
     except Exception:
         pass
@@ -154,7 +203,7 @@ def backup_latest():
 
 
 def backup_list() -> dict:
-    files = sorted((DATA_DIR / "backups").glob("*.home"), key=lambda f: f.name, reverse=True)
+    files = sorted((DATA_DIR / "backups").glob("*.home"), key=lambda f: f.stat().st_mtime, reverse=True)
     items = [{"name": f.name, "bytes": f.stat().st_size, "mtime": int(f.stat().st_mtime * 1000)} for f in files]
     cur = DATA_DIR / "current.home"
     return {"ok": True, "version": APP_VERSION, "dir": str(DATA_DIR),

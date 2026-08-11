@@ -112,6 +112,8 @@ export default function Spend({ data, mut }: { data: DevData; mut: Mut }) {
                   <span style={{ color: "var(--text-tertiary)" }}>没定花完日期</span>
                 ) : dLeft < 0 ? (
                   <span style={{ color: "var(--red)", fontWeight: 600 }}>已过期 {-dLeft} 天，还剩 {yuan(left)} 没花完</span>
+                ) : dLeft === 0 ? (
+                  <span style={{ color: "var(--orange)", fontWeight: 600 }}>今天到期 · 建议今天花完剩余 {yuan(left)}</span>
                 ) : (
                   <span style={{ color: "var(--text-secondary)" }}>距目标 <strong>{dLeft}</strong> 天 · 建议日均 <strong style={{ color: "var(--accent)" }}>{yuan(perDay || 0)}</strong>{dLeft >= 7 ? ` · 周均 ${yuan((perDay || 0) * 7)}` : ""}</span>
                 )}

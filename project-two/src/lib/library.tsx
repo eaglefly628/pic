@@ -51,6 +51,8 @@ export const useLibrary = (): LibCtx => {
 export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [items, setItems] = useState<MediaItem[]>([]);
+  const itemsRef = useRef<MediaItem[]>([]);
+  itemsRef.current = items; // 渲染期与 state 同步，供 updateItem 同步读取最新列表
   const [albums, setAlbums] = useState<Album[]>([]);
   const thumbs = useRef<Map<string, string>>(new Map());
   const baseHandle = useRef<DirHandle | null>(null);
@@ -120,9 +122,15 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateItem = useCallback(async (id: string, patch: Partial<MediaItem>) => {
-    let next: MediaItem | undefined;
-    setItems((prev) => prev.map((m) => (m.id === id ? (next = { ...m, ...patch }) : m)));
-    if (next) await store.putMeta(next);
+    // 不能在 setItems 的 updater 里做副作用（React 不保证同步执行，StrictMode 会跑两次）
+    const cur = itemsRef.current;
+    const old = cur.find((m) => m.id === id);
+    if (!old) return;
+    const next = { ...old, ...patch };
+    const updated = cur.map((m) => (m.id === id ? next : m));
+    itemsRef.current = updated; // 立即同步，保证连续调用不丢更新
+    setItems(updated);
+    await store.putMeta(next);
   }, []);
 
   const removeItem = useCallback(async (id: string) => {

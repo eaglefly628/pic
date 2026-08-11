@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DevData, DevNote } from "../../types";
 import { Btn, TextField, TextArea, Segmented, card } from "../../ui";
 import { IconPlus, IconTrash, IconPin, IconSearch, IconImport } from "../../icons";
@@ -28,29 +28,40 @@ export default function Notes({ data, mut }: { data: DevData; mut: Mut }) {
       createdAt: n.createdAt || now, updatedAt: n.updatedAt || now,
     }));
     mut((d) => { d.notes.unshift(...mapped); });
-    if (mapped[0]) setSel(mapped[0].id);
+    // 直接 setDraft 新笔记，不等 mut 异步回流（否则选中 effect 在旧 data 里找不到，编辑器空白）
+    if (mapped[0]) { setSel(mapped[0].id); setDraft(mapped[0]); setTagsText(mapped[0].tags?.join(", ") ?? ""); }
   };
 
   useEffect(() => {
     const n = data.notes.find((x) => x.id === sel) ?? null;
+    if (!n && draft?.id === sel) return; // 新建/导入后 data 还没回流：保留刚直接 set 的 draft
     setDraft(n);
     setTagsText(n?.tags?.join(", ") ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel]);
 
-  // 自动保存（防抖）
+  // 自动保存（防抖 400ms）：待保存内容放 ref，切换笔记/卸载时 flush 落盘而不是丢弃
+  const pendingRef = useRef<DevNote | null>(null);
+  const flushSave = () => {
+    const p = pendingRef.current;
+    if (!p) return;
+    pendingRef.current = null;
+    mut((d) => {
+      const n = d.notes.find((x) => x.id === p.id);
+      if (!n) return;
+      n.title = p.title; n.body = p.body; n.category = p.category; n.tags = p.tags; n.pinned = p.pinned; n.updatedAt = Date.now();
+    });
+  };
   useEffect(() => {
     if (!draft) return;
-    const id = setTimeout(() => {
-      mut((d) => {
-        const n = d.notes.find((x) => x.id === draft.id);
-        if (!n) return;
-        n.title = draft.title; n.body = draft.body; n.category = draft.category; n.tags = draft.tags; n.pinned = draft.pinned; n.updatedAt = Date.now();
-      });
-    }, 400);
+    pendingRef.current = draft;
+    const id = setTimeout(flushSave, 400);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft]);
+  // 切换笔记 / 组件卸载前，把 400ms 内未落盘的输入立即保存
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => flushSave(), [sel]);
 
   const filtered = q.trim()
     ? list.filter((n) => (n.title + n.body + (n.tags?.join(" ") ?? "")).toLowerCase().includes(q.trim().toLowerCase()))
@@ -59,7 +70,7 @@ export default function Notes({ data, mut }: { data: DevData; mut: Mut }) {
   const create = () => {
     const n: DevNote = { id: uid("n"), title: "未命名笔记", body: "", createdAt: Date.now(), updatedAt: Date.now() };
     mut((d) => { d.notes.unshift(n); });
-    setSel(n.id);
+    setSel(n.id); setDraft(n); setTagsText(""); // 直接 set draft，不等 data 回流
   };
   const del = () => {
     if (!draft) return;

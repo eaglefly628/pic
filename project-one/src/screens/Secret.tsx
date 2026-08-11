@@ -72,7 +72,9 @@ export default function Secret({ onExit }: { onExit: () => void }) {
   const currentAcc = ds?.accounts.find((a) => a.id === view?.detail.id);
   const mutate = (fn: (d: Dataset) => void) => {
     if (!ds || !keysRef.current) return;
-    const next = clone(ds); fn(next); setDs(next); void saveSecret(keysRef.current, next);
+    const next = clone(ds); fn(next); setDs(next);
+    saveSecret(keysRef.current, next).catch((e) => alert(e instanceof Error ? e.message : "保存失败，本次修改未写入磁盘")); // 落盘失败要提示，不能静默丢
+
   };
   const open = (id: string) => { setSelectedId(id); setSub("detail"); };
   const strength = passwordStrength(pw);

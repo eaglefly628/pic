@@ -20,7 +20,12 @@ export function loadBlob(): VaultBlob | null {
 }
 
 export function saveBlob(blob: VaultBlob): void {
-  localStorage.setItem(KEY, JSON.stringify(blob));
+  try {
+    localStorage.setItem(KEY, JSON.stringify(blob));
+  } catch {
+    // QuotaExceededError / 隐私模式等：写入失败必须暴露给调用方，不能静默丢数据
+    throw new Error("本机存储空间已满或不可用，保存失败，本次修改未写入磁盘");
+  }
 }
 
 export function exportBlobString(): string | null {
@@ -60,7 +65,16 @@ export function listBackups(): Backup[] {
   }
 }
 function saveBackups(arr: Backup[]): void {
-  localStorage.setItem(BKEY, JSON.stringify(arr));
+  try {
+    localStorage.setItem(BKEY, JSON.stringify(arr));
+  } catch {
+    throw new Error("本机存储空间已满，备份保存失败（可删除旧备份后重试）");
+  }
+}
+
+/** 清空全部程序内备份（重置金库时使用） */
+export function clearBackups(): void {
+  localStorage.removeItem(BKEY);
 }
 
 /** 以当前已保存的加密数据创建一个命名备份 */

@@ -65,5 +65,9 @@ export async function openVault<T = unknown>(password: string, file: VaultFile):
 
 export function isVaultFile(o: unknown): o is VaultFile {
   const f = o as VaultFile;
-  return !!f && f.app === "junbai-dev" && typeof f.salt === "string" && typeof f.iv === "string" && typeof f.ct === "string";
+  return !!f && f.app === "junbai-dev" && f.v === 1
+    && Number.isInteger(f.iter) && f.iter >= 100_000 && f.iter <= 3_000_000
+    && typeof f.salt === "string" && f.salt.length > 0
+    && typeof f.iv === "string" && f.iv.length > 0
+    && typeof f.ct === "string" && f.ct.length > 0;
 }

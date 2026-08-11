@@ -32,7 +32,9 @@ export async function savePwBox(keys: UnlockedKeys, items: PasswordItem[]): Prom
 }
 
 export async function changePwBoxPassword(keys: UnlockedKeys, newPw: string): Promise<void> {
-  const cur = JSON.parse(localStorage.getItem(KEY) as string) as VaultBlob;
+  const s = localStorage.getItem(KEY);
+  if (!s) throw new Error("未找到密码保险箱数据，无法修改密码"); // 无此库
+  const cur = JSON.parse(s) as VaultBlob;
   const { blob } = await rewrapVault(keys, cur, newPw);
   localStorage.setItem(KEY, JSON.stringify(blob));
 }

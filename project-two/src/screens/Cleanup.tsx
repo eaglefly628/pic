@@ -26,16 +26,17 @@ export default function Cleanup() {
   const [tab, setTab] = useState<Tab>("dup");
   const [scan, setScan] = useState<{ done: number; total: number; label: string } | null>(null);
 
+  const visible = useMemo(() => items.filter((m) => !m.private), [items]); // 私密照片不进入清理数据源
   const needAnalyze = useMemo(() => items.filter((m) => !m.hash || m.phash === undefined).length, [items]);
 
   const dupGroups = useMemo(() => {
     const m = new Map<string, MediaItem[]>();
-    for (const it of items) if (it.hash) (m.get(it.hash) ?? m.set(it.hash, []).get(it.hash)!).push(it);
+    for (const it of visible) if (it.hash) (m.get(it.hash) ?? m.set(it.hash, []).get(it.hash)!).push(it);
     return [...m.values()].filter((g) => g.length > 1).map((g) => g.slice().sort((a, b) => a.addedAt - b.addedAt));
-  }, [items]);
+  }, [visible]);
 
   const similarGroups = useMemo(() => {
-    const wp = items.filter((m) => m.phash);
+    const wp = visible.filter((m) => m.phash);
     const used = new Set<string>();
     const groups: MediaItem[][] = [];
     for (let i = 0; i < wp.length; i++) {
@@ -48,11 +49,11 @@ export default function Cleanup() {
       if (g.length > 1) groups.push(g.sort((a, b) => a.addedAt - b.addedAt));
     }
     return groups;
-  }, [items]);
+  }, [visible]);
 
-  const blurry = useMemo(() => items.filter((m) => m.kind === "image" && m.blur !== undefined && m.blur < BLUR_T).sort((a, b) => (a.blur || 0) - (b.blur || 0)), [items]);
-  const shots = useMemo(() => items.filter((m) => isScreenshot(m)), [items]);
-  const small = useMemo(() => items.filter((m) => m.kind === "image" && ((m.width && m.height && m.width < 300 && m.height < 300) || m.size < 50 * 1024)), [items]);
+  const blurry = useMemo(() => visible.filter((m) => m.kind === "image" && m.blur !== undefined && m.blur < BLUR_T).sort((a, b) => (a.blur || 0) - (b.blur || 0)), [visible]);
+  const shots = useMemo(() => visible.filter((m) => isScreenshot(m)), [visible]);
+  const small = useMemo(() => visible.filter((m) => m.kind === "image" && ((m.width && m.height && m.width < 300 && m.height < 300) || m.size < 50 * 1024)), [visible]);
 
   const groupDeletable = (gs: MediaItem[][]) => gs.reduce((n, g) => n + g.length - 1, 0);
 

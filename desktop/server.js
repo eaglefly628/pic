@@ -15,6 +15,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFile, spawn } = require("child_process");
+const crypto = require("crypto");
 const { URL: NodeURL } = require("url");
 
 const PORT = 5180;
@@ -98,16 +99,68 @@ function canonical(v) {
   return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonical(v[k])).join(",") + "}";
 }
 
+function tsName() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+function rotateBackups() {
+  // 轮转按修改时间（备份/冲突两种前缀混在一起时按名字排会删错顺序）
+  let files;
+  try {
+    files = fs.readdirSync(path.join(DATA_DIR, "backups")).filter((f) => f.endsWith(".home"))
+      .map((f) => ({ f, m: fs.statSync(path.join(DATA_DIR, "backups", f)).mtimeMs }))
+      .sort((a, b) => a.m - b.m);
+  } catch (e) { return; }
+  for (const x of files.slice(0, Math.max(0, files.length - BACKUP_KEEP))) {
+    try { fs.unlinkSync(path.join(DATA_DIR, "backups", x.f)); } catch (e) { /* ignore */ }
+  }
+}
+
+function writeHistory(prefix, data) {
+  fs.mkdirSync(path.join(DATA_DIR, "backups"), { recursive: true }); // 运行中目录被删也能自愈
+  atomicWrite(path.join(DATA_DIR, "backups", `我家里的一切-${prefix}-${tsName()}.home`), data);
+  rotateBackups();
+}
+
+function readMeta() {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "meta.json"), "utf-8"));
+    return m && typeof m === "object" ? m : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+const sha256 = (s) => crypto.createHash("sha256").update(s, "utf8").digest("hex");
+
 function backupSave(raw) {
   // 收下浏览器端打包好的「整屋备份」（各库数据已在浏览器里加密，服务端只当密文存盘）。
   const bundle = JSON.parse(raw.toString("utf-8"));
   if (!bundle || typeof bundle !== "object" || Array.isArray(bundle) || !bundle.__home_backup)
     return { ok: false, error: "不是本系统的备份数据" };
+  // 传输层标记（不落盘）：baseSavedAt=客户端上次同步到的磁盘时间戳；force=用户明确要求以这份为准；
+  // conflictOnly=只存成历史备份、不动 current（覆盖前给旧状态留底用）。
+  const baseSavedAt = typeof bundle.baseSavedAt === "number" ? bundle.baseSavedAt : null;
+  const force = Boolean(bundle.force);
+  const conflictOnly = Boolean(bundle.conflictOnly);
+  delete bundle.baseSavedAt; delete bundle.force; delete bundle.conflictOnly;
   const content = (b) => canonical({ localStorage: b.localStorage ?? null, indexedDB: b.indexedDB ?? null });
   const newContent = content(bundle);
+  const newHash = sha256(newContent);
+  if (conflictOnly) {
+    bundle.dataVersion = DATA_VERSION; bundle.appVersion = APP_VERSION; bundle.appChannel = APP_CHANNEL; bundle.savedAt = Date.now();
+    writeHistory("冲突", Buffer.from(JSON.stringify(bundle), "utf-8"));
+    return { ok: true, conflictOnly: true, dir: DATA_DIR };
+  }
+  // 快路径：meta.json 里存了上次写盘内容的哈希，命中即「没变化」，免去整读整比（省掉热路径三倍序列化）。
+  const meta = readMeta();
+  if (meta && meta.contentHash === newHash && typeof meta.savedAt === "number")
+    return { ok: true, savedAt: meta.savedAt, bytes: meta.bytes || 0, dir: DATA_DIR, unchanged: true };
   const oldRaw = backupLatest();
+  let old = null;
   if (oldRaw !== null) {
-    let old = null;
     try {
       old = JSON.parse(oldRaw.toString("utf-8"));
     } catch (e) {
@@ -122,6 +175,14 @@ function backupSave(raw) {
       // 内容没变就不更新时间戳——否则多入口会因时间戳变化互相触发无谓的“恢复”。
       if (content(old) === newContent)
         return { ok: true, savedAt: old.savedAt, bytes: oldRaw.length, dir: DATA_DIR, unchanged: true };
+      // 过期写护栏：客户端声明了它基于哪个磁盘版本（baseSavedAt），但磁盘已被另一个入口写过
+      // （时间戳对不上、内容也不同）→ 不覆盖 current，把这份存成「冲突」历史备份，让客户端先拉新数据。
+      if (!force && baseSavedAt !== null && (old.savedAt || 0) !== baseSavedAt) {
+        bundle.dataVersion = DATA_VERSION; bundle.appVersion = APP_VERSION; bundle.appChannel = APP_CHANNEL; bundle.savedAt = Date.now();
+        writeHistory("冲突", Buffer.from(JSON.stringify(bundle), "utf-8"));
+        return { ok: false, error: "stale-write", diskSavedAt: old.savedAt || 0, conflictSaved: true,
+                 hint: "磁盘上有另一个入口存的更新数据；这份修改已存入历史备份，请先同步最新数据。" };
+      }
     }
   }
   bundle.dataVersion = DATA_VERSION;
@@ -129,19 +190,12 @@ function backupSave(raw) {
   bundle.appChannel = APP_CHANNEL;
   bundle.savedAt = Date.now();
   const data = Buffer.from(JSON.stringify(bundle), "utf-8");
-  fs.mkdirSync(path.join(DATA_DIR, "backups"), { recursive: true }); // 运行中目录被删也能自愈
+  fs.mkdirSync(path.join(DATA_DIR, "backups"), { recursive: true });
   atomicWrite(path.join(DATA_DIR, "current.home"), data);
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-  atomicWrite(path.join(DATA_DIR, "backups", `我家里的一切-备份-${ts}.home`), data);
-  const files = fs.readdirSync(path.join(DATA_DIR, "backups")).filter((f) => f.endsWith(".home")).sort();
-  for (const f of files.slice(0, Math.max(0, files.length - BACKUP_KEEP))) {
-    try { fs.unlinkSync(path.join(DATA_DIR, "backups", f)); } catch (e) { /* ignore */ }
-  }
+  writeHistory("备份", data);
   try {
     fs.writeFileSync(path.join(DATA_DIR, "meta.json"),
-      JSON.stringify({ appVersion: APP_VERSION, savedAt: bundle.savedAt, bytes: data.length }));
+      JSON.stringify({ appVersion: APP_VERSION, savedAt: bundle.savedAt, bytes: data.length, dataVersion: DATA_VERSION, contentHash: newHash }));
   } catch (e) { /* ignore */ }
   return { ok: true, savedAt: bundle.savedAt, bytes: data.length, dir: DATA_DIR };
 }
@@ -156,14 +210,13 @@ function backupLatest() {
 }
 
 function backupList() {
-  let files = [];
+  let items = [];
   try {
-    files = fs.readdirSync(path.join(DATA_DIR, "backups")).filter((f) => f.endsWith(".home")).sort().reverse();
+    items = fs.readdirSync(path.join(DATA_DIR, "backups")).filter((f) => f.endsWith(".home")).map((name) => {
+      const st = fs.statSync(path.join(DATA_DIR, "backups", name));
+      return { name, bytes: st.size, mtime: Math.floor(st.mtimeMs) };
+    }).sort((a, b) => b.mtime - a.mtime);
   } catch (e) { /* ignore */ }
-  const items = files.map((name) => {
-    const st = fs.statSync(path.join(DATA_DIR, "backups", name));
-    return { name, bytes: st.size, mtime: Math.floor(st.mtimeMs) };
-  });
   const cur = path.join(DATA_DIR, "current.home");
   let curM = null;
   try { curM = Math.floor(fs.statSync(cur).mtimeMs); } catch (e) { /* ignore */ }

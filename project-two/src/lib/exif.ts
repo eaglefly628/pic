@@ -63,10 +63,22 @@ export async function makeVideoThumb(file: Blob, max = 480): Promise<{ blob: Blo
   const v = document.createElement("video");
   v.src = url; v.muted = true; v.preload = "metadata"; v.playsInline = true;
   try {
-    await new Promise<void>((res, rej) => {
-      v.onloadeddata = () => res();
-      v.onerror = () => rej(new Error("video load failed"));
+    // 8 秒超时：preload="metadata" 下 loadeddata 可能永不触发，不能让整批导入卡死
+    const loaded = await new Promise<boolean>((res) => {
+      const timer = setTimeout(() => { done(); res(false); }, 8000);
+      const done = () => { clearTimeout(timer); v.onloadeddata = null; v.onerror = null; };
+      v.onloadeddata = () => { done(); res(true); };
+      v.onerror = () => { done(); res(false); };
     });
+    if (!loaded) {
+      // 超时/加载失败：返回灰色占位缩略图，不抛异常中断导入
+      const canvas = document.createElement("canvas");
+      canvas.width = 480; canvas.height = 360;
+      const g = canvas.getContext("2d")!;
+      g.fillStyle = "#6b7280"; g.fillRect(0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), "image/jpeg", 0.8));
+      return { blob, width: 0, height: 0, durationSec: 0 };
+    }
     await new Promise<void>((res) => {
       v.onseeked = () => res();
       try { v.currentTime = Math.min(1, (v.duration || 2) * 0.1); } catch { res(); }
@@ -78,6 +90,7 @@ export async function makeVideoThumb(file: Blob, max = 480): Promise<{ blob: Blo
     const blob = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), "image/jpeg", 0.8));
     return { blob, width: v.videoWidth, height: v.videoHeight, durationSec: v.duration || 0 };
   } finally {
+    v.onseeked = null; v.removeAttribute("src"); v.load(); // 停止加载并释放解码器
     URL.revokeObjectURL(url);
   }
 }

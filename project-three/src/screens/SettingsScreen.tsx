@@ -12,6 +12,8 @@ export default function SettingsScreen() {
   const [newPw, setNewPw] = useState("");
   const [newPw2, setNewPw2] = useState("");
   const [msg, setMsg] = useState<{ t: "ok" | "err"; m: string } | null>(null);
+  const [impPw, setImpPw] = useState("");
+  const [impMsg, setImpMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const doChange = async () => {
@@ -25,8 +27,10 @@ export default function SettingsScreen() {
 
   const doImport = async (f: File) => {
     if (!confirm("导入会用所选文件【替换】本机当前保险库，且需用该文件对应的主密码解锁。确定继续？")) return;
-    const r = await importVault(f);
-    if (r === "bad") setMsg({ t: "err", m: "文件无法识别" });
+    const r = await importVault(f, impPw);
+    if (r === "bad") setImpMsg("文件无法识别");
+    else if (r === "badpass") setImpMsg("该备份文件的主密码错误，本机保险库未被替换");
+    else setImpPw("");
   };
 
   return (
@@ -50,10 +54,12 @@ export default function SettingsScreen() {
         <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 12 }}>
           导出的是<strong>加密文件</strong>（没有主密码打不开）。把它拷到另一台机器，用「导入」载入后，输入主密码即可使用——这就是多台机器共享的方式。
         </div>
+        <Field label="该备份文件的主密码（导入前必填）"><input type="password" value={impPw} onChange={(e) => setImpPw(e.target.value)} autoComplete="off" style={inputStyle} /></Field>
+        {impMsg && <div style={{ fontSize: 12.5, color: "var(--red)", marginBottom: 10 }}>{impMsg}</div>}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Btn variant="soft" onClick={exportVault}>导出加密文件</Btn>
           <input ref={fileRef} type="file" accept=".vault,.json,application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); e.currentTarget.value = ""; }} />
-          <Btn variant="ghost" onClick={() => fileRef.current?.click()}>导入（替换本机）</Btn>
+          <Btn variant="ghost" onClick={() => { setImpMsg(""); if (!impPw) { setImpMsg("请先输入该备份文件的主密码"); return; } fileRef.current?.click(); }}>导入（替换本机）</Btn>
         </div>
       </Section>
 

@@ -487,6 +487,9 @@
       bkmsg.textContent = '正在恢复…';
       try {
         await applyBundle(bundle);
+        // 用户明确选了这个文件 → 以它为准强制写盘（磁盘原数据已在历史备份里），并对上同步点，
+        // 否则刷新后首次同步会把导入的数据又用磁盘旧数据顶掉。
+        try { await autoSave('force'); } catch (e) { }
         bkmsg.textContent = '恢复完成，正在刷新…';
         setTimeout(() => location.reload(), 700);
       } catch (e) { bkmsg.textContent = '恢复出错：' + (e && e.message || e); }
@@ -528,23 +531,51 @@
     async function autoSave(reason) {
       try {
         const bundle = await buildBundle();
-        const body = JSON.stringify(bundle);
-        const sig = sigOf(body);
-        if (sig === lastSig && reason !== 'manual') return null;   // 没变化就不重复写
-        const r = await fetch('/api/backup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((x) => x.json()).catch(() => null);
+        const sig = sigOf(JSON.stringify(bundle));
+        const forced = reason === 'manual' || reason === 'force';
+        if (sig === lastSig && !forced) return null;   // 没变化就不重复写
+        // 过期写协议：声明这份数据基于磁盘上的哪个版本；服务器发现磁盘已被别的入口更新时会拒收
+        // （并把这份自动存成「冲突」历史备份），我们再拉新数据——两个入口不再互相覆盖。
+        bundle.baseSavedAt = Number(localStorage.getItem('home.diskSyncedAt') || 0);
+        if (forced) bundle.force = true;               // 用户明确要求以当前这份为准（立即备份/导入恢复）
+        const r = await fetch('/api/backup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bundle) }).then((x) => x.json()).catch(() => null);
         if (r && r.ok) { lastSig = sig; if (r.savedAt) localStorage.setItem('home.diskSyncedAt', String(r.savedAt)); if (bkstatus) bkstatus.textContent = `已自动存到本机 · ${fmtTime(r.savedAt)}（磁盘保留最近 40 份历史）`; if (bkdir) bkdir.textContent = '目录：' + r.dir; }
         else if (r && r.error === 'reject-downgrade') { if (bkstatus) bkstatus.textContent = '⚠️ ' + (r.hint || '本入口版本偏旧，数据未写入（磁盘上是更新版本写的）。请更新本入口。'); }
+        else if (r && r.error === 'stale-write') {
+          if (bkstatus) bkstatus.textContent = '检测到另一入口有更新数据，正在同步…（本入口刚才的状态已存入历史备份）';
+          await pullDisk();                            // 拉磁盘上更新的数据并刷新
+        }
         return r;
       } catch (e) { return null; }
     }
+    // 用磁盘上最新的整屋备份覆盖本机，并记录同步点（applyBundle 会清 localStorage，所以之后再写 diskSyncedAt）
+    async function pullDisk() {
+      try {
+        const res = await fetch('/api/backup/latest'); if (res.status === 204) return false;
+        const latest = await res.json();
+        if (!latest || !latest.__home_backup) return false;
+        await applyBundle(latest);
+        localStorage.setItem('home.diskSyncedAt', String(latest.savedAt || Date.now()));
+        location.reload();
+        return true;
+      } catch (e) { return false; }
+    }
     // 开机把本机与「本机磁盘上的整屋备份」对齐：本机空 → 恢复；磁盘上有更新的版本(另一个入口存的) → 拉过来。
     // 这样「安装版 App」和「VSCode 里 python run.py」两个入口，数据都以同一个磁盘目录为准、自动同步(后动的为准)。
+    // 磁盘数据是不是更新版本 App 写的（本入口偏旧就不该动它）。入口版本没拿到时先重试一次，别误报。
+    async function diskIsNewerApp(latest) {
+      if (!HOME_DATA_VERSION) await initHomeVersion();
+      if (!HOME_DATA_VERSION) return null;   // 版本接口不通：说不清新旧，交给调用方保守处理
+      return Number(latest.dataVersion || 0) > HOME_DATA_VERSION;
+    }
     async function maybeAutoRestore() {
       let latest = null;
       try { const res = await fetch('/api/backup/latest'); if (res.status === 204) return false; latest = await res.json(); } catch (e) { return false; }
       if (!latest || !latest.__home_backup) return false;
       // 兼容护栏：磁盘上的数据是更新版本 App 写的 → 本入口偏旧，别读进来又写回去弄坏；提示更新。
-      if (Number(latest.dataVersion || 0) > HOME_DATA_VERSION) {
+      const newerApp = await diskIsNewerApp(latest);
+      if (newerApp === null) return false;   // 版本接口暂时不通：这轮不动数据，也不吓唬人
+      if (newerApp) {
         if (bkstatus) bkstatus.textContent = '⚠️ 本机数据是更新版本的 App 写的，本入口偏旧。请先更新本入口(git pull + 重建)再用，以免弄坏数据。';
         return false;
       }
@@ -554,6 +585,16 @@
       const syncedAt = Number(localStorage.getItem('home.diskSyncedAt') || 0);
       const newer = (latest.savedAt || 0) > syncedAt;   // 磁盘比“我上次同步到的”更新 = 另一个入口存过更新的
       if (has && !newer) return false;                  // 本机已有数据、磁盘也不比我新 → 不动
+      // 本机有数据但从没同步过（升级后首次/换浏览器）：不自动覆盖本机——交给 autoSave 的
+      // 过期写协议仲裁（内容相同会直接对上同步点；不同则磁盘为准、本机这份自动进历史备份）。
+      if (has && !syncedAt) return false;
+      // 覆盖前把本机现状先存成「冲突」历史备份——任何数据都不无痕消失
+      if (has) {
+        try {
+          const mine = await buildBundle(); mine.conflictOnly = true;
+          await fetch('/api/backup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mine) });
+        } catch (e) { }
+      }
       // diskSyncedAt 追踪已能防重复恢复的死循环，无需 sessionStorage 守卫，这样同一会话里也能再同步。
       await applyBundle(latest);
       localStorage.setItem('home.diskSyncedAt', String(latest.savedAt || Date.now()));
@@ -564,8 +605,14 @@
       let latest = null;
       try { const res = await fetch('/api/backup/latest'); if (res.status === 204) { toast('本机还没有自动备份'); return; } latest = await res.json(); } catch (e) { toast('读取本机备份失败'); return; }
       if (!latest || !latest.__home_backup) { toast('本机备份无法识别'); return; }
+      // 手动恢复同样要走「本入口是否偏旧」护栏——别把更新版本的数据读进旧代码再写坏
+      const newerApp = await diskIsNewerApp(latest);
+      if (newerApp || newerApp === null) { toast(newerApp ? '本机数据是更新版本的 App 写的，请先更新本入口' : '版本信息获取失败，稍后再试'); return; }
       if (!confirm(`用本机最近一次自动备份（${fmtTime(latest.savedAt)}）替换当前全部数据？`)) return;
-      await applyBundle(latest); location.reload();
+      await applyBundle(latest);
+      // 恢复的就是磁盘当前版 → 直接记下同步点，避免刷新后又触发一轮多余的自动恢复
+      localStorage.setItem('home.diskSyncedAt', String(latest.savedAt || Date.now()));
+      location.reload();
     }
     async function initHomeVersion() {
       try {
@@ -583,10 +630,10 @@
         }
       } catch (e) { }
     }
-    if (bknow) bknow.addEventListener('click', async () => { bknow.disabled = true; const r = await autoSave('manual'); toast(r && r.ok ? '已备份到本机' : '备份失败（要从 run.py 启动才有本机备份）'); bknow.disabled = false; });
+    if (bknow) bknow.addEventListener('click', async () => { bknow.disabled = true; const r = await autoSave('manual'); toast(r && r.ok ? '已备份到本机' : '备份失败（要从 App 或 start-mac.command 启动才有本机备份）'); bknow.disabled = false; });
     if (bkrestore) bkrestore.addEventListener('click', restoreFromDisk);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') autoSave('hide'); });
-    window.addEventListener('pagehide', () => { try { buildBundle().then((b) => navigator.sendBeacon('/api/backup/save', new Blob([JSON.stringify(b)], { type: 'application/json' }))); } catch (e) { } });
+    window.addEventListener('pagehide', () => { try { buildBundle().then((b) => { b.baseSavedAt = Number(localStorage.getItem('home.diskSyncedAt') || 0); navigator.sendBeacon('/api/backup/save', new Blob([JSON.stringify(b)], { type: 'application/json' })); }); } catch (e) { } });
 
     // ===== Touch ID（WebAuthn PRF）解锁家庭理财 =====
     const BIOKEY = 'home.bio';

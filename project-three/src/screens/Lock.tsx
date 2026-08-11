@@ -22,19 +22,25 @@ export default function Lock() {
     if (isSetup) {
       if (pw.length < 8) { setErr("主密码至少 8 位"); return; }
       if (pw !== pw2) { setErr("两次输入不一致"); return; }
-      setBusy(true); await setup(pw); setBusy(false);
+      setBusy(true);
+      try { await setup(pw); }
+      catch { setErr("存储写入失败，请重试"); }
+      finally { setBusy(false); }
     } else {
       setBusy(true);
-      const ok = await unlock(pw);
-      setBusy(false);
-      if (!ok) { setErr("主密码错误"); setPw(""); }
+      try {
+        const ok = await unlock(pw);
+        if (!ok) { setErr("主密码错误"); setPw(""); }
+      } catch { setErr("存储读取失败，请重试"); }
+      finally { setBusy(false); }
     }
   };
 
   const onImport = async (f: File) => {
     setErr("");
-    const r = await importVault(f);
+    const r = await importVault(f, pw); // 上方输入框里填的是「该备份文件的主密码」
     if (r === "bad") setErr("文件无法识别，请选择导出的 .vault 文件");
+    else if (r === "badpass") setErr("该文件的主密码错误，未替换本机数据");
     else { setPw(""); setPw2(""); }
   };
 
@@ -86,7 +92,7 @@ export default function Lock() {
         <div style={{ marginTop: 16, textAlign: "center" }}>
           <input ref={fileRef} type="file" accept=".vault,.json,application/json" style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); e.currentTarget.value = ""; }} />
-          <button onClick={() => fileRef.current?.click()} style={linkBtn}>
+          <button onClick={() => { if (!pw) { setErr("请先在上方输入该备份文件的主密码，再选择文件"); return; } setErr(""); fileRef.current?.click(); }} style={linkBtn}>
             {isSetup ? "已有保险库？从文件导入" : "导入其它保险库文件"}
           </button>
         </div>
