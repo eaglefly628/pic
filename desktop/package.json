@@ -23,13 +23,10 @@
     },
     "files": [
       "main.js",
+      "server.js",
       "package.json"
     ],
     "extraResources": [
-      {
-        "from": "../run.py",
-        "to": "payload/run.py"
-      },
       {
         "from": "../VERSION",
         "to": "payload/VERSION"
