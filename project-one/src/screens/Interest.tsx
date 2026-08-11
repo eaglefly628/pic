@@ -5,6 +5,7 @@ import type { Dataset } from "../data/types";
 import { fmt } from "../lib/format";
 import { card } from "../ui";
 import { useCountUp, rise } from "../lib/anim";
+import { useBreakpoint } from "../lib/breakpoint";
 
 /** 可复用的利息预测视图（主账户与私房钱共用） */
 export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRate: (id: string, dec: number) => void }) {
@@ -13,6 +14,7 @@ export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRa
     for (const a of dataset.accounts) o[a.id] = a.rate != null ? String(+(a.rate * 100).toFixed(4)) : "0";
     return o;
   });
+  const phone = useBreakpoint() === "phone";
   const lb = latestBalances(dataset);
   const commit = (id: string, val: string) => onSetRate(id, (parseFloat(val) || 0) / 100);
 
@@ -29,13 +31,12 @@ export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRa
   const dAnim = useCountUp(totalAnnual / 365);
 
   return (
-    <div style={{ padding: "24px 32px 40px" }}>
+    <div style={{ padding: phone ? "16px 14px 28px" : "24px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
-        <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #b08a5e)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 8px 20px -6px var(--accent-soft)" }}>
-          <div aria-hidden className="fv-sheen" />
-          <div style={{ position: "relative" }}>
+        <div className="fv-sweep" style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--grad-1), var(--grad-2))", borderRadius: 14, padding: phone ? "14px 16px" : "18px 22px", minWidth: 0, color: "#fff", boxShadow: "0 8px 20px -6px var(--accent-soft)" }}>
+                    <div style={{ position: "relative" }}>
             <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>预计年利息合计</div>
-            <div style={{ fontSize: 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{fmt(yAnim)}</div>
+            <div style={{ fontSize: phone ? 20 : 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmt(yAnim)}</div>
           </div>
         </div>
         <Metric label="预计月利息" value={fmt(mAnim)} />

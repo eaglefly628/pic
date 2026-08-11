@@ -101,7 +101,7 @@ export function Modal({ open, title, onClose, children, footer, width = 460 }: {
         }}>
         {sheet && <div aria-hidden style={{ width: 38, height: 4, borderRadius: 2, background: "var(--separator-strong)", margin: "8px auto 0" }} />}
         <div style={{ padding: sheet ? "12px 18px 14px" : "16px 22px", borderBottom: "0.5px solid var(--separator)", fontSize: 15, fontWeight: 600, color: "var(--text-primary)", position: "sticky", top: 0, background: "var(--bg-card)" }}>{title}</div>
-        <div style={{ padding: sheet ? "16px 18px" : "18px 22px" }}>{children}</div>
+        <div className="fv-sheet-body" style={{ padding: sheet ? "16px 18px" : "18px 22px" }}>{children}</div>
         {footer && <div style={{ padding: sheet ? "10px 18px 20px" : "12px 22px 18px", display: "flex", gap: 10, justifyContent: sheet ? "stretch" : "flex-end" }}>{footer}</div>}
       </div>
     </div>
@@ -109,8 +109,9 @@ export function Modal({ open, title, onClose, children, footer, width = 460 }: {
 }
 
 export function EmptyState({ icon, text, action }: { icon?: React.ReactNode; text: string; action?: React.ReactNode }) {
+  const phone = useBreakpoint() === "phone";   // 手机上 48px 上下留白显得空得发慌，收一半
   return (
-    <div style={{ ...card, padding: "48px 22px", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, color: "var(--text-tertiary)" }}>
+    <div style={{ ...card, padding: phone ? "26px 18px" : "48px 22px", display: "flex", flexDirection: "column", alignItems: "center", gap: phone ? 12 : 14, color: "var(--text-tertiary)" }}>
       {icon}
       <div style={{ fontSize: 13.5 }}>{text}</div>
       {action}

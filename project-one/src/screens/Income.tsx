@@ -4,6 +4,7 @@ import type { IncomeItem } from "../vault/types";
 import { fmt } from "../lib/format";
 import { Btn, Field, Modal, Select, TextField, TextArea, EmptyState, card, uid } from "../ui";
 import { useCountUp, rise } from "../lib/anim";
+import { useBreakpoint } from "../lib/breakpoint";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
 
 const CATS = ["工资", "奖金", "经营", "投资分红", "租金", "其他"];
@@ -14,6 +15,7 @@ function monthly(it: IncomeItem): number {
 
 export default function Income() {
   const { data, update } = useVault();
+  const phone = useBreakpoint() === "phone";
   const items = data?.incomes ?? [];
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<IncomeItem | null>(null);
@@ -26,13 +28,12 @@ export default function Income() {
   const remove = (id: string) => update((d) => { d.incomes = (d.incomes ?? []).filter((x) => x.id !== id); });
 
   return (
-    <div style={{ padding: "24px 32px 40px" }}>
+    <div style={{ padding: phone ? "16px 14px 28px" : "24px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
-        <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--green), #1FAD66)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 8px 20px -6px rgba(52,199,89,0.4)" }}>
-          <div aria-hidden className="fv-sheen" />
-          <div style={{ position: "relative" }}>
+        <div className="fv-sweep" style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--grad-g1), var(--grad-g2))", borderRadius: 14, padding: phone ? "14px 16px" : "18px 22px", minWidth: 0, color: "#fff", boxShadow: "0 8px 20px -6px rgba(52,199,89,0.4)" }}>
+                    <div style={{ position: "relative" }}>
             <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>每月收入合计</div>
-            <div style={{ fontSize: 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{fmt(mAnim)}</div>
+            <div style={{ fontSize: phone ? 20 : 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmt(mAnim)}</div>
           </div>
         </div>
         <Metric label="每年收入合计" value={fmt(yAnim)} />
@@ -88,10 +89,11 @@ export default function Income() {
 const mini: React.CSSProperties = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, background: "var(--fill-quaternary)", border: "none", cursor: "pointer" };
 
 function Metric({ label, value }: { label: string; value: string }) {
+  const phone = useBreakpoint() === "phone";
   return (
-    <div style={{ ...card, padding: "18px 22px" }}>
-      <div style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 500 }}>{label}</div>
-      <div style={{ fontSize: 25, fontWeight: 600, color: "var(--text-primary)", marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+    <div style={{ ...card, padding: phone ? "14px 16px" : "18px 22px", minWidth: 0 }}>
+      <div style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+      <div style={{ fontSize: phone ? 20 : 25, fontWeight: 600, color: "var(--text-primary)", marginTop: 8, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
     </div>
   );
 }

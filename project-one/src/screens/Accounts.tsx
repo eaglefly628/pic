@@ -2,6 +2,7 @@ import type { View } from "../lib/compute";
 import { Btn, card, Segmented } from "../ui";
 import { fmt } from "../lib/format";
 import { useCountUp, rise } from "../lib/anim";
+import { useBreakpoint } from "../lib/breakpoint";
 import { IconChevron, IconPlus } from "../icons";
 
 type AccVM = View["groups"][number]["accounts"][number];
@@ -12,34 +13,40 @@ export type AccMode = "group" | "flat" | "updated";
 export default function Accounts({ view, mode, onModeChange, onOpen, onAddAccount }: {
   view: View; mode: AccMode; onModeChange: (m: AccMode) => void; onOpen: (id: string) => void; onAddAccount: () => void;
 }) {
+  const phone = useBreakpoint() === "phone";
   const t = view.totals;
   const netA = useCountUp(t.netRaw);
   const aA = useCountUp(t.assetsRaw);
   const lA = useCountUp(t.liabRaw);
 
   return (
-    <div style={{ padding: "24px 32px 40px" }}>
-      <div className="fv-rise" style={{ ...rise(0), display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
-        <div style={{ flex: 1, ...card, padding: "16px 22px", display: "flex", alignItems: "center", gap: 28 }}>
-          <div>
+    <div style={{ padding: phone ? "16px 14px 28px" : "24px 32px 40px" }}>
+      {/* 手机：汇总条竖过来（净资产整行 + 总资产/总负债并排），新增账户降到下面整行 */}
+      <div className="fv-rise" style={{ ...rise(0), display: "flex", flexDirection: phone ? "column" : "row", alignItems: phone ? "stretch" : "center", gap: phone ? 10 : 16, marginBottom: phone ? 14 : 18 }}>
+        <div style={{ flex: 1, ...card, padding: phone ? "14px 16px" : "16px 22px", display: "flex", flexDirection: phone ? "column" : "row", alignItems: phone ? "stretch" : "center", gap: phone ? 12 : 28, minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>净资产</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>{fmt(netA)}</div>
+            <div style={{ fontSize: phone ? 26 : 22, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmt(netA)}</div>
           </div>
-          <div style={{ width: 0.5, height: 34, background: "var(--separator-strong)" }} />
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>总资产</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", marginTop: 3 }}>{fmt(aA)}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>总负债</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--red)", fontVariantNumeric: "tabular-nums", marginTop: 3 }}>{fmt(lA)}</div>
+          {phone
+            ? <div style={{ height: 0.5, background: "var(--separator-strong)" }} />
+            : <div style={{ width: 0.5, height: 34, background: "var(--separator-strong)" }} />}
+          <div className="fv-keep-cols" style={{ display: phone ? "grid" : "contents", gridTemplateColumns: "1fr 1fr", gap: 12, minWidth: 0 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>总资产</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmt(aA)}</div>
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>总负债</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: "var(--red)", fontVariantNumeric: "tabular-nums", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmt(lA)}</div>
+            </div>
           </div>
         </div>
-        <Btn onClick={onAddAccount} style={{ height: 36 }}><IconPlus />新增账户</Btn>
+        <Btn onClick={onAddAccount} style={{ height: phone ? 44 : 36, width: phone ? "100%" : undefined, flex: "none" }}><IconPlus />新增账户</Btn>
       </div>
 
       <div className="fv-rise" style={{ ...rise(70), display: "flex", alignItems: "center", marginBottom: 16 }}>
-        <Segmented value={mode} onChange={(m) => onModeChange(m as AccMode)} style={{ width: 300 }}
+        <Segmented value={mode} onChange={(m) => onModeChange(m as AccMode)} style={{ width: phone ? "100%" : 300 }}
           options={[{ value: "group", label: "按分类" }, { value: "flat", label: "全部排序" }, { value: "updated", label: "按更新时间" }]} />
       </div>
 
@@ -65,6 +72,30 @@ export default function Accounts({ view, mode, onModeChange, onOpen, onAddAccoun
 }
 
 function AccountRow({ acc, onOpen, showCat }: { acc: AccVM; onOpen: (id: string) => void; showCat?: boolean }) {
+  const phone = useBreakpoint() === "phone";
+  // 手机上 390 宽塞不下七列。按交接说明取舍：只留「头像 · 名称/副标题 · 余额/较上次 · chevron」，
+  // 占比进度条、更新时间两列、超时角标都去掉（超时信息进详情页还看得到）。
+  if (phone) {
+    return (
+      <div onClick={() => onOpen(acc.id)} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 11, padding: "12px 14px", borderTop: acc.border, cursor: "pointer", minHeight: 60 }}>
+        <span style={{ width: 34, height: 34, borderRadius: 9, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${acc.color} 15%, transparent)`, color: acc.color }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700 }}>{acc.initial}</span>
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{acc.name}</div>
+          <div style={{ fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span style={{ color: "var(--text-tertiary)" }}>{showCat ? acc.catTitle : acc.type} · </span>
+            <span style={{ color: acc.overdue ? "var(--red)" : acc.stale ? "var(--orange)" : "var(--text-tertiary)", fontWeight: 400 }}>{acc.ago}</span>
+          </div>
+        </div>
+        <div style={{ textAlign: "right", flex: "none", minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: acc.amountColor, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{acc.balance}</div>
+          <div style={{ fontSize: 10.5, color: acc.deltaColor, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{acc.deltaText}</div>
+        </div>
+        <span style={{ flex: "none" }}><IconChevron size={15} /></span>
+      </div>
+    );
+  }
   return (
     <div onClick={() => onOpen(acc.id)} className="fv-row" style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", borderTop: acc.border, cursor: "pointer" }}>
       <span style={{ width: 38, height: 38, borderRadius: 10, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${acc.color} 15%, transparent)`, color: acc.color }}>

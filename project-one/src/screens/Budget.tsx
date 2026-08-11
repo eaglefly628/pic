@@ -6,6 +6,7 @@ import { fmt, fmtWan } from "../lib/format";
 import { Btn, Field, Modal, Select, TextField, TextArea, EmptyState, card, uid } from "../ui";
 import { useCountUp, rise } from "../lib/anim";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
+import { useBreakpoint } from "../lib/breakpoint";
 
 const CATS = ["生活", "教育", "医疗", "房贷/房租", "车辆", "旅行", "保险", "大额采购", "其他"];
 const YEAR_OPTS = [1, 2, 3, 5, 10, 15, 20, 30, 40];
@@ -26,6 +27,7 @@ export default function Budget() {
   const [withInterest, setWithInterest] = useState(true);
   const [years, setYears] = useState(3);
 
+  const phone = useBreakpoint() === "phone";
   const incomes = data?.incomes ?? [];
   const expenses = data?.expenses ?? [];
 
@@ -106,7 +108,7 @@ export default function Budget() {
   const remove = (id: string) => update((d) => { d.expenses = (d.expenses ?? []).filter((x) => x.id !== id); });
 
   return (
-    <div style={{ padding: "24px 32px 40px" }}>
+    <div style={{ padding: phone ? "16px 14px 28px" : "24px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 18 }}>
         <Metric label="当前净资产" value={calc.net0} />
         <Metric label="每月净现金流" value={calc.monthlyNet} accent={calc.monthlyNet >= 0 ? "var(--green)" : "var(--red)"} />
@@ -115,14 +117,14 @@ export default function Budget() {
       </div>
 
       {/* 预测图 */}
-      <div className="fv-rise" style={{ ...rise(80), ...card, padding: "18px 22px 12px", marginBottom: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-          <div>
+      <div className="fv-rise" style={{ ...rise(80), ...card, padding: phone ? "16px 16px 10px" : "18px 22px 12px", marginBottom: phone ? 14 : 18 }}>
+        <div style={{ display: "flex", flexDirection: phone ? "column" : "row", alignItems: phone ? "stretch" : "center", justifyContent: "space-between", gap: phone ? 10 : 0, marginBottom: 6 }}>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>资产预测（未来 {years} 年）</div>
             <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 2 }}>净资产 + 收入 − 开销{withInterest ? " + 利息" : ""}</div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--text-secondary)", cursor: "pointer" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: phone ? 10 : 14, justifyContent: phone ? "space-between" : "flex-start", flex: "none" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--text-secondary)", cursor: "pointer", minWidth: 0 }}>
               <input type="checkbox" checked={withInterest} onChange={(e) => setWithInterest(e.target.checked)} />
               叠加利息（约 {fmt(calc.annualInterest / 12)}/月）
             </label>
@@ -269,10 +271,11 @@ const mini: React.CSSProperties = { width: 26, height: 26, display: "flex", alig
 
 function Metric({ label, value, accent }: { label: string; value: number; accent?: string }) {
   const n = useCountUp(value);
+  const phone = useBreakpoint() === "phone";
   return (
-    <div style={{ ...card, padding: "16px 20px" }}>
-      <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>{label}</div>
-      <div style={{ fontSize: 21, fontWeight: 600, color: accent ?? "var(--text-primary)", marginTop: 7, fontVariantNumeric: "tabular-nums" }}>{fmt(n)}</div>
+    <div style={{ ...card, padding: phone ? "14px 14px" : "16px 20px", minWidth: 0 }}>
+      <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+      <div style={{ fontSize: phone ? 17 : 21, fontWeight: 600, color: accent ?? "var(--text-primary)", marginTop: 7, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmt(n)}</div>
     </div>
   );
 }

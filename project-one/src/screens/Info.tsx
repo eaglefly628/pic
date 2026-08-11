@@ -3,12 +3,14 @@ import { useVault } from "../vault/VaultContext";
 import type { InfoItem, InfoField } from "../vault/types";
 import { Btn, Field, Modal, Select, TextField, TextArea, card, uid } from "../ui";
 import { IconLock, IconUser, IconEdit, IconTrash, IconPlus } from "../icons";
+import { useBreakpoint } from "../lib/breakpoint";
 
 const TYPES = ["实名信息", "身份证", "银行卡", "护照", "社保/医保", "驾驶证", "保险单", "会员卡", "WiFi", "紧急联系人", "其他"];
 const MEMBER_COLORS = ["#ae431e", "#be850c", "#008a62", "#005b9b", "#a964ba", "#a03a63"];
 
 export default function Info() {
   const { data, update } = useVault();
+  const phone = useBreakpoint() === "phone";
   const infos = data?.infos ?? [];
   const userName = data?.dataset.userName ?? "我";
   const vaultName = data?.dataset.vaultName ?? "家庭金库";
@@ -33,19 +35,19 @@ export default function Info() {
   const remove = (id: string) => update((d) => { d.infos = d.infos.filter((x) => x.id !== id); });
 
   return (
-    <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease" }}>
+    <div style={{ padding: phone ? "16px 14px 28px" : "24px 32px 40px", animation: "fvFade 0.3s ease" }}>
       <div style={{ ...card, borderRadius: 16, overflow: "hidden", marginBottom: 18 }}>
-        <div style={{ height: 88, background: "linear-gradient(120deg, var(--accent), #b08a5e 70%, #c9a274)" }} />
-        <div style={{ padding: "0 26px 22px", display: "flex", alignItems: "flex-end", gap: 18, marginTop: -34 }}>
-          <span style={{ width: 78, height: 78, borderRadius: 22, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(160deg,var(--accent),#b08a5e)", color: "#fff", fontSize: 30, fontWeight: 700, border: "4px solid var(--bg-card)", boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>{userInitial}</span>
-          <div style={{ flex: 1, minWidth: 0, paddingBottom: 4 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)" }}>{userName}</h1>
+        <div style={{ height: phone ? 78 : 88, background: "linear-gradient(120deg, var(--accent), #b08a5e 70%, #c9a274)" }} />
+        <div style={{ padding: phone ? "0 16px 18px" : "0 26px 22px", display: "flex", flexWrap: phone ? "wrap" : "nowrap", alignItems: phone ? "flex-start" : "flex-end", gap: phone ? 12 : 18, marginTop: phone ? 0 : -34 }}>
+          <span style={{ width: phone ? 66 : 78, height: phone ? 66 : 78, borderRadius: phone ? 18 : 22, flex: "none", marginTop: -34, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(160deg,var(--accent),#b08a5e)", color: "#fff", fontSize: phone ? 25 : 30, fontWeight: 700, border: "4px solid var(--bg-card)", boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>{userInitial}</span>
+          <div style={{ flex: 1, minWidth: 0, paddingBottom: 4, flexBasis: phone ? "100%" : "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
+              <h1 style={{ fontSize: phone ? 19 : 22, fontWeight: 600, color: "var(--text-primary)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userName}</h1>
               <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 9px", borderRadius: 6 }}>户主 · 管理员</span>
             </div>
             <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 4 }}>{vaultName}</div>
           </div>
-          <Btn variant="ghost" onClick={startNew}><IconPlus />添加信息</Btn>
+          <Btn variant="ghost" onClick={startNew} style={phone ? { width: "100%", height: 42 } : undefined}><IconPlus />添加信息</Btn>
         </div>
       </div>
 
@@ -53,7 +55,7 @@ export default function Info() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {infos.length === 0 ? (
             <div style={{ ...card, padding: "40px 22px", textAlign: "center", color: "var(--text-tertiary)", fontSize: 13 }}>
-              还没有机密信息，点击右上角「添加信息」录入身份证、银行卡、WiFi 等。
+              还没有机密信息，点「添加信息」录入身份证、银行卡、WiFi 等。
             </div>
           ) : infos.map((it) => (
             <div key={it.id} style={{ ...card, overflow: "hidden" }}>

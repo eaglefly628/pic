@@ -54,7 +54,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
   };
   // 手机：净资产整宽大卡置顶（34px 数字），总资产/总负债降为并排两张小卡，图表单栏
   const netCard = (
-    <div className="fv-sweep" style={{ flex: "none", position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #b08a5e)", borderRadius: 14, padding: phone ? "22px 20px" : "20px 22px", boxShadow: "0 10px 26px -8px var(--accent-soft)", color: "#fff" }}>
+    <div className="fv-sweep" style={{ flex: "none", position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--grad-1), var(--grad-2))", borderRadius: 14, padding: phone ? "22px 20px" : "20px 22px", boxShadow: "0 10px 26px -8px var(--accent-soft)", color: "#fff" }}>
       <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 85% at 88% 0%, rgba(255,255,255,0.30), transparent 58%)", pointerEvents: "none" }} />
       <div style={{ position: "relative" }}>
         <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>净资产</div>
