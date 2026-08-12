@@ -167,6 +167,16 @@ function TrendChart({ view }: { view: View }) {
   const [hover, setHover] = useState<{ i: number; px: number; py: number } | null>(null);
   const pts = view.trend.points;
 
+  // 没有快照时（比如刚建好的独立管理），别把图表撑成一个几百像素高的空白框
+  if (pts.length === 0) {
+    return (
+      <div style={{ minHeight: 96, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, color: "var(--text-tertiary)" }}>
+        <div style={{ fontSize: 13 }}>还没有快照</div>
+        <div style={{ fontSize: 11.5 }}>记满两次余额后，这里会画出净资产曲线</div>
+      </div>
+    );
+  }
+
   const onMove = (e: React.MouseEvent) => {
     const el = ref.current;
     if (!el || pts.length === 0) return;
@@ -219,6 +229,17 @@ function TrendChart({ view }: { view: View }) {
 
 function DonutCard({ donut }: { donut: View["donut"] }) {
   const [hi, setHi] = useState<number | null>(null);
+  if (donut.length === 0) {
+    return (
+      <div style={{ ...card, padding: "20px 22px" }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14 }}>资产构成</div>
+        <div style={{ minHeight: 88, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, color: "var(--text-tertiary)" }}>
+          <div style={{ fontSize: 13 }}>还没有账户</div>
+          <div style={{ fontSize: 11.5 }}>添加账户后这里会按资产类型分色</div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ ...card, padding: "20px 22px" }}>
       <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14 }}>资产构成</div>

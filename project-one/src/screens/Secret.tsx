@@ -13,12 +13,14 @@ import { RetirementView } from "./Retirement";
 import { AccountEditor, SnapshotEditor } from "./editors";
 import { Btn, Field, Modal, TextField } from "../ui";
 import { IconKey, IconChevron, IconArrowRight } from "../icons";
+import { useBreakpoint } from "../lib/breakpoint";
 
 type Sub = "dashboard" | "accounts" | "detail" | "interest" | "retirement";
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
 export default function Secret({ onExit }: { onExit: () => void }) {
   const { data } = useVault();
+  const phone = useBreakpoint() === "phone";
   const userName = data?.dataset.userName ?? "我";
 
   const [status, setStatus] = useState<"loading" | "onboard" | "locked" | "unlocked">("loading");
@@ -81,29 +83,45 @@ export default function Secret({ onExit }: { onExit: () => void }) {
 
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 40, display: "flex", flexDirection: "column", background: "var(--bg-content)", animation: "fvRise .2s ease" }}>
-      <div style={{ height: 52, flex: "none", display: "flex", alignItems: "center", gap: 12, padding: "0 18px", background: "var(--bg-toolbar)", backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)", borderBottom: "0.5px solid var(--separator)" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--text-primary)", fontWeight: 600, fontSize: 14 }}>
-          <span style={{ width: 22, height: 22, borderRadius: 6, background: "linear-gradient(160deg,var(--text-tertiary),#b08a5e)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={13} stroke="#fff" /></span>
-          独立管理
-        </span>
-        {status === "unlocked" && view && (
-          sub === "detail" ? (
-            <button onClick={() => setSub("accounts")} className="fv-tap" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 500, padding: "5px 7px" }}>
-              <span style={{ transform: "rotate(180deg)", display: "inline-flex" }}><IconChevron size={16} stroke="var(--accent)" /></span>{view.detail.name}
+      {/* 手机上标题+4个tab+改密码+退出挤不进一行 52px，会把「退出」顶出屏幕、人就出不来了。
+          改成两行：第一行留标题和出口，第二行放可横滑的 tab。 */}
+      <div style={{ flex: "none", background: "var(--bg-toolbar)", backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)", borderBottom: "0.5px solid var(--separator)" }}>
+        <div style={{ height: 52, display: "flex", alignItems: "center", gap: phone ? 8 : 12, padding: phone ? "0 12px" : "0 18px" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--text-primary)", fontWeight: 600, fontSize: 14, flex: "none", whiteSpace: "nowrap" }}>
+            <span style={{ width: 22, height: 22, borderRadius: 6, flex: "none", background: "linear-gradient(160deg,var(--text-tertiary),#b08a5e)", display: "flex", alignItems: "center", justifyContent: "center" }}><IconKey size={13} stroke="#fff" /></span>
+            独立管理
+          </span>
+          {status === "unlocked" && view && sub === "detail" && (
+            <button onClick={() => setSub("accounts")} className="fv-tap" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 500, padding: "5px 7px", minWidth: 0, overflow: "hidden" }}>
+              <span style={{ transform: "rotate(180deg)", display: "inline-flex", flex: "none" }}><IconChevron size={16} stroke="var(--accent)" /></span>
+              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{view.detail.name}</span>
             </button>
-          ) : (
+          )}
+          {/* 桌面/平板：tab 跟标题同一行 */}
+          {!phone && status === "unlocked" && view && sub !== "detail" && (
             <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2, marginLeft: 6 }}>
               <button onClick={() => setSub("dashboard")} className="fv-tap" style={seg(sub === "dashboard")}>仪表盘</button>
               <button onClick={() => setSub("accounts")} className="fv-tap" style={seg(sub === "accounts")}>账户</button>
               <button onClick={() => setSub("interest")} className="fv-tap" style={seg(sub === "interest")}>利息</button>
               <button onClick={() => setSub("retirement")} className="fv-tap" style={seg(sub === "retirement")}>退休预测</button>
             </div>
-          )
+          )}
+          <div style={{ flex: 1, minWidth: 0 }} />
+          {!phone && <span style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>独立密码 · 独立加密</span>}
+          {status === "unlocked" && <Btn variant="ghost" onClick={() => setCpwOpen(true)} style={{ height: phone ? 34 : 30, flex: "none", padding: phone ? "0 11px" : undefined }}>改密码</Btn>}
+          <Btn variant="ghost" onClick={onExit} style={{ height: phone ? 34 : 30, flex: "none", padding: phone ? "0 11px" : undefined }}>退出</Btn>
+        </div>
+        {/* 手机：tab 单独一行，可横滑 */}
+        {phone && status === "unlocked" && view && sub !== "detail" && (
+          <div className="fv-scroll" style={{ display: "flex", gap: 2, padding: "0 12px 8px", overflowX: "auto" }}>
+            <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2 }}>
+              <button onClick={() => setSub("dashboard")} className="fv-tap" style={seg(sub === "dashboard")}>仪表盘</button>
+              <button onClick={() => setSub("accounts")} className="fv-tap" style={seg(sub === "accounts")}>账户</button>
+              <button onClick={() => setSub("interest")} className="fv-tap" style={seg(sub === "interest")}>利息</button>
+              <button onClick={() => setSub("retirement")} className="fv-tap" style={seg(sub === "retirement")}>退休预测</button>
+            </div>
+          </div>
         )}
-        <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>独立密码 · 独立加密</span>
-        {status === "unlocked" && <Btn variant="ghost" onClick={() => setCpwOpen(true)} style={{ height: 30 }}>改密码</Btn>}
-        <Btn variant="ghost" onClick={onExit} style={{ height: 30 }}>退出</Btn>
       </div>
 
       {status === "unlocked" && view && ds ? (

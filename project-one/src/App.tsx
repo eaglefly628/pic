@@ -66,7 +66,13 @@ function Shell({ data }: { data: VaultData }) {
   const isPhone = bp === "phone";
   const isTablet = bp === "tablet";
 
-  const [screen, setScreen] = useState<Screen>("dashboard");
+  // 导航栈：返回要回到「真正的来路」，而不是一张写死的映射表
+  // （比如预算与预测既能从「收支」下钻、也能从「更多」进，写死就会指错）。
+  const [stack, setStack] = useState<Screen[]>(["dashboard"]);
+  const screen = stack[stack.length - 1];
+  const push = (s: Screen) => setStack((st) => (st[st.length - 1] === s ? st : [...st, s]));
+  const setScreen = (s: Screen) => setStack([s]);          // 一级入口：清栈重来
+  const pop = () => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st));
   const [selectedId, setSelectedId] = useState<string>(data.dataset.accounts[0]?.id ?? "");
   const [range, setRange] = useState<RangeKey>("1y");
   const [accMode, setAccMode] = useState<AccMode>("group"); // 提到这一层，进详情页再退出不会丢排序方式
@@ -97,7 +103,7 @@ function Shell({ data }: { data: VaultData }) {
   const userInitial = (view.meta.userName.slice(0, 1) || "U").toUpperCase();
   const currentAcc = data.dataset.accounts.find((a) => a.id === view.detail.id);
 
-  const open = (id: string) => { setSelectedId(id); setScreen("detail"); };
+  const open = (id: string) => { setSelectedId(id); push("detail"); };
 
   const TITLES: Record<Screen, string> = {
     dashboard: "仪表盘", accounts: "资金账户", detail: view.detail.name, passwords: "密码保险箱",
@@ -106,12 +112,10 @@ function Shell({ data }: { data: VaultData }) {
   };
   const pageTitle = TITLES[screen];
 
-  // 手机上二级页要能退回一级页
-  const backTarget: Partial<Record<Screen, Screen>> = {
-    detail: "accounts", budget: "income",
-    interest: "more", markets: "more", import: "more", info: "more", settings: "more",
-  };
-  const back = isPhone ? backTarget[screen] : (screen === "detail" ? "accounts" : undefined);
+  // 返回目标 = 栈里的上一层。桌面/平板有常驻侧栏，只有账户详情需要返回。
+  const back: Screen | undefined = isPhone
+    ? (stack.length > 1 ? stack[stack.length - 2] : undefined)
+    : (screen === "detail" ? "accounts" : undefined);
 
   const sidebarW = collapsed ? 68 : 236;
 
@@ -141,7 +145,7 @@ function Shell({ data }: { data: VaultData }) {
       {screen === "income" && <Income />}
       {screen === "budget" && <Budget />}
       {screen === "markets" && <Markets />}
-      {screen === "more" && <More onGo={(s) => setScreen(s)} onLock={lock} accounts={view.meta.accountCount} pwCount={data.passwords.length} />}
+      {screen === "more" && <More onGo={push} onLock={lock} accounts={view.meta.accountCount} pwCount={data.passwords.length} />}
     </>
   );
 
@@ -234,7 +238,7 @@ function Shell({ data }: { data: VaultData }) {
         <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg-content)" }}>
           <div style={{ height: 52, flex: "none", display: "flex", alignItems: "center", gap: isPhone ? 8 : 12, padding: isPhone ? "0 12px" : "0 18px", background: "var(--bg-toolbar)", ...glass, borderBottom: "0.5px solid var(--separator)", zIndex: 5 }}>
             {back && (
-              <button onClick={() => setScreen(back)} className="fv-tap" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13.5, fontWeight: 500, padding: "5px 7px", marginLeft: -7, borderRadius: 7, minHeight: isPhone ? 44 : undefined }}>
+              <button onClick={() => (isPhone ? pop() : setScreen(back))} className="fv-tap" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13.5, fontWeight: 500, padding: "5px 7px", marginLeft: -7, borderRadius: 7, minHeight: isPhone ? 44 : undefined }}>
                 <span style={{ transform: "rotate(180deg)", display: "inline-flex" }}><IconChevron size={17} stroke="var(--accent)" /></span>
                 {TITLES[back]}
               </button>
