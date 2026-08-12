@@ -1,0 +1,22 @@
+{
+  // 终端 → 运行任务：不进调试器、直接跑（比 F5 略快，日常本地跑用这个）。
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "启动（Python · 本地调试）",
+      "type": "shell",
+      "command": "python3 run.py",
+      "options": { "cwd": "${workspaceFolder}", "env": { "HOME_CHANNEL": "dev" } },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "启动（Node · App 同款后端）",
+      "type": "shell",
+      "command": "node desktop/server.js",
+      "options": { "cwd": "${workspaceFolder}", "env": { "HOME_CHANNEL": "dev" } },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ]
+}

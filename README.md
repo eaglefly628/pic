@@ -10,9 +10,15 @@ node desktop/server.js   # Mac 可双击 start-mac.command；Windows 双击 star
 # 浏览器打开 http://127.0.0.1:5180/ ，顶部菜单进入「家庭理财 / 家庭影像」
 ```
 
-服务器已用 Node 重写（`desktop/server.js`，为苹果上架做准备、App 不再依赖系统 Python）。
-数据目录、端口、接口与旧版完全一致，老数据直接读到。没装 Node 的机器仍可用
-`python run.py`（旧版服务器，保留作后备，行为相同）。
+服务器有两份**行为完全一致**的实现，端口、接口、数据目录都相同，随便用哪个：
+
+| 实现 | 用途 | 启动 |
+|---|---|---|
+| `run.py`（Python） | **本地开发 / Debug 首选**，起得快、断点方便 | `python3 run.py`，VS Code 里按 F5 或「运行任务 → 启动（Python）」 |
+| `desktop/server.js`（Node） | Mac App 内嵌的就是这份（上架用，不依赖系统 Python） | `node desktop/server.js`，或直接开桌面 App |
+
+两者读写同一个数据目录（`~/Library/Application Support/我家里的一切`），可以随时来回切换；
+同时开两个入口也不会互相覆盖数据（有过期写检测 + 冲突自动备份）。
 
 ## 包含的应用
 
