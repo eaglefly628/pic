@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>我家里的一切</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -22,9 +22,14 @@
   /* 顶部菜单 */
   #bar {
     height: 50px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px;
+    padding-top: env(safe-area-inset-top); height: calc(50px + env(safe-area-inset-top));
     background: rgba(255,255,255,0.6); backdrop-filter: blur(30px) saturate(180%);
     -webkit-backdrop-filter: blur(30px) saturate(180%); border-bottom: 0.5px solid var(--sep); z-index: 10;
   }
+  /* 返回：打开子应用时才出现，保证任何时候都退得回入口（手机上顶栏挤时这是唯一可靠的退路） */
+  #backbtn { display: none; border: none; background: rgba(0,0,0,0.05); cursor: pointer; font-size: 13px; font-weight: 600;
+    color: var(--text); padding: 7px 12px; border-radius: 9px; margin-right: 4px; flex: none; }
+  #backbtn.show { display: inline-flex; align-items: center; gap: 4px; }
   .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; margin-right: 14px; cursor: pointer; }
   .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(160deg, var(--accent), #5E5CE6); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 800; }
   .tab { border: none; background: transparent; cursor: pointer; font-size: 13.5px; font-weight: 500; color: var(--text2); padding: 7px 14px; border-radius: 9px; }
@@ -106,6 +111,15 @@
   .lockbtn { border: none; background: rgba(0,0,0,0.05); cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text2); padding: 6px 12px; border-radius: 9px; display: none; align-items: center; gap: 5px; }
   .lockbtn.show { display: inline-flex; }
   .barbtn { border: none; background: rgba(0,0,0,0.05); cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text2); padding: 6px 12px; border-radius: 9px; display: inline-flex; align-items: center; gap: 5px; }
+  /* 手机/窄屏：顶栏放不下就先让位——藏掉品牌文字与标语，保住「返回 + 三个入口」，并把点击区做到 44pt */
+  @media (max-width: 720px) {
+    #bar { padding-left: 10px; padding-right: 10px; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    #bar::-webkit-scrollbar { display: none; }
+    .brandtext, .hint { display: none; }
+    .brand { margin-right: 6px; flex: none; }
+    .tab, .barbtn, .lockbtn.show, #backbtn.show { flex: none; min-height: 44px; padding-top: 11px; padding-bottom: 11px; font-size: 14px; }
+    .spacer { min-width: 4px; }
+  }
   /* 设置 · 数据 */
   #settings { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.32); backdrop-filter: blur(3px); }
   #settings.show { display: flex; }
@@ -141,7 +155,8 @@
     </div>
   </div>
   <div id="bar">
-    <div class="brand" data-go="home"><span class="logo">家</span>我家里的一切</div>
+    <button id="backbtn" title="返回入口">‹ 返回</button>
+    <div class="brand" data-go="home"><span class="logo">家</span><span class="brandtext">我家里的一切</span></div>
     <button class="tab active" data-go="home">入口</button>
     <button class="tab" data-go="male">男主</button>
     <button class="tab" data-go="female">女主</button>
@@ -318,23 +333,38 @@
       catch (e) { frame.src = url; }
     }
 
-    function nav(target) {
+    const backbtn = document.getElementById('backbtn');
+    let lastScreen = 'home';   // 子应用的「返回」回到进来时那一屏（男主 → 开发世界 → 返回男主）
+    function nav(target, fromPop) {
       if (target === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; refreshGateBio(); setTimeout(() => gpw.focus(), 50); return; }
       if (screens[target]) {
         Object.values(screens).forEach(s => s.classList.add('hide'));
         screens[target].classList.remove('hide');
         frame.classList.remove('show');
+        backbtn.classList.remove('show');
         setActive(target);
         document.body.className = 'scene-' + target;
-        history.replaceState(null, '', '#' + target);
+        lastScreen = target;
+        if (!fromPop) history.replaceState({ scr: target }, '', '#' + target);
       } else if (SRC[target]) {
         if (frame.dataset.app !== target) { loadFrame(SRC[target]); frame.dataset.app = target; }
         Object.values(screens).forEach(s => s.classList.add('hide'));
         frame.classList.add('show');
+        backbtn.classList.add('show');      // 进了子应用就一定有「返回」可点
         setActive(target === 'dev' ? 'male' : 'home');
-        history.replaceState(null, '', '#' + target);
+        // 压一条历史：iPhone 侧滑返回 / 浏览器后退才有东西可退（以前全是 replaceState，等于没有后退栈）
+        if (!fromPop) history.pushState({ app: target, from: lastScreen }, '', '#' + target);
       }
     }
+    // 系统后退（iPhone 侧滑 / 浏览器后退键）：按 URL 切屏，不再压历史，避免来回打架
+    window.addEventListener('popstate', () => {
+      const t = (location.hash || '#home').slice(1);
+      nav(screens[t] || SRC[t] ? t : 'home', true);
+    });
+    backbtn.addEventListener('click', () => {
+      if (history.state && history.state.app) history.back();   // 和侧滑返回走同一条路
+      else nav(lastScreen || 'home');                           // 直接开在子应用(深链/刷新)时的兜底
+    });
     document.addEventListener('click', (e) => {
       const go = e.target.closest('[data-go]');
       if (go) { nav(go.dataset.go); return; }
@@ -389,8 +419,8 @@
     }
     function lockHouse() {
       sessionStorage.removeItem(SKEY);
-      loadFrame('about:blank'); frame.dataset.app = ''; frame.classList.remove('show');
-      Object.values(screens).forEach(s => s.classList.add('hide')); screens.home.classList.remove('hide'); setActive('home'); history.replaceState(null, '', '#home');
+      loadFrame('about:blank'); frame.dataset.app = ''; frame.classList.remove('show'); backbtn.classList.remove('show');
+      Object.values(screens).forEach(s => s.classList.add('hide')); screens.home.classList.remove('hide'); setActive('home'); lastScreen = 'home'; history.replaceState({ scr: 'home' }, '', '#home');
       lockbtn.classList.remove('show'); gate.style.display = 'none';
     }
     gbtn.addEventListener('click', submitGate);
@@ -723,7 +753,8 @@
     refreshGateBio();
 
     const start = (location.hash || '#home').slice(1);
-    nav(screens[start] || SRC[start] ? start : 'home');
+    // 开机这一屏不压历史（URL 本来就是它），否则后退会退到同一个 hash 上、看着像卡住
+    nav(screens[start] || SRC[start] ? start : 'home', true);
 
     // 版本号 + 本机自动备份/恢复
     (async () => {
