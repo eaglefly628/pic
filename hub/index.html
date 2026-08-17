@@ -375,7 +375,8 @@
     const enc = new TextEncoder(), dec = new TextDecoder();
     const b64 = (b) => btoa(String.fromCharCode(...new Uint8Array(b)));
     const unb64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-    const ITER = 200000, SKEY = 'home.key', LKEY = 'home.lock';
+    // 与各世界统一到 OWASP 现行建议量级；老的门禁记录里存着自己的 iter，仍能验证，验过后自动升级（见 verifyLock）
+    const ITER = 600000, SKEY = 'home.key', LKEY = 'home.lock';
     async function deriveKey(pw, salt, iter) {
       const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']);
       return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
@@ -390,7 +391,10 @@
       const raw = localStorage.getItem(LKEY); if (!raw) return false;
       try { const o = JSON.parse(raw); const key = await deriveKey(pw, unb64(o.salt), o.iter);
         const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, key, unb64(o.ct));
-        return dec.decode(pt) === 'home-ok';
+        if (dec.decode(pt) !== 'home-ok') return false;
+        // 老门禁（迭代次数低于现行标准）：趁手里有密码，重建成更强的一份；失败不影响本次解锁
+        if (Number(o.iter || 0) < ITER) { try { await createLock(pw); } catch (e) { } }
+        return true;
       } catch (e) { return false; }
     }
     const gate = document.getElementById('gate'), gpw = document.getElementById('gpw'), gpw2 = document.getElementById('gpw2');

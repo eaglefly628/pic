@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { VaultData } from "./types";
-import { createVault, rewrapVault, sealVault, unlockVault, type UnlockedKeys, type VaultBlob } from "../lib/crypto";
+import { createVault, needsKdfUpgrade, rewrapVault, sealVault, unlockVault, upgradeKdf, type UnlockedKeys, type VaultBlob } from "../lib/crypto";
 import { hasVault, loadBlob, saveBlob } from "../lib/storage";
 import { initialVaultData } from "../data/defaultData";
 import { pwSession } from "./pwStore";
@@ -61,6 +61,16 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       const { data: d, keys } = await unlockVault<VaultData>(pw, blob);
       blobRef.current = blob;
       keysRef.current = keys;
+      // 老金库（KDF 迭代次数低于当前标准）：趁手里有主密码，静默升级后落盘。
+      // 只是用更强的 KDF 重新包裹同一个 DEK，数据密文不动；失败也不影响本次解锁。
+      if (needsKdfUpgrade(blob)) {
+        try {
+          const up = await upgradeKdf(keys, blob, pw);
+          saveBlob(up.blob);
+          blobRef.current = up.blob;
+          keysRef.current = up.keys;
+        } catch { /* 升级失败就下次再说，不能因此打不开金库 */ }
+      }
       dataRef.current = d;
       setData(d);
       lastActivity.current = Date.now();

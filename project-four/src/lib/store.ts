@@ -5,6 +5,7 @@ const DB = "devworld";
 const VER = 1;
 const S = "vault";
 const KEY = "main";
+const BACKUP_KEY = "backup";   // 迁移/导入等覆盖操作前，旧库先另存一份在这里，便于找回
 
 let dbp: Promise<IDBDatabase> | null = null;
 function open(): Promise<IDBDatabase> {
@@ -34,6 +35,18 @@ export async function saveVaultFile(file: VaultFile): Promise<void> {
   const db = await open();
   const tx = db.transaction(S, "readwrite");
   tx.objectStore(S).put(file, KEY);
+  await new Promise<void>((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); });
+}
+
+export async function loadVaultBackup(): Promise<VaultFile | undefined> {
+  const db = await open();
+  return reqP(db.transaction(S, "readonly").objectStore(S).get(BACKUP_KEY) as IDBRequest<VaultFile | undefined>);
+}
+
+export async function saveVaultBackup(file: VaultFile): Promise<void> {
+  const db = await open();
+  const tx = db.transaction(S, "readwrite");
+  tx.objectStore(S).put(file, BACKUP_KEY);
   await new Promise<void>((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); });
 }
 

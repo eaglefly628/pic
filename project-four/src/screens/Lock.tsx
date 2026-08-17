@@ -8,8 +8,9 @@ const STR_LABEL = ["很弱", "弱", "一般", "强", "很强"];
 const STR_COLOR = ["var(--red)", "var(--red)", "var(--orange)", "var(--green)", "var(--green)"];
 
 export default function Lock() {
-  const { status, setup, unlock, importVault } = useVault();
-  const isSetup = status === "setup";
+  const { status, setup, unlock, migrateLegacy, importVault } = useVault();
+  const isMigrate = status === "migrate";   // 旧版固定口令库：这次要让用户定一个真正的主密码
+  const isSetup = status === "setup" || isMigrate;
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [show, setShow] = useState(false);
@@ -22,7 +23,13 @@ export default function Lock() {
     if (isSetup) {
       if (pw.length < 8) { setErr("主密码至少 8 位"); return; }
       if (pw !== pw2) { setErr("两次输入不一致"); return; }
-      setBusy(true); await setup(pw); setBusy(false);
+      setBusy(true);
+      try {
+        const ok = isMigrate ? await migrateLegacy(pw) : (await setup(pw), true);
+        if (!ok) setErr("旧数据读取失败，未做任何改动。请重试或先导出备份。");
+      } catch (e) {
+        setErr("保存失败：" + ((e as Error)?.message || e) + "（原数据未被改动）");
+      } finally { setBusy(false); }
     } else {
       setBusy(true);
       const ok = await unlock(pw);
@@ -47,9 +54,12 @@ export default function Lock() {
             <div aria-hidden className="fv-sheen" />
             <IconTerminal size={26} stroke="#fff" />
           </div>
-          <div style={{ fontSize: 19, fontWeight: 700 }}>{isSetup ? "创建主密码" : "解锁开发世界"}</div>
+          <div style={{ fontSize: 19, fontWeight: 700 }}>{isMigrate ? "给开发世界设置主密码" : isSetup ? "创建主密码" : "解锁开发世界"}</div>
           <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 6, textAlign: "center", lineHeight: 1.6 }}>
-            {isSetup ? "这是打开你「开发世界」的唯一钥匙。请务必牢记——它不会被保存，也无法找回。" : "输入主密码以解锁。所有数据都在本机本地解密。"}
+            {isMigrate
+              ? "以前这里用的是内置口令，等于没有加密。现在请设置你自己的主密码，原有数据会用它重新加密，一条都不会少。"
+              : isSetup ? "这是打开你「开发世界」的唯一钥匙。请务必牢记——它不会被保存，也无法找回。"
+              : "输入主密码以解锁。所有数据都在本机本地解密。"}
           </div>
         </div>
 
@@ -80,7 +90,7 @@ export default function Lock() {
           )}
 
           {err && <div style={{ fontSize: 12.5, color: "var(--red)", marginBottom: 12 }}>{err}</div>}
-          <Btn type="submit" full disabled={busy || !pw}>{busy ? "处理中…" : isSetup ? "创建工作台" : "解锁"}</Btn>
+          <Btn type="submit" full disabled={busy || !pw}>{busy ? "处理中…" : isMigrate ? "设置并加密现有数据" : isSetup ? "创建工作台" : "解锁"}</Btn>
         </form>
 
         <div style={{ marginTop: 16, textAlign: "center" }}>
