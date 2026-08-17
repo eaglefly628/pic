@@ -28,3 +28,6 @@ src-tauri/gen/
 
 # 真实数据仅本机，不进仓库/不进分发包
 src/data/history.json
+
+# 审计脚本产物（截图与报告，不入库）
+.audit-phone/
