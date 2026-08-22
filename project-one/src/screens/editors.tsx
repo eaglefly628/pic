@@ -86,14 +86,47 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
   );
 }
 
-export function SnapshotEditor({ open, accountName, onClose, onSubmit }: {
-  open: boolean; accountName: string; onClose: () => void; onSubmit: (date: string, amount: number) => void;
+/** 本地时区的 YYYY-MM-DD。不能用 toISOString——那是 UTC，
+ *  在 UTC+8 的凌晨会算成前一天，默认日期就差一天。 */
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/** 某月最后一天 */
+function monthEnd(year: number, monthIdx: number): Date {
+  return new Date(year, monthIdx + 1, 0);
+}
+
+export function SnapshotEditor({ open, accountName, recorded, onClose, onSubmit }: {
+  open: boolean; accountName: string;
+  /** 这个账户「确实记录过」的日期 → 当时余额。用来标出哪些月份漏了。 */
+  recorded?: Map<string, number>;
+  onClose: () => void; onSubmit: (date: string, amount: number) => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localISO(new Date());
   const [date, setDate] = useState(today);
   const [amount, setAmount] = useState("");
+  const rec = recorded ?? new Map<string, number>();
 
   React.useEffect(() => { if (open) { setDate(today); setAmount(""); } }, [open, today]);
+
+  // 最近 8 个月，标出哪几个月这个账户还没记过——「漏掉了哪一期」一眼能看出来
+  const months = React.useMemo(() => {
+    const now = new Date();
+    const out: { key: string; label: string; date: string; hasDate?: string }[] = [];
+    for (let i = 0; i < 8; i++) {
+      const end = monthEnd(now.getFullYear(), now.getMonth() - i);
+      const key = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}`;
+      // 这个月里有没有已记录的日期（不一定正好是月末）
+      const hit = [...rec.keys()].filter((d) => d.startsWith(key)).sort().pop();
+      // 本月的「月末」还没到，钳到今天——否则会记出一条未来日期的快照
+      const target = end > now ? now : end;
+      out.push({ key, label: `${end.getMonth() + 1}月`, date: hit ?? localISO(target), hasDate: hit });
+    }
+    return out;
+  }, [rec, open]);
+
+  const existing = rec.get(date);
+  const missing = months.filter((m) => !m.hasDate).length;
 
   const submit = () => {
     if (!amount.trim()) return;
@@ -102,10 +135,51 @@ export function SnapshotEditor({ open, accountName, onClose, onSubmit }: {
   };
 
   return (
-    <Modal open={open} title={`新增快照 · ${accountName}`} onClose={onClose} width={400}
-      footer={<><Btn variant="ghost" onClick={onClose}>取消</Btn><Btn onClick={submit}>添加</Btn></>}>
-      <Field label="日期"><TextField type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-      <Field label="余额（整数或小数均可）"><TextField value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="如 50000" inputMode="decimal" autoFocus /></Field>
+    <Modal open={open} title={`新增快照 · ${accountName}`} onClose={onClose} width={420}
+      footer={<><Btn variant="ghost" onClick={onClose}>取消</Btn><Btn onClick={submit}>{existing != null ? "覆盖这一期" : "添加"}</Btn></>}>
+
+      {/* 补漏用：最近 8 个月哪些记过、哪些没记，点一下直接跳到那期 */}
+      <div style={{ marginBottom: 13 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6, display: "block" }}>
+          最近 8 个月{missing > 0 && <span style={{ color: "var(--orange)", fontWeight: 500 }}> · 有 {missing} 个月没记</span>}
+        </span>
+        <div className="fv-scroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+          {months.map((m) => {
+            const on = date.startsWith(m.key);
+            return (
+              <button key={m.key} type="button" className="fv-tap" onClick={() => setDate(m.date)}
+                title={m.hasDate ? `已记录 ${m.hasDate}` : "这个月还没记过"}
+                style={{
+                  flex: "none", minWidth: 52, padding: "6px 9px", borderRadius: 8, cursor: "pointer",
+                  border: on ? "1px solid var(--accent)" : "0.5px solid var(--separator-strong)",
+                  background: on ? "var(--accent-soft)" : m.hasDate ? "var(--fill-quaternary)" : "transparent",
+                  color: on ? "var(--accent)" : m.hasDate ? "var(--text-secondary)" : "var(--orange)",
+                  fontSize: 12, fontWeight: on ? 600 : 500, whiteSpace: "nowrap",
+                }}>
+                {m.label}{m.hasDate ? " ·" : " ○"}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <Field label="日期（可以往前选，用来补记漏掉的月份）">
+        <TextField type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} />
+      </Field>
+      {existing != null && (
+        <div style={{ fontSize: 12, color: "var(--orange)", marginTop: -7, marginBottom: 13, lineHeight: 1.6 }}>
+          这一期已经记过（{fmtPlain(existing)}），确认后会覆盖成新的数字。
+        </div>
+      )}
+
+      <Field label="余额（整数或小数均可）">
+        <TextField value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="如 50000" inputMode="decimal" autoFocus />
+      </Field>
     </Modal>
   );
+}
+
+/** 提示里用的朴素金额（不带货币符号处理，够看即可） */
+function fmtPlain(n: number): string {
+  return "¥" + Math.round(n).toLocaleString("zh-CN");
 }

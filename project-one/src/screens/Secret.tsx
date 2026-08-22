@@ -18,6 +18,20 @@ import { useBreakpoint } from "../lib/breakpoint";
 type Sub = "dashboard" | "accounts" | "detail" | "interest" | "retirement";
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
+/** 某账户真正记录过的日期 → 当时余额。snapshots 里每期都会给所有账户结转余额，
+ *  所以不能只看 balances 有没有值；touched 才是「这一期确实记了这个账户」。 */
+function recordedDatesOf(snaps: { date: string; balances: Record<string, number | null>; touched?: string[] }[], accId?: string) {
+  const m = new Map<string, number>();
+  if (!accId) return m;
+  for (const s of snaps) {
+    const v = s.balances[accId];
+    if (v == null) continue;
+    const touched = s.touched ? s.touched.includes(accId) : true;
+    if (touched) m.set(s.date, v);
+  }
+  return m;
+}
+
 export default function Secret({ onExit }: { onExit: () => void }) {
   const { data } = useVault();
   const phone = useBreakpoint() === "phone";
@@ -150,7 +164,9 @@ export default function Secret({ onExit }: { onExit: () => void }) {
               else mutate((d) => addAccount(d, meta, balance));
             }}
           />
-          <SnapshotEditor open={snapEditor} accountName={currentAcc?.name ?? ""} onClose={() => setSnapEditor(false)}
+          <SnapshotEditor open={snapEditor} accountName={currentAcc?.name ?? ""}
+            recorded={recordedDatesOf(ds?.snapshots ?? [], currentAcc?.id)}
+            onClose={() => setSnapEditor(false)}
             onSubmit={(date, amount) => { if (currentAcc) mutate((d) => addSnapshot(d, currentAcc.id, date, amount)); }} />
           <Modal open={cpwOpen} title="修改独立管理密码" onClose={() => setCpwOpen(false)} width={400}
             footer={<><Btn variant="ghost" onClick={() => setCpwOpen(false)}>取消</Btn><Btn onClick={doChangePw}>保存</Btn></>}>

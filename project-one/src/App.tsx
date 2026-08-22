@@ -3,6 +3,7 @@ import { useVault } from "./vault/VaultContext";
 import { useTheme } from "./lib/theme";
 import { buildView, type RangeKey } from "./lib/compute";
 import { useBreakpoint } from "./lib/breakpoint";
+import { isEmbedded, goHomeHub } from "./lib/embed";
 import type { VaultData } from "./vault/types";
 import { addAccount, addSnapshot, deleteAccount, deleteSnapshotEntry, updateAccount } from "./vault/ops";
 import {
@@ -59,12 +60,27 @@ export default function App() {
   return <div className="fv-root" data-theme={theme}><Shell data={data} /></div>;
 }
 
+/** 某账户真正记录过的日期 → 当时余额。snapshots 里每期都会给所有账户结转余额，
+ *  所以不能只看 balances 有没有值；touched 才是「这一期确实记了这个账户」。 */
+function recordedDatesOf(snaps: { date: string; balances: Record<string, number | null>; touched?: string[] }[], accId?: string) {
+  const m = new Map<string, number>();
+  if (!accId) return m;
+  for (const s of snaps) {
+    const v = s.balances[accId];
+    if (v == null) continue;
+    const touched = s.touched ? s.touched.includes(accId) : true;
+    if (touched) m.set(s.date, v);
+  }
+  return m;
+}
+
 function Shell({ data }: { data: VaultData }) {
   const { update, lock } = useVault();
   const { theme, toggle } = useTheme();
   const bp = useBreakpoint();
   const isPhone = bp === "phone";
   const isTablet = bp === "tablet";
+  const embedded = isEmbedded();          // 嵌在大厅 iframe 里跑 → 才有「上一层」可回
 
   // 导航栈：返回要回到「真正的来路」，而不是一张写死的映射表
   // （比如预算与预测既能从「收支」下钻、也能从「更多」进，写死就会指错）。
@@ -102,6 +118,10 @@ function Shell({ data }: { data: VaultData }) {
   const view = useMemo(() => buildView(data.dataset, { range, selectedId }), [data.dataset, range, selectedId]);
   const userInitial = (view.meta.userName.slice(0, 1) || "U").toUpperCase();
   const currentAcc = data.dataset.accounts.find((a) => a.id === view.detail.id);
+  const snapRecorded = useMemo(
+    () => recordedDatesOf(data.dataset.snapshots, currentAcc?.id),
+    [data.dataset.snapshots, currentAcc?.id]
+  );
 
   const open = (id: string) => { setSelectedId(id); push("detail"); };
 
@@ -145,7 +165,7 @@ function Shell({ data }: { data: VaultData }) {
       {screen === "income" && <Income />}
       {screen === "budget" && <Budget />}
       {screen === "markets" && <Markets />}
-      {screen === "more" && <More onGo={push} onLock={lock} accounts={view.meta.accountCount} pwCount={data.passwords.length} />}
+      {screen === "more" && <More onGo={push} onLock={lock} embedded={embedded} accounts={view.meta.accountCount} pwCount={data.passwords.length} />}
     </>
   );
 
@@ -237,6 +257,15 @@ function Shell({ data }: { data: VaultData }) {
         {/* MAIN */}
         <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg-content)" }}>
           <div style={{ height: 52, flex: "none", display: "flex", alignItems: "center", gap: isPhone ? 8 : 12, padding: isPhone ? "0 12px" : "0 18px", background: "var(--bg-toolbar)", ...glass, borderBottom: "0.5px solid var(--separator)", zIndex: 5 }}>
+            {/* 手机竖版：大厅那排 tab 太挤，应用内自己给一个回首页的口子 */}
+            {isPhone && embedded && !back && (
+              <button onClick={goHomeHub} title="返回我家里的一切" className="fv-icnbtn"
+                style={{ width: 34, height: 34, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, marginLeft: -4, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-secondary)" }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3.5 11.2 12 4l8.5 7.2" /><path d="M5.8 9.6V19a1 1 0 0 0 1 1h10.4a1 1 0 0 0 1-1V9.6" />
+                </svg>
+              </button>
+            )}
             {back && (
               <button onClick={() => (isPhone ? pop() : setScreen(back))} className="fv-tap" style={{ display: "flex", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 13.5, fontWeight: 500, padding: "5px 7px", marginLeft: -7, borderRadius: 7, minHeight: isPhone ? 44 : undefined }}>
                 <span style={{ transform: "rotate(180deg)", display: "inline-flex" }}><IconChevron size={17} stroke="var(--accent)" /></span>
@@ -288,6 +317,7 @@ function Shell({ data }: { data: VaultData }) {
         <SnapshotEditor
           open={snapEditor}
           accountName={currentAcc?.name ?? ""}
+          recorded={snapRecorded}
           onClose={() => setSnapEditor(false)}
           onSubmit={(date, amount) => { if (currentAcc) update((d) => addSnapshot(d.dataset, currentAcc.id, date, amount)); }}
         />
@@ -351,8 +381,8 @@ function TabBar({ screen, onGo }: { screen: Screen; onGo: (s: Screen) => void })
 }
 
 /* ── 手机「更多」页：Tab Bar 放不下的入口都在这 ── */
-function More({ onGo, onLock, accounts, pwCount }: {
-  onGo: (s: Screen) => void; onLock: () => void; accounts: number; pwCount: number;
+function More({ onGo, onLock, accounts, pwCount, embedded }: {
+  onGo: (s: Screen) => void; onLock: () => void; accounts: number; pwCount: number; embedded: boolean;
 }) {
   const rows: { key: Screen; label: string; icon: React.ReactNode; note?: string }[] = [
     { key: "interest", label: "利息预测", icon: <IconPercent /> },
@@ -364,6 +394,19 @@ function More({ onGo, onLock, accounts, pwCount }: {
   ];
   return (
     <div style={{ padding: "16px 14px 28px", display: "flex", flexDirection: "column", gap: 14 }}>
+      {embedded && (
+        <button onClick={goHomeHub} className="fv-row"
+          style={{ flex: "none", display: "flex", alignItems: "center", gap: 12, width: "100%", minHeight: 52, padding: "0 16px", border: "0.5px solid var(--separator)", borderRadius: 14, cursor: "pointer", background: "var(--bg-card)", boxShadow: "var(--card-shadow)", color: "var(--text-primary)", fontSize: 14, textAlign: "left" }}>
+          <span style={{ color: "var(--accent)", display: "inline-flex" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3.5 11.2 12 4l8.5 7.2" /><path d="M5.8 9.6V19a1 1 0 0 0 1 1h10.4a1 1 0 0 0 1-1V9.6" />
+            </svg>
+          </span>
+          <span>返回「我家里的一切」</span>
+          <span style={{ marginLeft: "auto", display: "inline-flex" }}><IconChevron /></span>
+        </button>
+      )}
+
       <div style={{ flex: "none", background: "var(--bg-card)", borderRadius: 16, boxShadow: "var(--card-shadow)", overflow: "hidden" }}>
         {rows.map((r, i) => (
           <button key={r.key} onClick={() => onGo(r.key)} className="fv-row"

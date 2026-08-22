@@ -91,8 +91,18 @@
     .screen { padding: 24px 16px 32px; }
     .sec-head { margin: 26px 0 12px; gap: 10px; }
     .sec-head .aside { display: none; }          /* 窄屏放不下右侧注脚，收掉 */
+    /* 顶栏在 390 宽下原来会挤成竖排单字、整体溢出 71px，「入口」被压成 13px 的缝。
+       元素本身不换行（nowrap）+ 砍掉窄屏用不上的东西，让它老实排成一行。 */
+    #bar { padding: 0 12px; gap: 2px; }
     #bar .hint { display: none; }
-    #bar .tab { margin-right: 12px; }
+    #bar .brand { margin-right: 12px; font-size: 0; letter-spacing: 0; gap: 0; }  /* 只留「家」logo，标题字收掉 */
+    #bar .brand .logo { font-size: 12px; }
+    #bar .tab { margin-right: 0; padding: 8px 10px; white-space: nowrap; flex: none; min-height: 44px; }
+    #bar .devsw { display: none; }        /* 设备预览是桌面上用的，真手机上没意义 */
+    #bar .nobk { font-size: 0; padding: 6px 8px; }        /* 只留 ⚠ 图标，点开还是进设置 */
+    #bar .nobk::before { font-size: 13px; }
+    #bar .barbtn, #bar .lockbtn { padding: 6px 8px; white-space: nowrap; flex: none; }
+    #bar .barbtn svg { display: none; }
   }
 
   /* 设备预览容器内：同上，但按预览宽度而不是视口宽度 */
@@ -975,6 +985,12 @@
     applyView(localStorage.getItem(VKEY) || '');
     // 顶栏那枚警示点一下直接开设置，省得用户不知道去哪看
     document.getElementById('nobk').addEventListener('click', () => document.getElementById('setbtn').click());
+
+    // 子应用（iframe 里的理财等）请求回大厅首页。只认同源消息。
+    window.addEventListener('message', (e) => {
+      if (e.origin !== location.origin) return;
+      if (e.data && e.data.__homeNav === 'home') nav('home');
+    });
 
     const start = (location.hash || '#home').slice(1);
     nav(screens[start] || SRC[start] ? start : 'home');
