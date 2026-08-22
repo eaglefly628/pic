@@ -273,17 +273,25 @@ body { background: #f5efe4; }
 }
 .fv-breathe { transform-box: fill-box; transform-origin: center; animation: fvBreathe 4.2s ease-out infinite; }
 
-/* ⑨ 流光：只在 hover 时扫一次，不再常驻 */
+/* ⑨ 流光：只在 hover 时扫一次，扫完自己走干净
+   ⚠ 两个坑，缺一个都会让白光「扫到一半弹回来卡住」：
+     1) 动画必须带 forwards。不带的话 1.15s 跑完 transform 立刻回落成基础值，
+        而基础值原来没写 transform（= translateX(0)），白光会瞬移回卡片左半边。
+     2) opacity 必须由 keyframes 驱动，不能写在 :hover 规则上。写在 hover 上的话
+        只要鼠标不移开就恒为 1，那条弹回来的白光就一直杵在卡上不消失。 */
 @keyframes fvSweep {
-  from { transform: translateX(-130%) skewX(-16deg); }
-  to   { transform: translateX(260%)  skewX(-16deg); }
+  0%   { transform: translateX(-130%) skewX(-16deg); opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateX(260%)  skewX(-16deg); opacity: 0; }
 }
 .fv-sweep { position: relative; overflow: hidden; }
 .fv-sweep::after {
-  content: ""; position: absolute; inset: 0 auto 0 0; width: 38%; pointer-events: none; opacity: 0;
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 38%; pointer-events: none;
+  opacity: 0; transform: translateX(-130%) skewX(-16deg);   /* 静止态就停在卡外左侧 */
   background: linear-gradient(100deg, transparent, rgba(255,255,255,.24), transparent);
 }
-.fv-sweep:hover::after { opacity: 1; animation: fvSweep 1.15s var(--ease-out-soft); }
+.fv-sweep:hover::after { animation: fvSweep 1.15s var(--ease-out-soft) forwards; }
 
 /* ⑩ 数字变化：极短一瞬泛出强调色，再落回 */
 @keyframes fvFlash { 0% { color: var(--accent); } 100% { color: inherit; } }
