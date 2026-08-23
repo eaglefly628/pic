@@ -57,9 +57,9 @@ export default function VaultScreen() {
           style={{ position: "absolute", inset: 0, zIndex: 18, background: "rgba(0,0,0,0.28)" }} />
       )}
       <div style={{
-        width: phone ? (railOpen ? 150 : 46) : 196,
+        width: phone ? (railOpen ? 150 : 38) : 196,
         flex: "none", borderRight: "0.5px solid var(--separator)",
-        padding: phone ? (railOpen ? "8px 8px" : "8px 5px") : "16px 10px",
+        padding: phone ? (railOpen ? "8px 8px" : "6px 3px") : "16px 10px",
         overflow: "auto", background: "var(--bg-content)",
         position: phone && railOpen ? "absolute" : "relative",
         insetBlock: phone && railOpen ? 0 : undefined,
@@ -73,7 +73,7 @@ export default function VaultScreen() {
             title={railOpen ? "收起分类" : "展开分类"} aria-label={railOpen ? "收起分类" : "展开分类"}
             style={{
               display: "flex", alignItems: "center", justifyContent: railOpen ? "flex-end" : "center",
-              width: "100%", minHeight: 34, marginBottom: 4, border: "none", borderRadius: 8,
+              width: "100%", minHeight: 30, marginBottom: 2, border: "none", borderRadius: 7,
               background: "transparent", color: "var(--text-tertiary)", cursor: "pointer",
             }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
@@ -167,15 +167,31 @@ function SideItem({ label, count, active, onClick, icon, compact, iconOnly }: {
         width: "100%", border: "none", background: active ? "var(--fill)" : "transparent",
         color: active ? "var(--text-primary)" : "var(--text-secondary)",
         fontSize: compact ? 12.5 : 13.5, fontWeight: 500,
-        padding: iconOnly ? "9px 0" : compact ? "7px 8px" : "8px 10px",
+        padding: iconOnly ? "11px 0" : compact ? "7px 8px" : "8px 10px",
         borderRadius: 9, marginBottom: 2, position: "relative",
       }}>
       <span style={{ display: "flex", flex: "none", color: active ? "var(--accent)" : "var(--text-tertiary)" }}>{icon}</span>
-      {!iconOnly && <span style={{ flex: 1, textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>}
-      {!iconOnly && <span style={{ fontSize: 11.5, color: "var(--text-tertiary)", flex: "none" }}>{count}</span>}
-      {/* 收起时用一个小圆点提示这一类里有东西，不然只有图标看不出多少 */}
-      {iconOnly && count > 0 && (
-        <span style={{ position: "absolute", top: 5, right: 5, width: 5, height: 5, borderRadius: "50%", background: active ? "var(--accent)" : "var(--text-tertiary)" }} />
+      {/* 标签不再 flex:1 撑开——原来「标签靠左、数字靠右」中间留一大段空当，
+          没有信息量。现在紧挨着排，条数用一个小圆圈贴在右下角表示。 */}
+      {!iconOnly && <span style={{ textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{label}</span>}
+      {count > 0 && (
+        <span style={{
+          position: iconOnly ? "absolute" : "static",
+          bottom: iconOnly ? 2 : undefined,
+          right: iconOnly ? 0 : undefined,
+          marginLeft: iconOnly ? 0 : 5,
+          flex: "none",
+          // content-box + padding + border 会让实际尺寸涨到 26px 把图标盖住，必须 border-box
+          boxSizing: "border-box",
+          minWidth: iconOnly ? 14 : 16, height: iconOnly ? 14 : 16,
+          padding: iconOnly ? "0 2px" : "0 4px", borderRadius: 8,
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          fontSize: iconOnly ? 9 : 10, fontWeight: 600, lineHeight: 1,
+          fontVariantNumeric: "tabular-nums",
+          background: active ? "var(--accent)" : "var(--fill)",
+          color: active ? "#fff" : "var(--text-tertiary)",
+          border: iconOnly ? "1.5px solid var(--bg-content)" : "none",
+        }}>{count > 99 ? "99+" : count}</span>
       )}
     </button>
   );
