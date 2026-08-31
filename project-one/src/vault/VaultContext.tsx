@@ -3,6 +3,7 @@ import type { VaultData } from "./types";
 import { createVault, rewrapVault, sealVault, unlockVault, type UnlockedKeys, type VaultBlob } from "../lib/crypto";
 import { hasVault, loadBlob, saveBlob } from "../lib/storage";
 import { initialVaultData } from "../data/defaultData";
+import { pruneOrphanBalances } from "./ops";
 import { pwSession } from "./pwStore";
 
 type Status = "loading" | "onboard" | "locked" | "unlocked";
@@ -58,6 +59,14 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       const { data: d, keys } = await unlockVault<VaultData>(pw, blob);
       blobRef.current = blob;
       keysRef.current = keys;
+      // 自愈：早期版本删账户时没清历史快照，混用不同版本后文件里会留下指向
+      // 已删账户的残留。清掉并落盘，只在真的清到东西时才写一次。
+      const pruned = pruneOrphanBalances(d.dataset);
+      if (pruned > 0) {
+        const sealed = await sealVault(keys, d);
+        saveBlob(sealed);
+        blobRef.current = sealed;
+      }
       setData(d);
       lastActivity.current = Date.now();
       setStatus("unlocked");

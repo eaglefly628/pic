@@ -86,11 +86,26 @@ export function accountSeries(ds: Dataset, id: string): { date: string; v: numbe
   return out;
 }
 
-/** 每期净值（所有账户余额之和，含负债） */
+/** 每期净值（所有账户余额之和，含负债）
+ *
+ *  ⚠ 「这一期没记这个账户」不等于「这个账户这一期是 0」。原来写的是
+ *  `s.balances[a.id] ?? 0`，于是 Excel 里某个账户的单元格一旦留空（或者某个月
+ *  忘了填），那笔钱就在那个月整笔归零，曲线上出现一个假的断崖——比如账户有
+ *  50 万、7 月起不再填，8 月净值就凭空少 50 万。
+ *
+ *  正确语义是沿用它最近一次记录的余额（跟 addSnapshot 手工建快照时的结转一致）；
+ *  账户第一次出现之前才算 0（那时候它还不存在）。
+ *  真要让一个账户从历史里消失，用 deleteAccount——那会把它从所有快照里删干净。 */
 export function netSeries(ds: Dataset): { date: string; v: number }[] {
-  return ds.snapshots.map((s) => {
+  const snaps = [...ds.snapshots].sort((a, b) => a.date.localeCompare(b.date));
+  const carried: Record<string, number> = {};
+  return snaps.map((s) => {
     let sum = 0;
-    for (const a of ds.accounts) sum += s.balances[a.id] ?? 0;
+    for (const a of ds.accounts) {
+      const v = s.balances[a.id];
+      if (v != null) carried[a.id] = v;
+      sum += carried[a.id] ?? 0;
+    }
     return { date: s.date, v: sum };
   });
 }

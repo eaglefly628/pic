@@ -32,7 +32,31 @@ export function updateAccount(ds: Dataset, id: string, meta: AccountInput) {
 
 export function deleteAccount(ds: Dataset, id: string) {
   ds.accounts = ds.accounts.filter((a) => a.id !== id);
-  for (const s of ds.snapshots) delete s.balances[id];
+  for (const s of ds.snapshots) {
+    delete s.balances[id];
+    // touched 也要清。原来只删了 balances，touched 里会留下这个账户的 id，
+    // 虽然不影响金额，但「最后更新」这类按 touched 判断的逻辑会读到已经不存在的账户。
+    if (s.touched) s.touched = s.touched.filter((t) => t !== id);
+  }
+}
+
+/** 清掉快照里指向「已经不存在的账户」的残留数据。
+ *  早期版本删账户时只从账户列表里移除、没有清理历史快照，这些数据在混用不同
+ *  版本之后会留在文件里。金额上不会算错（求和只遍历当前账户），但留着没意义，
+ *  而且一旦有账户复用了同一个 id 就会把旧值带回来。返回清理掉的条目数。 */
+export function pruneOrphanBalances(ds: Dataset): number {
+  const alive = new Set(ds.accounts.map((a) => a.id));
+  let n = 0;
+  for (const s of ds.snapshots) {
+    for (const id of Object.keys(s.balances)) {
+      if (!alive.has(id)) { delete s.balances[id]; n++; }
+    }
+    if (s.touched) {
+      const kept = s.touched.filter((t) => alive.has(t));
+      if (kept.length !== s.touched.length) { n += s.touched.length - kept.length; s.touched = kept; }
+    }
+  }
+  return n;
 }
 
 /** 为某账户在指定日期新增/更新一条余额快照（新日期会结转其它账户的上次余额，保持净值一致）。

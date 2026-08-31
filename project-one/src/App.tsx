@@ -149,7 +149,7 @@ function Shell({ data }: { data: VaultData }) {
           onAddSnapshot={() => setSnapEditor(true)}
           onEditAccount={() => setAccEditor({ open: true, editing: true })}
           onDeleteAccount={() => {
-            if (currentAcc && confirm(`删除账户「${currentAcc.name}」及其全部快照？`)) {
+            if (currentAcc && confirm(`删除账户「${currentAcc.name}」？\n\n它在所有历史月份里的余额也会一并删掉——净资产曲线会整体重算，不会在删除的那个月出现断崖。此操作不可撤销。`)) {
               update((d) => deleteAccount(d.dataset, currentAcc.id));
               setScreen("accounts");
             }
