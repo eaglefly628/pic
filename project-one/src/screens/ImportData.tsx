@@ -26,7 +26,17 @@ export default function ImportData() {
   };
 
   const apply = () => {
-    if (!result) return;
+    if (!result || !data) return;
+    // 这是全站最容易误伤的操作：会把现有全部账户和快照整个换掉。
+    // 把「现在有什么、会变成什么」都写进确认框，让人看清楚再点。
+    const cur = data.dataset;
+    const msg =
+      `确定用这份 Excel 替换全部数据？\n\n` +
+      `现在：${cur.accounts.length} 个账户、${cur.snapshots.length} 期快照\n` +
+      `替换后：${result.accountCount} 个账户、${result.snapshotCount} 期快照` +
+      (result.from ? `（${result.from} ～ ${result.to}）` : "") + `\n\n` +
+      `现有的账户、快照、手工补录都会被覆盖，不可撤销。建议先到「设置 · 程序内备份」建一个还原点。`;
+    if (!confirm(msg)) return;
     update((d) => { d.dataset.accounts = result.dataset.accounts; d.dataset.snapshots = result.dataset.snapshots; d.dataset.real = true; });
     setDone(true);
   };

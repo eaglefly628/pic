@@ -24,6 +24,7 @@ import Budget from "./screens/Budget";
 import Markets from "./screens/Markets";
 import Secret from "./screens/Secret";
 import { AccountEditor, SnapshotEditor } from "./screens/editors";
+import Search, { type SearchTarget } from "./screens/Search";
 
 type Screen =
   | "dashboard" | "accounts" | "detail" | "passwords" | "info" | "import"
@@ -106,6 +107,22 @@ function Shell({ data }: { data: VaultData }) {
   const [accEditor, setAccEditor] = useState<{ open: boolean; editing: boolean }>({ open: false, editing: false });
   const [snapEditor, setSnapEditor] = useState(false);
   const [secretOpen, setSecretOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // ⌘K / Ctrl+K 全局呼出搜索。之前顶栏那个搜索框只是个样子，角标写着 ⌘K 却什么都不做。
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen((v) => !v); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const onSearchGo = (t: SearchTarget) => {
+    if (t.kind === "account") open(t.id);
+    else if (t.kind === "income") setScreen("income");
+    else if (t.kind === "expense") setScreen("budget");
+    else if (t.kind === "password") setScreen("passwords");
+    else setScreen("info");
+  };
   const clicksRef = useRef(0);
   const lastClickRef = useRef(0);
   const onSecretTap = () => {
@@ -275,12 +292,18 @@ function Shell({ data }: { data: VaultData }) {
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pageTitle}</div>
             <div style={{ flex: 1 }} />
             {/* 搜索框在手机上占不下，收掉 */}
-            {!isPhone && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, width: isTablet ? 130 : 188, height: 30, padding: "0 10px", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)" }}>
+            {isPhone ? (
+              <button onClick={() => setSearchOpen(true)} title="搜索" className="fv-icnbtn"
+                style={{ width: 36, height: 36, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-secondary)" }}>
+                <IconSearch size={16} stroke="currentColor" />
+              </button>
+            ) : (
+              <button onClick={() => setSearchOpen(true)} title="搜索全部（⌘K）" className="fv-tap"
+                style={{ display: "flex", alignItems: "center", gap: 6, width: isTablet ? 130 : 188, height: 30, padding: "0 10px", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-tertiary)" }}>
                 <IconSearch />
-                <span style={{ fontSize: 12.5, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>搜索全部</span>
-                {!isTablet && <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-tertiary)", border: "0.5px solid var(--separator-strong)", borderRadius: 4, padding: "1px 4px" }}>⌘K</span>}
-              </div>
+                <span style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>搜索全部</span>
+                {!isTablet && <span style={{ marginLeft: "auto", fontSize: 11, border: "0.5px solid var(--separator-strong)", borderRadius: 4, padding: "1px 4px" }}>⌘K</span>}
+              </button>
             )}
             <button onClick={toggle} title="切换外观" className="fv-icnbtn" style={{ width: isPhone ? 36 : 30, height: isPhone ? 36 : 30, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)", cursor: "pointer", color: "var(--text-secondary)" }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round">
@@ -321,6 +344,8 @@ function Shell({ data }: { data: VaultData }) {
           onClose={() => setSnapEditor(false)}
           onSubmit={(date, amount) => { if (currentAcc) update((d) => addSnapshot(d.dataset, currentAcc.id, date, amount)); }}
         />
+
+        <Search data={data} open={searchOpen} onClose={() => setSearchOpen(false)} onGo={onSearchGo} />
 
         {/* 隐藏入口：右下角无反馈小字，连点 5 下进入「私房钱」 */}
         <span onClick={onSecretTap} title="" style={{ position: "absolute", bottom: isPhone ? 88 : 4, right: 10, fontSize: 10.5, color: "var(--text-tertiary)", opacity: 0.6, userSelect: "none", zIndex: 30, padding: "4px 6px" }}>v0.1.0</span>

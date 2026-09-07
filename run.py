@@ -103,9 +103,20 @@ def _atomic_write(path: Path, data: bytes):
     os.replace(tmp, path)   # 原子替换，避免写一半导致的半损坏文件
 
 
+# 服务器是多线程的（ThreadingTCPServer），而 45 秒定时、页面隐藏、pagehide 的 sendBeacon
+# 可能贴得很近。_atomic_write 用的是固定的 .tmp 文件名，两个请求同时进来会互相踩，
+# os.replace 可能把写了一半的搬过去。整个「读旧值 → 比对 → 写新值」串行化。
+_BACKUP_LOCK = threading.Lock()
+
+
 def backup_save(raw: bytes) -> dict:
     """收下浏览器端打包好的「整屋备份」（各库数据已在浏览器里加密，服务端只当密文存盘）。
     写 current.home（最新），并在 backups/ 里留一份带时间戳的历史，轮转保留最近 BACKUP_KEEP 份。"""
+    with _BACKUP_LOCK:
+        return _backup_save_locked(raw)
+
+
+def _backup_save_locked(raw: bytes) -> dict:
     bundle = json.loads(raw)
     if not isinstance(bundle, dict) or not bundle.get("__home_backup"):
         return {"ok": False, "error": "不是本系统的备份数据"}
