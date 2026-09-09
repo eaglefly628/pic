@@ -38,7 +38,7 @@ MOUNTS = {
     "/vault": (ROOT / "project-three" / "dist"),
     "/dev": (ROOT / "project-four" / "dist"),
 }
-PORT = 5180
+PORT = int(os.environ.get("HOME_PORT") or 5180)
 BACKUP_KEEP = 40   # 磁盘上保留的历史备份份数（轮转）
 
 
@@ -55,7 +55,13 @@ def data_dir() -> Path:
     """本机稳定数据目录——跨版本升级不变（这样新版本能读到旧版本的数据，兼容往前）。
     macOS: ~/Library/Application Support/我家里的一切
     Windows: %APPDATA%/我家里的一切     Linux: ~/.local/share/我家里的一切
-    取不到系统目录时退回项目内 .home-data。"""
+    取不到系统目录时退回项目内 .home-data。
+    HOME_DATA_DIR 环境变量可以强制指定目录（测试脚本用，避免碰到真实数据）。"""
+    forced = os.environ.get("HOME_DATA_DIR")
+    if forced:
+        d = Path(forced)
+        (d / "backups").mkdir(parents=True, exist_ok=True)
+        return d
     home = Path.home()
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA") or (home / "AppData" / "Roaming"))
@@ -100,6 +106,10 @@ def _atomic_write(path: Path, data: bytes):
     path.parent.mkdir(parents=True, exist_ok=True)   # 目录被删/首次写入也能自愈
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(data)
+    try:
+        os.chmod(tmp, 0o600)   # 只有本人可读：文件里除了加密金库，还有其它子应用的明文数据
+    except Exception:
+        pass
     os.replace(tmp, path)   # 原子替换，避免写一半导致的半损坏文件
 
 
@@ -138,6 +148,15 @@ def _backup_save_locked(raw: bytes) -> dict:
             # 内容没变就不更新时间戳——否则多入口会因时间戳变化互相触发无谓的“恢复”。
             if _content(old) == new_content:
                 return {"ok": True, "savedAt": old.get("savedAt"), "bytes": len(old_raw), "dir": str(DATA_DIR), "unchanged": True}
+            # 乐观并发：客户端带上「我上次同步到的 savedAt」。磁盘上的比它新，说明另一个入口
+            # （比如安装版和 VSCode 同时开着）在我之后写过——直接覆盖会把对方的改动抹掉。
+            # 拒绝，让前端先把新的拉回来。老客户端不带这个字段则跳过检查（向后兼容）。
+            base = bundle.get("baseSavedAt")
+            disk_at = int(old.get("savedAt") or 0)
+            if isinstance(base, (int, float)) and disk_at > int(base):
+                return {"ok": False, "error": "stale", "diskSavedAt": disk_at, "baseSavedAt": int(base),
+                        "hint": "磁盘上的数据比你这个窗口上次同步到的更新（另一个入口写过），本次未覆盖。刷新页面会拉取最新数据。"}
+    bundle.pop("baseSavedAt", None)   # 只用于校验，不落盘
     bundle["dataVersion"] = DATA_VERSION
     bundle["appVersion"] = APP_VERSION
     bundle["appChannel"] = APP_CHANNEL
@@ -145,14 +164,8 @@ def _backup_save_locked(raw: bytes) -> dict:
     data = json.dumps(bundle, ensure_ascii=False).encode("utf-8")
     (DATA_DIR / "backups").mkdir(parents=True, exist_ok=True)   # 运行中目录被删也能自愈
     _atomic_write(DATA_DIR / "current.home", data)
-    ts = time.strftime("%Y%m%d-%H%M%S")
-    _atomic_write(DATA_DIR / "backups" / f"我家里的一切-备份-{ts}.home", data)
-    files = sorted((DATA_DIR / "backups").glob("*.home"))
-    for f in files[:-BACKUP_KEEP]:      # 只留最近的若干份
-        try:
-            f.unlink()
-        except Exception:
-            pass
+    _atomic_write(_fresh_backup_path("我家里的一切-备份-"), data)
+    _prune_backups()
     try:
         (DATA_DIR / "meta.json").write_text(
             json.dumps({"appVersion": APP_VERSION, "savedAt": bundle["savedAt"], "bytes": len(data)}, ensure_ascii=False),
@@ -162,13 +175,126 @@ def _backup_save_locked(raw: bytes) -> dict:
     return {"ok": True, "savedAt": bundle["savedAt"], "bytes": len(data), "dir": str(DATA_DIR)}
 
 
+_TS_RE = re.compile(r"(\d{8})-(\d{6})")
+
+
+def _fresh_backup_path(prefix: str) -> Path:
+    """backups/<prefix><时间戳>.home；同一秒内连写两次（页面隐藏 + pagehide 贴得很近）不再互相覆盖，
+    第二份加 -2、-3 后缀。"""
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    d = DATA_DIR / "backups"
+    p = d / f"{prefix}{ts}.home"
+    i = 2
+    while p.exists():
+        p = d / f"{prefix}{ts}-{i}.home"
+        i += 1
+    return p
+
+
+def _stamp_of(f: Path):
+    """从文件名里取出 YYYYMMDD-HHMMSS；取不到就用 mtime。"""
+    m = _TS_RE.search(f.name)
+    if m:
+        return m.group(1) + "-" + m.group(2)
+    return time.strftime("%Y%m%d-%H%M%S", time.localtime(f.stat().st_mtime))
+
+
+def _prune_backups():
+    """分层保留，而不是只留最近 40 次。
+    原来的问题：编辑得勤的时候 40 次只够半小时，一次错误状态能把所有好的历史全部滚掉。
+    现在：最近 BACKUP_KEEP 次全留；再往前每天留当天最后一份、留 30 天；再往前每周留一份、留 12 周。
+    手动的安全副本（keep- 开头，恢复前自动存的）单独计数，留最近 10 份，不参与上面的轮转。"""
+    d = DATA_DIR / "backups"
+    auto = sorted([f for f in d.glob("*.home") if not f.name.startswith("keep-")], key=_stamp_of)
+    keep = set(auto[-BACKUP_KEEP:])
+    # 按天 / 按周分桶，各桶取最后一份
+    by_day, by_week = {}, {}
+    for f in auto:
+        st = _stamp_of(f)
+        day = st[:8]
+        try:
+            t = time.strptime(day, "%Y%m%d")
+            week = time.strftime("%G-%V", t)
+        except Exception:
+            week = day[:6]
+        by_day[day] = f          # 同一天后面的覆盖前面的 → 留当天最后一份
+        by_week[week] = f
+    now = time.time()
+    for day, f in by_day.items():
+        try:
+            age = (now - time.mktime(time.strptime(day, "%Y%m%d"))) / 86400
+        except Exception:
+            age = 0
+        if age <= 30:
+            keep.add(f)
+    weeks = sorted(by_week.keys())[-12:]
+    for w in weeks:
+        keep.add(by_week[w])
+    for f in auto:
+        if f not in keep:
+            try:
+                f.unlink()
+            except Exception:
+                pass
+    manual = sorted([f for f in d.glob("keep-*.home")], key=_stamp_of)
+    for f in manual[:-10]:
+        try:
+            f.unlink()
+        except Exception:
+            pass
+
+
+def backup_keep(raw: bytes) -> dict:
+    """无条件把一份 bundle 存成安全副本（不动 current.home、不做过期检查）。
+    用在「从备份恢复」之前：先把当前本机状态存下来，恢复错了还能回来。"""
+    try:
+        bundle = json.loads(raw)
+    except Exception:
+        return {"ok": False, "error": "不是合法的备份数据（JSON 解析失败）"}
+    if not isinstance(bundle, dict) or not bundle.get("__home_backup"):
+        return {"ok": False, "error": "不是本系统的备份数据"}
+    bundle.pop("baseSavedAt", None)
+    bundle["savedAt"] = int(time.time() * 1000)
+    bundle["dataVersion"] = DATA_VERSION
+    data = json.dumps(bundle, ensure_ascii=False).encode("utf-8")
+    with _BACKUP_LOCK:
+        p = _fresh_backup_path("keep-恢复前-")
+        _atomic_write(p, data)
+        _prune_backups()
+    return {"ok": True, "name": p.name, "bytes": len(data)}
+
+
+def backup_get(name: str):
+    """按文件名取一份历史备份。只认 backups/ 里的 .home 文件名，防穿越。"""
+    if not name or "/" in name or "\\" in name or name in (".", "..") or not name.endswith(".home"):
+        return None
+    base = (DATA_DIR / "backups").resolve()
+    target = (base / name).resolve()
+    if target.parent != base or not target.is_file():
+        return None
+    return target.read_bytes()
+
+
 def backup_latest():
     p = DATA_DIR / "current.home"
     return p.read_bytes() if p.is_file() else None
 
 
+def _tighten_perms():
+    """启动时把旧版本留下的 644 备份文件收紧成 600（新写的文件在 _atomic_write 里已经是 600）。
+    只在多用户系统上有意义；Windows 上 chmod 基本无效，失败静默。"""
+    try:
+        files = [DATA_DIR / "current.home"] + list((DATA_DIR / "backups").glob("*.home"))
+        for f in files:
+            if f.is_file() and (f.stat().st_mode & 0o077):
+                os.chmod(f, 0o600)
+    except Exception:
+        pass
+
+
 def backup_list() -> dict:
-    files = sorted((DATA_DIR / "backups").glob("*.home"), key=lambda f: f.name, reverse=True)
+    # 按时间倒序（最新在前），自动备份和 keep- 安全副本按真实时间穿插，而不是按文件名分成两堆
+    files = sorted((DATA_DIR / "backups").glob("*.home"), key=_stamp_of, reverse=True)
     items = [{"name": f.name, "bytes": f.stat().st_size, "mtime": int(f.stat().st_mtime * 1000)} for f in files]
     cur = DATA_DIR / "current.home"
     return {"ok": True, "version": APP_VERSION, "dir": str(DATA_DIR),
@@ -589,6 +715,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+        if bare == "/api/backup/get":
+            from urllib.parse import urlparse, parse_qs, unquote
+            q = parse_qs(urlparse(self.path).query)
+            name = unquote((q.get("name") or [""])[0])
+            data = backup_get(name)
+            if data is None:
+                self.send_error(404); return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if bare == "/api/backup/list":
             return self._send_json(backup_list())
         if bare == "/api/disk/scan":
@@ -623,6 +762,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         bare = self.path.split("?")[0]
+        if bare == "/api/backup/keep":
+            origin = self.headers.get("Origin", "")
+            if origin and origin not in ("http://localhost:%d" % PORT, "http://127.0.0.1:%d" % PORT):
+                self.send_error(403); return
+            try:
+                ln = int(self.headers.get("Content-Length", "0") or "0")
+                raw = self.rfile.read(ln) if ln else b""
+                res = backup_keep(raw)
+            except Exception as e:
+                res = {"ok": False, "error": str(e)}
+            return self._send_json(res)
         if bare == "/api/backup/save":
             origin = self.headers.get("Origin", "")
             if origin and origin not in ("http://localhost:%d" % PORT, "http://127.0.0.1:%d" % PORT):
@@ -667,6 +817,7 @@ def main() -> int:
             webbrowser.open(url)
         return 0
     with httpd:
+        _tighten_perms()
         _tag = f"v{APP_LABEL}  ·  {'开发版' if APP_CHANNEL == 'dev' else '发布版'}"
         print("┌──────────────────────────────────────────────┐")
         print(f"│  我家里的一切  {_tag:<28}│")

@@ -379,6 +379,13 @@
           <button class="pbtn soft" id="bknow">立即备份到本机</button>
           <button class="pbtn ghost" id="bkrestore">从本机备份恢复…</button>
         </div>
+        <div id="bkpick" hidden style="margin-top:10px;padding:10px 12px;border:0.5px solid var(--sep);border-radius:10px;background:var(--bg2)">
+          <div class="shint" style="margin:0 0 8px">选一份历史版本恢复（自动备份最近 40 次全留，再往前按天留 30 天、按周留 12 周）：</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="bksel" style="flex:1;min-width:220px;height:32px;border-radius:8px;border:0.5px solid var(--sep);background:var(--card);color:var(--text);font-size:12.5px;padding:0 8px"></select>
+            <button class="pbtn soft" id="bkgo">恢复这一份</button>
+          </div>
+        </div>
         <div class="shint" id="bkdir" style="color:var(--text-tertiary);word-break:break-all"></div>
       </div>
       <div class="sec">
@@ -765,10 +772,39 @@
       const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k === 'home.bio' || k === 'home.diskSyncedAt') continue; ls[k] = localStorage.getItem(k); }
       let dbs = []; try { dbs = (await indexedDB.databases()) || []; } catch (e) { dbs = []; }
       const idb = []; for (const info of dbs) if (info.name) idb.push(await dumpDB(info.name));
-      return { __home_backup: 1, v: 1, appVersion: HOME_VERSION, origin: location.origin, localStorage: ls, indexedDB: idb };
+      // baseSavedAt = 我上次跟磁盘同步到的时间戳。服务端用它判断有没有别的入口在我之后写过，
+      // 有的话拒绝这次写入，免得「后写的赢」把对方的改动抹掉。
+      return { __home_backup: 1, v: 1, appVersion: HOME_VERSION, origin: location.origin, localStorage: ls, indexedDB: idb,
+               baseSavedAt: Number(localStorage.getItem('home.diskSyncedAt') || 0) };
     }
     // 用一个 bundle 覆盖本机数据（保留本机 Touch ID 凭据）
+    // 恢复前校验：别等 localStorage.clear() 之后才发现 bundle 是坏的。
+    // 金库类的 key 必须能解析成 {v:1, wrap, data} 的加密结构；其它 key 只要是字符串就行。
+    function validateBundle(bundle) {
+      if (!bundle || typeof bundle !== 'object' || !bundle.__home_backup) return '不是本系统的备份';
+      const ls = bundle.localStorage;
+      if (ls != null && typeof ls !== 'object') return 'localStorage 段格式不对';
+      for (const k of ['familyvault.vault.v1', 'familyvault.pwbox.v1', 'familyvault.secret.v1']) {
+        const raw = ls && ls[k];
+        if (raw == null) continue;
+        let b; try { b = JSON.parse(raw); } catch (e) { return `${k} 不是合法 JSON（文件可能损坏）`; }
+        if (!b || b.v !== 1 || !b.wrap || !b.data) return `${k} 缺少加密结构（文件可能损坏或被截断）`;
+      }
+      if (bundle.indexedDB != null && !Array.isArray(bundle.indexedDB)) return 'indexedDB 段格式不对';
+      return null;
+    }
+    // 恢复前先把「现在这台机器上的状态」存成一份安全副本（keep-恢复前-*.home）。
+    // 恢复错了、或者恢复的那份其实更旧，还能从这份回来。
+    async function keepSafetyCopy() {
+      try {
+        const cur = await buildBundle();
+        const r = await fetch('/api/backup/keep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cur) }).then((x) => x.json()).catch(() => null);
+        return r && r.ok ? r.name : null;
+      } catch (e) { return null; }
+    }
     async function applyBundle(bundle) {
+      const why = validateBundle(bundle);
+      if (why) throw new Error('备份文件校验失败：' + why);
       const keepBio = localStorage.getItem('home.bio');
       localStorage.clear();
       for (const k of Object.keys(bundle.localStorage || {})) localStorage.setItem(k, bundle.localStorage[k]);
@@ -807,10 +843,17 @@
           BACKEND_OK = true;
           const el = document.getElementById('nobk'); if (el) el.hidden = true;
           if (r.savedAt) localStorage.setItem('home.diskSyncedAt', String(r.savedAt));
-          if (bkstatus) bkstatus.textContent = `已自动存到本机 · ${fmtTime(r.savedAt)}（磁盘保留最近 40 份历史）`;
+          if (bkstatus) bkstatus.textContent = `已自动存到本机 · ${fmtTime(r.savedAt)}（磁盘保留最近 40 次 + 每天 30 天 + 每周 12 周）`;
           if (bkdir) bkdir.textContent = '目录：' + r.dir;
         }
         else if (r && r.error === 'reject-downgrade') { if (bkstatus) bkstatus.textContent = '⚠️ ' + (r.hint || '本入口版本偏旧，数据未写入（磁盘上是更新版本写的）。请更新本入口。'); }
+        else if (r && r.error === 'stale') {
+          // 另一个入口在我之后写过盘。不覆盖它，也不自动拉（拉会丢我这边没存的改动），让人决定。
+          if (bkstatus) bkstatus.innerHTML = '<b style="color:#b23f34">未写盘：磁盘上有更新的数据。</b>'
+            + '另一个入口（安装版 / 另一个窗口）在 ' + fmtTime(r.diskSavedAt) + ' 写过，为了不抹掉它的改动，本窗口这次没有覆盖。'
+            + '<br>如果你这边没有要保留的改动，刷新页面会拉取最新；如果有，先用「导出全部」留一份再刷新。';
+          if (reason !== 'interval') toast('磁盘上有更新的数据，本次未覆盖（详见设置）');
+        }
         else { markNoBackend(r ? '写盘被拒绝' : '写盘请求没有响应'); }   // 原来这里什么都不做，失败是完全静默的
         return r;
       } catch (e) { return null; }
@@ -836,12 +879,52 @@
       location.reload();
       return true;
     }
+    // 从本机备份恢复：不再只能恢复「最近一次」，而是列出磁盘上所有历史版本让人选。
+    // 原来 40 份历史备份在界面上完全用不到，只能手工去目录里翻。
     async function restoreFromDisk() {
-      let latest = null;
-      try { const res = await fetch('/api/backup/latest'); if (res.status === 204) { toast('本机还没有自动备份'); return; } latest = await res.json(); } catch (e) { toast('读取本机备份失败'); return; }
-      if (!latest || !latest.__home_backup) { toast('本机备份无法识别'); return; }
-      if (!confirm(`用本机最近一次自动备份（${fmtTime(latest.savedAt)}）替换当前全部数据？`)) return;
-      await applyBundle(latest); location.reload();
+      const pick = document.getElementById('bkpick');
+      if (!pick.hidden) { pick.hidden = true; return; }
+      let list = null;
+      try { list = await fetch('/api/backup/list').then((x) => x.json()); } catch (e) { toast('读取本机备份列表失败'); return; }
+      const items = (list && list.backups) || [];
+      if (!items.length) { toast('本机还没有自动备份'); return; }
+      const sel = document.getElementById('bksel');
+      const fmtB = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB';
+      sel.innerHTML = items.map((it, i) => {
+        const manual = it.name.startsWith('keep-');
+        const label = (i === 0 ? '最新 · ' : '') + fmtTime(it.mtime) + (manual ? ' · 恢复前的安全副本' : '') + ' · ' + fmtB(it.bytes);
+        return `<option value="${it.name.replace(/"/g, '&quot;')}">${label}</option>`;
+      }).join('');
+      pick.hidden = false;
+    }
+    async function restoreChosen() {
+      const name = document.getElementById('bksel').value;
+      if (!name) return;
+      if (READ_ONLY_NEWER) { alert('只读模式：本机数据由更新版本写入，本入口不能恢复覆盖它。请先更新本入口。'); return; }
+      let bundle = null;
+      try {
+        const res = await fetch('/api/backup/get?name=' + encodeURIComponent(name));
+        if (!res.ok) { toast('读取这份备份失败'); return; }
+        bundle = await res.json();
+      } catch (e) { toast('读取这份备份失败'); return; }
+      const why = validateBundle(bundle);
+      if (why) { alert('这份备份没法用：' + why); return; }
+      if (!confirm(`用「${fmtTime(bundle.savedAt)}」这份备份替换当前全部数据？\n\n恢复前会先把现在的状态存成一份安全副本，恢复错了可以再从它回来。`)) return;
+      const kept = await keepSafetyCopy();
+      if (!kept && !confirm('安全副本没存成功（本机磁盘备份可能没启用）。仍然继续恢复？现在的状态将无法找回。')) return;
+      // 记下磁盘现在的 savedAt：恢复后要用它当 baseSavedAt 把恢复结果写回去（过乐观并发检查）。
+      let diskAt = 0;
+      try { const r = await fetch('/api/backup/latest'); if (r.ok && r.status !== 204) diskAt = Number((await r.json()).savedAt || 0); } catch (e) { }
+      try { await applyBundle(bundle); } catch (e) { alert(String(e.message || e)); return; }
+      // 恢复的是「较旧的一份」时，磁盘上的 current.home 仍是较新的那份。不立刻写回，刷新时的开机同步
+      // 会认为「磁盘比本地新」，把刚恢复的又拉回去——等于白恢复。所以先把恢复结果写成最新，再刷新。
+      localStorage.setItem('home.diskSyncedAt', String(diskAt || Date.now()));
+      const w = await autoSave('manual');
+      if (!(w && w.ok)) {
+        localStorage.setItem('home.diskSyncedAt', String(Date.now()));   // 写回没成也别让开机同步把刚恢复的拉回去
+        toast('已恢复到本机，但没能写回磁盘备份（稍后会再试）');
+      }
+      location.reload();
     }
     // 磁盘备份是否真的可用。false 时「自动备份」整条链路都是空转，必须明确告诉用户。
     let BACKEND_OK = false;
@@ -880,6 +963,8 @@
     }
     if (bknow) bknow.addEventListener('click', async () => { bknow.disabled = true; const r = await autoSave('manual'); toast(r && r.ok ? '已备份到本机' : '备份失败（要从 run.py 启动才有本机备份）'); bknow.disabled = false; });
     if (bkrestore) bkrestore.addEventListener('click', restoreFromDisk);
+    const bkgo = document.getElementById('bkgo');
+    if (bkgo) bkgo.addEventListener('click', restoreChosen);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') autoSave('hide'); });
     window.addEventListener('pagehide', () => { try { buildBundle().then((b) => navigator.sendBeacon('/api/backup/save', new Blob([JSON.stringify(b)], { type: 'application/json' }))); } catch (e) { } });
 
