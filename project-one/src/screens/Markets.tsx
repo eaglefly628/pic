@@ -3,6 +3,7 @@ import { rise } from "../lib/anim";
 import { Btn, card, Segmented } from "../ui";
 import { IconRefresh } from "../icons";
 import { useBreakpoint } from "../lib/breakpoint";
+import { useWidth } from "../lib/useWidth";
 
 type Pt = { t: number; usd: number };  // 历史点，值统一放 .usd（金价/币价/汇率通用）
 type Range = "1mo" | "3mo" | "6mo" | "1y";
@@ -62,18 +63,22 @@ function TrendChart({ series, color, gradId, loading, fmtV }: {
   /** 给了就在图上标出纵轴的最高/最低（收益率这类「数值本身要看清」的场景用）。不给则跟原来一样。 */
   fmtV?: (v: number) => string;
 }) {
-  const chart = useMemo(() => spark(series.map((s) => s.v), 640, 180, fmtV ? 50 : 6), [series, !!fmtV]);
+  // viewBox 的宽度跟着元素实际像素宽走。写死 640 的话，元素比 640:180 更扁时
+  // viewBox 会等比缩放后居中，左右白白空掉一大截（见 lib/useWidth.ts 的说明）。
+  const [wrapRef, wrapW] = useWidth<HTMLDivElement>();
+  const W = Math.max(280, wrapW || 640), H = 180;
+  const chart = useMemo(() => spark(series.map((s) => s.v), W, H, fmtV ? 50 : 6), [series, !!fmtV, W]);
   const hi = useMemo(() => (series.length ? Math.max(...series.map((s) => s.v)) : 0), [series]);
   const lo = useMemo(() => (series.length ? Math.min(...series.map((s) => s.v)) : 0), [series]);
   if (series.length <= 1) return <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", padding: "40px 0", textAlign: "center" }}>{loading ? "加载中…" : "暂无走势数据"}</div>;
   return (
-    <>
-      <svg viewBox="0 0 640 180" style={{ width: "100%", height: 180, display: "block", overflow: "visible" }}>
+    <div ref={wrapRef}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H, display: "block", overflow: "visible" }}>
         <defs><linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={color} stopOpacity="0.28" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs>
         {/* 收益率这类要看清数值的，左边留一条刻度槽，标出区间最高/最低 */}
-        {fmtV && [{ v: hi, y: 6 }, { v: lo, y: 174 }].map((m) => (
+        {fmtV && [{ v: hi, y: 6 }, { v: lo, y: H - 6 }].map((m) => (
           <g key={m.y}>
-            <line x1="50" x2="640" y1={m.y} y2={m.y} stroke="var(--separator)" strokeWidth="1" />
+            <line x1="50" x2={W} y1={m.y} y2={m.y} stroke="var(--separator)" strokeWidth="1" />
             <text x="44" y={m.y + 3.5} textAnchor="end" fontSize="11" fill="var(--text-tertiary)">{fmtV(m.v)}</text>
           </g>
         ))}
@@ -81,7 +86,7 @@ function TrendChart({ series, color, gradId, loading, fmtV }: {
         <path d={chart.line} fill="none" stroke={color} strokeWidth="2" />
       </svg>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}><span>{fmtDate(series[0].t)}</span><span>{fmtDate(series[series.length - 1].t)}</span></div>
-    </>
+    </div>
   );
 }
 function ErrCard({ msg }: { msg?: string }) {
@@ -286,10 +291,12 @@ const CURVE_LABELS_PHONE = ["3M", "1Y", "2Y", "5Y", "10Y", "30Y"];
 /** 收益率曲线：横轴是期限（等距排开），纵轴是收益率；几条线靠虚实区分，不单靠颜色。 */
 function CurveChart({ curves, tenors, phone }: { curves: UstCurve[]; tenors: { key: string; months: number }[]; phone: boolean }) {
   const keys = tenors.map((t) => t.key).filter((k) => curves.some((c) => c.y[k] != null));
+  const [wrapRef, wrapW] = useWidth<HTMLDivElement>();   // 同上：viewBox 宽度跟元素实际宽度走
+  const W = Math.max(280, wrapW || 640), H = phone ? 168 : 210;
   const geom = useMemo(() => {
     const vals = curves.flatMap((c) => keys.map((k) => c.y[k]).filter((v): v is number => v != null));
     if (!vals.length || keys.length < 2) return null;
-    const W = 640, H = 210, L = 44, R = 10, T = 14, B = 34;
+    const L = 44, R = 10, T = 14, B = 34;
     const mn = Math.min(...vals), mx = Math.max(...vals);
     const pad = (mx - mn) * 0.18 || 0.2;
     const lo = mn - pad, hi = mx + pad;
@@ -301,19 +308,19 @@ function CurveChart({ curves, tenors, phone }: { curves: UstCurve[]; tenors: { k
       return { date: c.date, d: d.trim(), dots: keys.map((k, i) => ({ k, v: c.y[k], x: x(i), y: c.y[k] != null ? y(c.y[k]) : 0 })).filter((p) => p.v != null) };
     });
     const ticks = [0, 0.5, 1].map((f) => { const v = hi - f * (hi - lo); return { v, y: y(v) }; });
-    return { W, H, L, R, x, y, lines, ticks };
-  }, [curves, keys.join(",")]);
+    return { L, R, x, y, lines, ticks };
+  }, [curves, keys.join(","), W, H]);
 
   if (!geom) return <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", padding: "40px 0", textAlign: "center" }}>暂无曲线数据</div>;
   const labelSet = phone ? CURVE_LABELS_PHONE : CURVE_LABELS_WIDE;
   // 最新那条实线，往前的依次虚线、点线——靠线型区分而不是只靠颜色，色觉障碍也分得出
   const dash: (string | undefined)[] = [undefined, "5 4", "2 3"];
   return (
-    <>
-      <svg viewBox={`0 0 ${geom.W} ${geom.H}`} style={{ width: "100%", height: phone ? 168 : 210, display: "block", overflow: "visible" }}>
+    <div ref={wrapRef}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H, display: "block", overflow: "visible" }}>
         {geom.ticks.map((t, i) => (
           <g key={i}>
-            <line x1={geom.L} x2={geom.W - geom.R} y1={t.y} y2={t.y} stroke="var(--separator)" strokeWidth="1" />
+            <line x1={geom.L} x2={W - geom.R} y1={t.y} y2={t.y} stroke="var(--separator)" strokeWidth="1" />
             <text x={geom.L - 6} y={t.y + 3.5} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{t.v.toFixed(2)}</text>
           </g>
         ))}
@@ -326,7 +333,7 @@ function CurveChart({ curves, tenors, phone }: { curves: UstCurve[]; tenors: { k
           </g>
         ))}
         {keys.map((k, i) => labelSet.includes(k) && (
-          <text key={k} x={geom.x(i)} y={geom.H - 12} textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{tenorLabel(k)}</text>
+          <text key={k} x={geom.x(i)} y={H - 12} textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{tenorLabel(k)}</text>
         ))}
       </svg>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8, fontSize: 11.5, color: "var(--text-tertiary)" }}>
@@ -337,7 +344,7 @@ function CurveChart({ curves, tenors, phone }: { curves: UstCurve[]; tenors: { k
           </span>
         ))}
       </div>
-    </>
+    </div>
   );
 }
 

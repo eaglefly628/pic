@@ -83,6 +83,13 @@ function mock({ inverted = false, days = 130 } = {}) {
   check(legend >= 3, `曲线图例列出 3 个对比日期（找到 ${legend} 个日期）`);
   check(await p.locator('svg path[stroke]').count() >= 4, '走势线 + 三条曲线都画出来了');
   check(!(await overflow()), '桌面无横向溢出');
+  // viewBox 写死宽度时会等比缩放后居中，左右白白空掉一截；这里要求图铺满卡片
+  const fit = await p.evaluate(() => [...document.querySelectorAll('svg[viewBox]')]
+    .filter((s) => s.getBoundingClientRect().width > 300)
+    .map((s) => { const r = s.getBoundingClientRect(), vb = s.getAttribute('viewBox').split(/\s+/).map(Number);
+      const k = Math.min(r.width / vb[2], r.height / vb[3]);
+      return { w: Math.round(r.width), vbw: vb[2], letterbox: Math.round((r.width - vb[2] * k) / 2) }; }));
+  check(fit.length > 0 && fit.every((f) => f.letterbox === 0), `图都铺满宽度、没有居中留白：${fit.map((f) => `${f.vbw}/${f.w}px留白${f.letterbox}`).join('  ')}`);
   await p.screenshot({ path: OUT + 'ust-desktop.png', fullPage: true });
   // 曲线卡在内层滚动容器里，scrollIntoView 推不动，直接找那个容器把它滚到底
   await p.evaluate(() => {

@@ -5,6 +5,7 @@ import { fmt, fmtWan } from "../lib/format";
 import { card, Segmented, Switch } from "../ui";
 import { rise } from "../lib/anim";
 import { useBreakpoint } from "../lib/breakpoint";
+import { useWidth } from "../lib/useWidth";
 
 const PREF_KEY = "familyvault.secret.ui.v1";   // 只存开关这类界面偏好，不含任何金额
 const MONTHS = 12;
@@ -73,10 +74,15 @@ export default function SecretOverlay({ secret, main }: { secret: Dataset; main:
     return { ...l, plot: l.vals.map((v) => (v == null ? null : (v / base) * 100)) };
   }), [lines, mode]);
 
+  // viewBox 的宽高直接用量到的真实像素，缩放比恒为 1：鼠标坐标不用换算，也不浪费宽度
+  const [wrapRef, wrapW] = useWidth<HTMLDivElement>();
+  const W = Math.max(280, wrapW || 600);
+  const H = phone ? 180 : 210;
+
   const geom = useMemo(() => {
     const vals = plotted.flatMap((l) => l.plot).filter((v): v is number => v != null);
     if (vals.length < 2) return null;
-    const W = 600, H = 210, L = 52, R = 10, T = 14, B = 30;
+    const L = 52, R = 10, T = 14, B = 30;
     const mn = Math.min(...vals), mx = Math.max(...vals);
     const padv = (mx - mn) * 0.1 || Math.abs(mx || 1) * 0.1;
     // 上下各留一点余量，但全是正数时纵轴不越过 0——否则会标出一个根本不存在的负数刻度
@@ -97,15 +103,17 @@ export default function SecretOverlay({ secret, main }: { secret: Dataset; main:
       const gv = hi - ((hi - lo) * k) / 3;
       return { y: Y(gv), label: mode === "amount" ? fmtWan(Math.round(gv / 1000) * 1000) : gv.toFixed(0) };
     });
+    // 横轴标签按实际可用宽度决定密度，每个标签至少留 62px，宽了就多标几个
+    const step = Math.max(1, Math.ceil(months.length / Math.max(3, Math.floor((W - L - R) / 62))));
     const xLabels = months.map((m, i) => ({ x: X(i), label: monthLabel(m), i }))
-      .filter((_, i) => i % (phone ? 3 : 2) === 0 || i === months.length - 1);
-    return { W, H, L, R, T, B, X, Y, paths, grid, xLabels };
-  }, [plotted, months, mode, phone]);
+      .filter((_, i) => i % step === 0 || i === months.length - 1);
+    return { L, R, T, B, X, Y, paths, grid, xLabels };
+  }, [plotted, months, mode, W, H]);
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!geom) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const px = ((e.clientX - r.left) / r.width) * geom.W;
+    // viewBox 尺寸 = 元素像素尺寸，所以这里就是图上的 x，不用再乘缩放比
+    const px = e.clientX - e.currentTarget.getBoundingClientRect().left;
     let best = 0, bd = Infinity;
     for (let i = 0; i < months.length; i++) { const d = Math.abs(geom.X(i) - px); if (d < bd) { bd = d; best = i; } }
     setHover(best);
@@ -176,32 +184,34 @@ export default function SecretOverlay({ secret, main }: { secret: Dataset; main:
           options={[{ value: "amount", label: "金额" }, { value: "index", label: "指数" }]} />
       </div>
 
+      <div ref={wrapRef}>
       {geom ? (
-        <svg viewBox={`0 0 ${geom.W} ${geom.H}`} style={{ width: "100%", height: phone ? 180 : 210, display: "block", overflow: "visible", touchAction: "pan-y" }}
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H, display: "block", overflow: "visible", touchAction: "pan-y" }}
           onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)}>
           {geom.grid.map((g, i) => (
             <g key={i}>
-              <line x1={geom.L} x2={geom.W - geom.R} y1={g.y} y2={g.y} stroke="var(--separator)" strokeWidth="1" />
+              <line x1={geom.L} x2={W - geom.R} y1={g.y} y2={g.y} stroke="var(--separator)" strokeWidth="1" />
               <text x={geom.L - 6} y={g.y + 3.5} textAnchor="end" fontSize="10.5" fill="var(--text-tertiary)">{g.label}</text>
             </g>
           ))}
           {hover != null && (
-            <line x1={geom.X(hover)} x2={geom.X(hover)} y1={geom.T} y2={geom.H - geom.B} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />
+            <line data-role="guide" x1={geom.X(hover)} x2={geom.X(hover)} y1={geom.T} y2={H - geom.B} stroke="var(--separator-strong)" strokeWidth="1" strokeDasharray="3 3" />
           )}
           {geom.paths.map((l) => (
             <path key={l.key} d={l.d} fill="none" stroke={l.color} strokeWidth={l.width} strokeDasharray={l.dash}
               strokeLinecap="round" strokeLinejoin="round" />
           ))}
           {geom.paths.map((l) => l.dots[focus] && (
-            <circle key={l.key} cx={l.dots[focus]!.x} cy={l.dots[focus]!.y} r="3.4" fill="var(--bg-card)" stroke={l.color} strokeWidth="2" />
+            <circle data-role="focus-dot" key={l.key} cx={l.dots[focus]!.x} cy={l.dots[focus]!.y} r="3.4" fill="var(--bg-card)" stroke={l.color} strokeWidth="2" />
           ))}
           {geom.xLabels.map((t) => (
-            <text key={t.i} x={t.x} y={geom.H - 10} textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{t.label}</text>
+            <text key={t.i} x={t.x} y={H - 10} textAnchor="middle" fontSize="10.5" fill="var(--text-tertiary)">{t.label}</text>
           ))}
         </svg>
       ) : (
         <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", padding: "40px 0", textAlign: "center" }}>近一年还没有足够的快照，记满两期就能画出走势。</div>
       )}
+      </div>
 
       {lopsided && (
         <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.7, marginTop: 10 }}>

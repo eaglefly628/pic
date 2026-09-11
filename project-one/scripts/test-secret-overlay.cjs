@@ -5,8 +5,10 @@
 //   ③ 「合计家庭总资产」开关：打开多一条线和一个数，合计 = 两本账相加；关掉就消失
 //   ④ 开关状态记得住（退出重进还是上次那样）
 //   ⑤ 指数模式：各自从 100 起算
-//   ⑥ 指针移动能读出某个月各条线的值
-//   ⑦ 手机排版不溢出
+//   ⑥ 图铺满卡片宽度（viewBox 等比缩放居中会白白浪费近一半宽度）
+//   ⑦ 鼠标和高亮的点对齐（等比缩放居中还会让鼠标换算错位，越靠边越偏）
+//   ⑧ 指针移动能读出某个月各条线的值
+//   ⑨ 手机排版不溢出
 // 用法：node scripts/test-secret-overlay.cjs [url]
 const { chromium } = require(process.env.PW || '/opt/node22/lib/node_modules/playwright');
 const fs = require('fs');
@@ -144,7 +146,48 @@ const yuan = (s) => Number(String(s).replace(/[^\d.-]/g, ''));
   check(!axis2.some((a) => a.startsWith('−')), `全是正数时纵轴不出负刻度：${axis2.join(' ')}`);
   check(/量级差得多/.test(await cardText()), '金额模式下提示可以切指数看涨跌幅');
 
-  console.log('\n⑥ 指针读数');
+  console.log('\n⑥ 图铺满宽度、不是等比缩放后居中');
+  const box0 = await card().locator('svg[viewBox]').boundingBox();
+  const fit = await p.evaluate(() => {
+    const s = document.querySelector('[data-card="secret-overlay"] svg[viewBox]');
+    const r = s.getBoundingClientRect(), vb = s.getAttribute('viewBox').split(/\s+/).map(Number);
+    const scale = Math.min(r.width / vb[2], r.height / vb[3]);
+    return { w: Math.round(r.width), vbw: vb[2], scale: +scale.toFixed(3), letterbox: Math.round((r.width - vb[2] * scale) / 2) };
+  });
+  check(fit.scale === 1, `缩放比是 1:1（viewBox ${fit.vbw} × 元素 ${fit.w}px，scale=${fit.scale}）`);
+  check(fit.letterbox === 0, `左右没有居中留白（实得 ${fit.letterbox}px）`);
+
+  console.log('\n⑦ 鼠标和高亮点对齐');
+  // 用户报的问题：鼠标和它对应的点错位，越靠边偏得越多。
+  // 判据：高亮的竖线必须是离鼠标最近的那个月，也就是和鼠标的距离不超过半格。
+  const guideX = async () => await p.evaluate(() => {
+    const g = document.querySelector('[data-card="secret-overlay"] svg line[data-role="guide"]');
+    if (!g) return null;
+    const b = g.getBoundingClientRect();
+    return b.left + b.width / 2;
+  });
+  const gap = (box0.width - 52 - 10) / 11;                    // 12 个月，11 段
+  let worst = 0;
+  for (const f of [0.08, 0.25, 0.5, 0.75, 0.95]) {
+    const mx = box0.x + 52 + (box0.width - 52 - 10) * f;      // 只在数据区里取点
+    await p.mouse.move(mx, box0.y + box0.height / 2); await p.waitForTimeout(220);
+    const gx = await guideX();
+    const off = gx == null ? Infinity : Math.abs(gx - mx);
+    worst = Math.max(worst, off);
+    check(off <= gap / 2 + 2, `鼠标在 ${Math.round(f * 100)}% 处：竖线偏 ${off === Infinity ? '没画出来' : off.toFixed(1) + 'px'}（半格 ${(gap / 2).toFixed(1)}px）`);
+  }
+  check(worst <= gap / 2 + 2, `最大偏移 ${worst.toFixed(1)}px，都在半格内`);
+  // 高亮圆点也应该落在竖线上
+  const dotOff = await p.evaluate(() => {
+    const g = document.querySelector('[data-card="secret-overlay"] svg line[data-role="guide"]');
+    const d = document.querySelector('[data-card="secret-overlay"] svg circle[data-role="focus-dot"]');
+    if (!g || !d) return null;
+    const gb = g.getBoundingClientRect(), db = d.getBoundingClientRect();
+    return Math.abs((gb.left + gb.width / 2) - (db.left + db.width / 2));
+  });
+  check(dotOff != null && dotOff <= 1.5, `高亮圆点就在竖线上（差 ${dotOff == null ? '取不到' : dotOff.toFixed(2) + 'px'}）`);
+
+  console.log('\n⑧ 指针读数');
   const svg = card().locator('svg[viewBox]');   // 图例里那几个小色块也是 svg，取带 viewBox 的主图
   const box = await svg.boundingBox();
   const readout = async () => (await p.evaluate(() => {
@@ -160,7 +203,7 @@ const yuan = (s) => Number(String(s).replace(/[^\d.-]/g, ''));
   check(rRight !== rLeft, '移到不同位置读到的是不同月份');
   check(/独立管理/.test(rRight) && /家庭理财/.test(rRight), '读数行按线名列出各条线的值');
 
-  console.log('\n⑦ 手机');
+  console.log('\n⑨ 手机');
   await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(800);
   await p.evaluate(() => { for (const el of document.querySelectorAll('div')) { if (el.scrollHeight > el.clientHeight + 40 && getComputedStyle(el).overflowY === 'auto') el.scrollTop = el.scrollHeight; } });
   await p.waitForTimeout(700);
