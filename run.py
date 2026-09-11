@@ -15,7 +15,9 @@
 直接运行：  python run.py     （或双击 start.bat）
 数据全部保存在本机，不联网、不上传。按 Ctrl+C 退出。
 """
+import csv
 import http.server
+import io
 import json
 import mimetypes
 import os
@@ -199,13 +201,22 @@ def _stamp_of(f: Path):
     return time.strftime("%Y%m%d-%H%M%S", time.localtime(f.stat().st_mtime))
 
 
+def _order_of(f: Path):
+    """排序键。文件名只精确到秒，同一秒里写的两份（比如恢复前的安全副本和紧跟着的自动备份）
+    光看名字分不出先后，再用 mtime 做次级键，顺序才是确定的。"""
+    try:
+        return (_stamp_of(f), f.stat().st_mtime)
+    except Exception:
+        return (_stamp_of(f), 0.0)
+
+
 def _prune_backups():
     """分层保留，而不是只留最近 40 次。
     原来的问题：编辑得勤的时候 40 次只够半小时，一次错误状态能把所有好的历史全部滚掉。
     现在：最近 BACKUP_KEEP 次全留；再往前每天留当天最后一份、留 30 天；再往前每周留一份、留 12 周。
     手动的安全副本（keep- 开头，恢复前自动存的）单独计数，留最近 10 份，不参与上面的轮转。"""
     d = DATA_DIR / "backups"
-    auto = sorted([f for f in d.glob("*.home") if not f.name.startswith("keep-")], key=_stamp_of)
+    auto = sorted([f for f in d.glob("*.home") if not f.name.startswith("keep-")], key=_order_of)
     keep = set(auto[-BACKUP_KEEP:])
     # 按天 / 按周分桶，各桶取最后一份
     by_day, by_week = {}, {}
@@ -236,7 +247,7 @@ def _prune_backups():
                 f.unlink()
             except Exception:
                 pass
-    manual = sorted([f for f in d.glob("keep-*.home")], key=_stamp_of)
+    manual = sorted([f for f in d.glob("keep-*.home")], key=_order_of)
     for f in manual[:-10]:
         try:
             f.unlink()
@@ -294,7 +305,7 @@ def _tighten_perms():
 
 def backup_list() -> dict:
     # 按时间倒序（最新在前），自动备份和 keep- 安全副本按真实时间穿插，而不是按文件名分成两堆
-    files = sorted((DATA_DIR / "backups").glob("*.home"), key=_stamp_of, reverse=True)
+    files = sorted((DATA_DIR / "backups").glob("*.home"), key=_order_of, reverse=True)
     items = [{"name": f.name, "bytes": f.stat().st_size, "mtime": int(f.stat().st_mtime * 1000)} for f in files]
     cur = DATA_DIR / "current.home"
     return {"ok": True, "version": APP_VERSION, "dir": str(DATA_DIR),
@@ -377,6 +388,141 @@ def fetch_btc(rng="3mo"):
     out["ok"] = out.get("usd") is not None
     out["asOf"] = int(time.time() * 1000)
     return out
+
+# ── 美债收益率 ──────────────────────────────────────────────
+# 主源是美国财政部官方的「每日收益率曲线」CSV：整条曲线（1 月 ~ 30 年）都有，
+# 不要 key、不要注册，就是个静态文件。降级用 Yahoo 的几个收益率指数。
+UST_HISTORY_KEYS = ["3M", "2Y", "5Y", "10Y", "30Y"]   # 走势图只回这几档，省流量
+_UST_HDR = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(mo|month|yr|year)s?\s*$", re.I)
+
+
+def _ust_tenor(header):
+    """把 CSV 表头（"1 Mo" / "1.5 Month" / "10 Yr"）变成 ("10Y", 120.0)。认不出来返回 None。"""
+    m = _UST_HDR.match(header or "")
+    if not m:
+        return None
+    n = float(m.group(1))
+    months = n if m.group(2).lower().startswith("mo") else n * 12
+    key = ("%g" % months) + "M" if months < 12 else ("%g" % (months / 12)) + "Y"
+    return key, months
+
+
+def _ust_year(year):
+    """取某一年的每日收益率曲线。返回 (按日期升序的行, {档位: 月数})。
+    行的形状：{"date": "2026-09-10", "t": 毫秒, "y": {"10Y": 4.12, ...}}"""
+    url = ("https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
+           "daily-treasury-rates.csv/%d/all?type=daily_treasury_yield_curve"
+           "&field_tdr_date_year=%d&page&_format=csv" % (year, year))
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/csv, */*"})
+    with urllib.request.urlopen(req, timeout=25) as r:
+        text = r.read().decode("utf-8-sig", "replace")
+    rows = list(csv.reader(io.StringIO(text)))
+    if len(rows) < 2:
+        return [], {}
+    # 表头里哪几列是档位（列的顺序/有无各年不同，所以按名字认，不按位置）
+    cols, months_of = [], {}
+    for i, h in enumerate(rows[0]):
+        t = _ust_tenor(h)
+        if t:
+            cols.append((i, t[0]))
+            months_of[t[0]] = t[1]
+    out = []
+    for row in rows[1:]:
+        if not row or not row[0].strip():
+            continue
+        try:
+            mo, da, yr = row[0].strip().split("/")
+            yr, mo, da = int(yr), int(mo), int(da)
+            ms = int(time.mktime((yr, mo, da, 12, 0, 0, 0, 0, -1)) * 1000)   # 正午，避开时区把日期推偏
+        except Exception:
+            continue
+        y = {}
+        for i, key in cols:
+            if i < len(row) and row[i].strip():
+                try:
+                    y[key] = float(row[i].strip())
+                except Exception:
+                    pass
+        if y:
+            out.append({"date": "%04d-%02d-%02d" % (yr, mo, da), "t": ms, "y": y})
+    out.sort(key=lambda x: x["date"])
+    return out, months_of
+
+
+def _ust_yahoo():
+    """降级：Yahoo 的收益率指数，只够拼出一条很粗的曲线，没有完整历史。"""
+    out = {}
+    for sym, key in (("%5EIRX", "3M"), ("%5EFVX", "5Y"), ("%5ETNX", "10Y"), ("%5ETYX", "30Y")):
+        try:
+            v = _yahoo_chart(sym, "5d")["price"]
+            if v is None:
+                continue
+            # Yahoo 这几个指数历史上按「收益率 ×10」报（42.5 = 4.25%），后来改成直接报。
+            # 收益率不可能到 25%，据此两种口径都能兜住。
+            out[key] = v / 10.0 if v > 25 else v
+        except Exception:
+            continue
+    return out
+
+
+def fetch_ust(rng="3mo"):
+    """美债收益率：最新一整条曲线 + 上一交易日（算日涨跌）+ 常用几档的历史走势。"""
+    days = {"1mo": 32, "3mo": 95, "6mo": 190, "1y": 370}.get(rng, 95)
+    cutoff = time.time() - days * 86400
+    rows, months_of, err = [], {}, None
+    try:
+        year = time.gmtime().tm_year
+        rows, months_of = _ust_year(year)
+        # 当年文件不够长（尤其年初），再补上一年
+        if not rows or rows[0]["t"] / 1000.0 > cutoff:
+            try:
+                prev_rows, prev_months = _ust_year(year - 1)
+                rows = prev_rows + rows
+                for k, v in prev_months.items():
+                    months_of.setdefault(k, v)
+            except Exception:
+                pass
+    except Exception as e:
+        err = str(e)
+
+    if not rows:
+        curve = _ust_yahoo()
+        if not curve:
+            return {"ok": False, "error": "美债收益率获取失败（需联网）" + (" · " + err if err else "")}
+        tenors = [{"key": k, "months": {"3M": 3, "5Y": 60, "10Y": 120, "30Y": 360}[k]} for k in curve]
+        tenors.sort(key=lambda x: x["months"])
+        return {"ok": True, "src": "yahoo", "asOf": int(time.time() * 1000), "partial": True,
+                "tenors": tenors, "latest": {"date": None, "y": curve}, "prev": None,
+                "history": {}, "curves": [],
+                "note": "只取到当前收益率，没有历史走势（财政部数据源暂时取不到）"}
+
+    kept = [r for r in rows if r["t"] / 1000.0 >= cutoff]
+    if len(kept) < 2:
+        kept = rows[-60:]
+    latest = rows[-1]
+    prev = rows[-2] if len(rows) >= 2 else None
+    tenors = sorted(({"key": k, "months": m} for k, m in months_of.items()), key=lambda x: x["months"])
+    history = {}
+    for k in UST_HISTORY_KEYS:
+        pts = [{"t": r["t"], "usd": r["y"][k]} for r in kept if k in r["y"]]
+        if len(pts) >= 2:
+            history[k] = pts
+
+    # 曲线对比：现在 / 约一个月前 / 所选区间最早那期（去重，按日期新→旧）
+    def nearest(target_ms):
+        return min(rows, key=lambda r: abs(r["t"] - target_ms)) if rows else None
+    picks, seen = [], set()
+    for r in (latest, nearest(latest["t"] - 30 * 86400000), kept[0]):
+        if r and r["date"] not in seen:
+            seen.add(r["date"])
+            picks.append({"date": r["date"], "t": r["t"], "y": r["y"]})
+    picks.sort(key=lambda x: x["date"], reverse=True)
+
+    return {"ok": True, "src": "treasury", "asOf": int(time.time() * 1000),
+            "tenors": tenors, "latest": {"date": latest["date"], "t": latest["t"], "y": latest["y"]},
+            "prev": ({"date": prev["date"], "y": prev["y"]} if prev else None),
+            "history": history, "curves": picks, "points": len(kept)}
+
 
 FX_SYMBOLS = ["CNY", "EUR", "JPY", "HKD", "GBP", "KRW", "TWD", "AUD"]
 def fetch_fx(rng="3mo"):
@@ -678,13 +824,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if bare in ("/api/btc", "/api/fx"):
+        if bare in ("/api/btc", "/api/fx", "/api/ust"):
             from urllib.parse import urlparse, parse_qs
             rng = (parse_qs(urlparse(self.path).query).get("range") or ["3mo"])[0]
             if rng not in ("1mo", "3mo", "6mo", "1y"):
                 rng = "3mo"
+            fn = {"/api/btc": fetch_btc, "/api/fx": fetch_fx, "/api/ust": fetch_ust}[bare]
             try:
-                body = fetch_btc(rng) if bare == "/api/btc" else fetch_fx(rng)
+                body = fn(rng)
             except Exception as e:
                 body = {"ok": False, "error": str(e)}
             return self._send_json(body)
