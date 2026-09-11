@@ -128,9 +128,22 @@ export function SnapshotEditor({ open, accountName, recorded, onClose, onSubmit 
   const existing = rec.get(date);
   const missing = months.filter((m) => !m.hasDate).length;
 
+  // 「跟上次一样」用的上一期：所选日期之前、最近一次确实记录过的余额。
+  // 它跟「干脆不记」是两件事：不记 = 这期没看过（净值按结转算，但「最后更新」停在上一期）；
+  // 记一笔跟上次一样 = 这期看过了、确认没变，「最后更新」会刷新到这一期。
+  const prev = React.useMemo(() => {
+    const before = [...rec.entries()].filter(([d]) => d < date).sort((a, b) => a[0].localeCompare(b[0]));
+    return before.length ? before[before.length - 1] : null;
+  }, [rec, date]);
+
   const submit = () => {
     if (!amount.trim()) return;
     onSubmit(date, parseNum(amount));
+    onClose();
+  };
+  const sameAsLast = () => {
+    if (!prev) return;
+    onSubmit(date, prev[1]);
     onClose();
   };
 
@@ -172,11 +185,36 @@ export function SnapshotEditor({ open, accountName, recorded, onClose, onSubmit 
         </div>
       )}
 
-      <Field label="余额（整数或小数均可）">
-        <TextField value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder="如 50000" inputMode="decimal" autoFocus />
+      {/* 一键「这期看过了，跟上次一样」——不用再把同一个数字敲一遍 */}
+      {prev && (
+        <div style={{ marginBottom: 13 }}>
+          <button type="button" className="fv-tap" onClick={sameAsLast}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+              width: "100%", padding: "10px 12px", borderRadius: 10, cursor: "pointer",
+              border: "1px solid var(--accent)", background: "var(--accent-soft)", color: "var(--accent)",
+              fontSize: 13.5, fontWeight: 600, textAlign: "left",
+            }}>
+            <span>{existing != null ? "覆盖成跟上次一样" : "跟上次一样"} · {fmtPlain(prev[1])}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{mmdd(prev[0])} 记的</span>
+          </button>
+          <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.6, marginTop: 6 }}>
+            余额没变也点一下：这一期就算「看过、确认没变」，「最后更新」会记到这一期；跳过不记则停留在上一期。
+          </div>
+        </div>
+      )}
+
+      <Field label={prev ? "余额（变了就填这里）" : "余额（整数或小数均可）"}>
+        <TextField value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} placeholder={prev ? `上次 ${fmtPlain(prev[1])}` : "如 50000"} inputMode="decimal" autoFocus />
       </Field>
     </Modal>
   );
+}
+
+/** 2026-08-31 → 8月31日 */
+function mmdd(iso: string): string {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${Number(m[1])}月${Number(m[2])}日` : iso;
 }
 
 /** 提示里用的朴素金额（不带货币符号处理，够看即可） */
