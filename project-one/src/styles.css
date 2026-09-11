@@ -161,6 +161,8 @@ body { background: #f5efe4; }
 }
 /* 键盘可达性：仅键盘聚焦时显示描边环 */
 .fv-root :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 开关的真 checkbox 是隐藏的，焦点圈要画在旁边那个滑块上，否则键盘操作时看不见焦点在哪 */
+.fv-switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 11px; }
 .fv-root :focus:not(:focus-visible) { outline: none; }
 @media (prefers-reduced-motion: reduce) {
   .fv-tap, .fv-btn, .fv-nav, .fv-row, .fv-icnbtn, .fv-card-int { transition: none; }

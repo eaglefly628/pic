@@ -73,6 +73,28 @@ export function Segmented<T extends string>({ value, options, onChange, style }:
   );
 }
 
+/** 开关。底下是真的 checkbox，所以键盘 Tab / 空格和读屏都能用；外观是滑块。 */
+export function Switch({ checked, onChange, label, disabled }: {
+  checked: boolean; onChange: (v: boolean) => void; label?: React.ReactNode; disabled?: boolean;
+}) {
+  return (
+    <label className="fv-switch" style={{ display: "inline-flex", alignItems: "center", gap: 9, cursor: disabled ? "default" : "pointer", userSelect: "none", opacity: disabled ? 0.5 : 1 }}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)}
+        style={{ position: "absolute", width: 1, height: 1, opacity: 0, margin: 0, pointerEvents: "none" }} />
+      <span aria-hidden style={{
+        width: 38, height: 22, borderRadius: 11, flex: "none", position: "relative", display: "inline-block",
+        background: checked ? "var(--accent)" : "var(--separator-strong)", transition: "background .18s ease",
+      }}>
+        <span style={{
+          position: "absolute", top: 2, left: checked ? 18 : 2, width: 18, height: 18, borderRadius: 9,
+          background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.24)", transition: "left .18s cubic-bezier(.2,.7,.3,1)",
+        }} />
+      </span>
+      {label && <span style={{ fontSize: 12.5, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{label}</span>}
+    </label>
+  );
+}
+
 export function Modal({ open, title, onClose, children, footer, width = 460 }: {
   open: boolean; title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; width?: number;
 }) {

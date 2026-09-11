@@ -110,6 +110,31 @@ export function netSeries(ds: Dataset): { date: string; v: number }[] {
   });
 }
 
+/** 最近 n 个月的月份键（"2026-09"），升序，最后一个是今天所在的月。 */
+export function lastMonthKeys(n: number, end = new Date()): string[] {
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(end.getFullYear(), end.getMonth() - i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
+/** 把一条净值序列对齐到给定的月份上，每月取该月最后一条记录；
+ *  某个月没记就沿用上一期（跟净值的结转语义一致，不是归零）；
+ *  第一条记录之前给 null——那时这本账还不存在，画成 0 会凭空多出一段假的平线。
+ *  两本账（家庭账 / 独立管理）快照日期各记各的，要叠在一张图上就得先这样对齐。 */
+export function alignMonthly(series: { date: string; v: number }[], months: string[]): (number | null)[] {
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  let i = 0;
+  let cur: number | null = null;
+  return months.map((m) => {
+    const end = m + "-31";   // ISO 日期是补零的，该月任何一天都 ≤ "YYYY-MM-31"
+    while (i < sorted.length && sorted[i].date <= end) { cur = sorted[i].v; i++; }
+    return cur;
+  });
+}
+
 /** 同一个月可能记了好几笔——「每月」视图里只保留当月最后一次（最新那笔），
  *  避免一个月出现好几个节点。返回按月升序、每月一个点。 */
 function collapseMonthly<T extends { date: string }>(series: T[]): T[] {

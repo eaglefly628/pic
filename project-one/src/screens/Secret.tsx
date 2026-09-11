@@ -11,6 +11,7 @@ import Detail from "./Detail";
 import { InterestView } from "./Interest";
 import { RetirementView } from "./Retirement";
 import { AccountEditor, SnapshotEditor } from "./editors";
+import SecretOverlay from "./SecretOverlay";
 import { Btn, Field, Modal, TextField } from "../ui";
 import { IconKey, IconChevron, IconArrowRight } from "../icons";
 import { useBreakpoint } from "../lib/breakpoint";
@@ -96,7 +97,9 @@ export default function Secret({ onExit }: { onExit: () => void }) {
   const strength = passwordStrength(pw);
 
   return (
-    <div style={{ position: "absolute", inset: 0, zIndex: 40, display: "flex", flexDirection: "column", background: "var(--bg-content)", animation: "fvRise .2s ease" }}>
+    // data-screen：这一屏是盖在主界面上的浮层，底下主界面的导航按钮名字有重复的，
+    // 自动化测试要能把选择器限定在这一层里。
+    <div data-screen="secret" style={{ position: "absolute", inset: 0, zIndex: 40, display: "flex", flexDirection: "column", background: "var(--bg-content)", animation: "fvRise .2s ease" }}>
       {/* 手机上标题+4个tab+改密码+退出挤不进一行 52px，会把「退出」顶出屏幕、人就出不来了。
           改成两行：第一行留标题和出口，第二行放可横滑的 tab。 */}
       <div style={{ flex: "none", background: "var(--bg-toolbar)", backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)", borderBottom: "0.5px solid var(--separator)" }}>
@@ -141,7 +144,11 @@ export default function Secret({ onExit }: { onExit: () => void }) {
       {status === "unlocked" && view && ds ? (
         <>
           <div className="fv-scroll" style={{ flex: 1, overflowY: "auto" }}>
-            {sub === "dashboard" && <Dashboard view={view} onOpen={open} range={range} setRange={setRange} />}
+            {sub === "dashboard" && <>
+              <Dashboard view={view} onOpen={open} range={range} setRange={setRange} />
+              {/* 两本账的走势叠在一起看——只有解锁了独立管理的这一屏同时握着两边的数据 */}
+              {data && <SecretOverlay secret={ds} main={data.dataset} />}
+            </>}
             {sub === "accounts" && <Accounts view={view} mode={accMode} onModeChange={setAccMode} onOpen={open} onAddAccount={() => setAccEditor({ open: true, editing: false })} />}
             {sub === "interest" && <InterestView dataset={ds} onSetRate={(id, dec) => mutate((d) => { const a = d.accounts.find((x) => x.id === id); if (a) a.rate = dec; })} />}
             {sub === "retirement" && <RetirementView dataset={ds} onSave={(plan) => mutate((d) => { d.retirement = plan; })} />}
