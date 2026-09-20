@@ -331,6 +331,7 @@ function Shell({ data }: { data: VaultData }) {
         <AccountEditor
           open={accEditor.open}
           initial={accEditor.editing ? currentAcc : undefined}
+          trustOn={!!data.dataset.features?.trust}
           onClose={() => setAccEditor({ open: false, editing: false })}
           onSubmit={(meta, balance) => {
             if (accEditor.editing && currentAcc) update((d) => updateAccount(d.dataset, currentAcc.id, meta));

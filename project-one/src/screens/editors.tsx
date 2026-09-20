@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import type { AccountMeta, Category } from "../data/types";
 import type { AccountInput } from "../vault/ops";
-import { Btn, Field, Modal, Select, TextField } from "../ui";
+import { Btn, Field, Modal, Select, Switch, TextField } from "../ui";
 
 const CATS: { value: Category; label: string }[] = [
   { value: "liquid", label: "流动资金" },
@@ -10,8 +10,15 @@ const CATS: { value: Category; label: string }[] = [
   { value: "fixed", label: "家庭其他固定资产" },
   { value: "debt", label: "负债" },
 ];
-const COMPS = ["现金及银行", "股票", "理财/固收", "基金", "黄金", "房产", "养老金", "公积金", "其他固定资产", "负债", "其他"].map((v) => ({ value: v, label: v }));
+/** 家族信托是可选功能（设置里开），没开时分组列表里不出现 */
+const TRUST_CAT = { value: "trust" as Category, label: "家族信托" };
+const COMPS = ["现金及银行", "股票", "理财/固收", "基金", "黄金", "房产", "养老金", "公积金", "家族信托", "其他固定资产", "负债", "其他"].map((v) => ({ value: v, label: v }));
 const OWNERS = ["本人", "配偶", "全家", "父亲", "母亲", "孩子"];
+/** 锁定期预设。家族信托常见 2 年起，所以默认给 2 年。 */
+const LOCKS = [
+  { value: "0", label: "不锁定" }, { value: "6", label: "6 个月" }, { value: "12", label: "1 年" },
+  { value: "24", label: "2 年" }, { value: "36", label: "3 年" }, { value: "60", label: "5 年" }, { value: "120", label: "10 年" },
+];
 // 账户配色盘：给人手动挑的，不是编码用的分类色，所以不跑 CVD 全对校验。
 // 取暖象牙 register（比原 iOS 色板更闷一档），前 5 个与 --cat-1..5 同源，挑到就跟环形图一致。
 const PALETTE = [
@@ -25,8 +32,10 @@ function parseNum(s: string): number {
   return isNaN(n) ? 0 : n;
 }
 
-export function AccountEditor({ open, initial, onClose, onSubmit }: {
+export function AccountEditor({ open, initial, trustOn, onClose, onSubmit }: {
   open: boolean; initial?: AccountMeta & { comp?: string }; onClose: () => void;
+  /** 「家族信托 / 独立运营资产」这个可选功能开没开（设置里控制）。没开就完全看不到这些字段。 */
+  trustOn?: boolean;
   onSubmit: (meta: AccountInput, balance: number) => void;
 }) {
   const editing = !!initial;
@@ -38,6 +47,9 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
   const [color, setColor] = useState(initial?.color ?? PALETTE[0]);
   const [balance, setBalance] = useState("");
   const [ratePct, setRatePct] = useState("");
+  const [offBalance, setOffBalance] = useState(false);
+  const [lockStart, setLockStart] = useState("");
+  const [lockMonths, setLockMonths] = useState("0");
 
   React.useEffect(() => {
     if (!open) return;
@@ -45,12 +57,36 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
     setComp(initial?.comp ?? initial?.type ?? "现金及银行"); setInstitution(initial?.institution ?? ""); setOwner(initial?.owner ?? "本人");
     setColor(initial?.color ?? PALETTE[0]); setBalance("");
     setRatePct(initial?.rate != null ? String(+(initial.rate * 100).toFixed(4)) : "");
+    setOffBalance(!!initial?.offBalance);
+    setLockStart(initial?.lockStart ?? "");
+    setLockMonths(String(initial?.lockMonths ?? 0));
   }, [open, initial]);
+
+  // 选到「家族信托」时给一套常见默认：独立运营 + 今天起锁 2 年。手动改过就不再覆盖。
+  const pickCat = (v: Category) => {
+    setCat(v);
+    if (v === "trust" && !initial?.offBalance) {
+      setOffBalance(true);
+      if (comp === "现金及银行") setComp("家族信托");
+      if (!lockStart) setLockStart(localISO(new Date()));
+      if (lockMonths === "0") setLockMonths("24");
+    }
+  };
+
+  const months = Number(lockMonths) || 0;
+  // 编辑老数据时，存着的期限可能不在预设里（比如从别处导入的 18 个月），补一个选项进去
+  const lockOpts = LOCKS.some((o) => o.value === lockMonths) ? LOCKS : [{ value: lockMonths, label: `${months} 个月` }, ...LOCKS];
+  const showTrust = !!trustOn && (cat === "trust" || offBalance);
 
   const submit = () => {
     if (!name.trim()) return;
     onSubmit(
-      { name: name.trim(), cat, type: comp, comp, institution: institution.trim() || "—", owner: owner.trim() || "全家", color, rate: (parseFloat(ratePct) || 0) / 100 },
+      {
+        name: name.trim(), cat, type: comp, comp, institution: institution.trim() || "—", owner: owner.trim() || "全家",
+        color, rate: (parseFloat(ratePct) || 0) / 100,
+        // 功能没开时不写这些字段，免得关着开关也悄悄往数据里塞东西
+        ...(trustOn ? { offBalance, lockStart: months > 0 ? lockStart || undefined : undefined, lockMonths: months || undefined } : {}),
+      },
       parseNum(balance)
     );
     onClose();
@@ -61,7 +97,7 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
       footer={<><Btn variant="ghost" onClick={onClose}>取消</Btn><Btn onClick={submit}>{editing ? "保存" : "添加"}</Btn></>}>
       <Field label="账户名称"><TextField value={name} onChange={(e) => setName(e.target.value)} placeholder="如 招商银行储蓄卡" autoFocus /></Field>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="分组"><Select value={cat} options={CATS} onChange={(e) => setCat(e.target.value as Category)} /></Field>
+        <Field label="分组"><Select value={cat} options={trustOn ? [...CATS, TRUST_CAT] : CATS} onChange={(e) => pickCat(e.target.value as Category)} /></Field>
         <Field label="资产类型"><Select value={comp} options={COMPS} onChange={(e) => setComp(e.target.value)} /></Field>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -82,8 +118,43 @@ export function AccountEditor({ open, initial, onClose, onSubmit }: {
           ))}
         </div>
       </Field>
+
+      {showTrust && (
+        <div style={{ marginTop: 4, padding: "13px 14px", borderRadius: 11, background: "var(--fill-quaternary)", border: "0.5px solid var(--separator)" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>独立运营设定</div>
+          <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.7, marginBottom: 12 }}>
+            家族信托这类资产通常独立于家庭日常收支运作，也不方便随时动用。打开后它不进净资产、总资产/负债和资产构成，在仪表盘「独立运营资产」里单独列示；账户列表和利息预测里照常能看到。
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <Switch checked={offBalance} onChange={setOffBalance} label="不计入家庭总资产" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="锁定期"><Select value={lockMonths} options={lockOpts} onChange={(e) => {
+              setLockMonths(e.target.value);
+              if (e.target.value !== "0" && !lockStart) setLockStart(localISO(new Date()));
+            }} /></Field>
+            {months > 0 && <Field label="锁定起始日"><TextField type="date" value={lockStart} onChange={(e) => setLockStart(e.target.value)} /></Field>}
+          </div>
+          {months > 0 && lockStart && (
+            <div style={{ fontSize: 11.5, color: "var(--text-secondary)", marginTop: -6 }}>
+              解锁日 <strong style={{ fontVariantNumeric: "tabular-nums" }}>{unlockDate(lockStart, months)}</strong>
+              <span style={{ color: "var(--text-tertiary)" }}> · 到期前只提示，不会锁住任何操作</span>
+            </div>
+          )}
+        </div>
+      )}
     </Modal>
   );
+}
+
+/** 起始日 + 月数 → 解锁日（「1月31日 + 1个月」夹到 2 月最后一天，不溢出到 3 月） */
+function unlockDate(startISO: string, months: number): string {
+  const d = new Date(startISO + "T00:00:00");
+  if (isNaN(d.getTime())) return "—";
+  const day = d.getDate();
+  const t = new Date(d.getFullYear(), d.getMonth() + months, 1);
+  t.setDate(Math.min(day, new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()));
+  return localISO(t);
 }
 
 /** 本地时区的 YYYY-MM-DD。不能用 toISOString——那是 UTC，

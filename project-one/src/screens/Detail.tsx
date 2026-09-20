@@ -5,6 +5,7 @@ import { fmt } from "../lib/format";
 import { useCountUp, rise } from "../lib/anim";
 import { useBreakpoint } from "../lib/breakpoint";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
+import LockBar from "./LockBar";
 
 export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAccount, onDeleteSnapshot }: {
   view: View; onAddSnapshot: () => void; onEditAccount: () => void; onDeleteAccount: () => void; onDeleteSnapshot: (date: string) => void;
@@ -22,6 +23,7 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
           <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
             <h1 style={{ fontSize: phone ? 18 : 21, fontWeight: 600, color: "var(--text-primary)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.name}</h1>
             <span style={{ fontSize: 11, color: "var(--text-secondary)", background: "var(--fill-quaternary)", padding: "3px 9px", borderRadius: 6 }}>{d.type}</span>
+            {d.offBalance && <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 9px", borderRadius: 6, whiteSpace: "nowrap" }}>独立运营</span>}
           </div>
           <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 4 }}>{d.sub}</div>
         </div>
@@ -36,6 +38,21 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
           </div>
         </div>
       </div>
+
+      {(d.offBalance || d.lock) && (
+        <div className="fv-rise" style={{ ...rise(40), ...card, padding: phone ? "16px 16px" : "18px 24px", marginBottom: phone ? 14 : 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: d.lock ? 12 : 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>独立运营</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>
+              {d.offBalance ? "不计入净资产、总资产/负债和资产构成，在仪表盘单独列示" : "计入家庭总资产"}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }} />
+            {d.ratePct && <span style={{ fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>年化 <strong style={{ color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{d.ratePct}</strong></span>}
+            <span style={{ fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>归属 <strong style={{ color: "var(--text-primary)" }}>{d.owner}</strong></span>
+          </div>
+          {d.lock && <LockBar lock={d.lock} />}
+        </div>
+      )}
 
       <div className="fv-rise" style={{ ...rise(70), ...card, padding: phone ? "16px 16px 10px" : "20px 24px 14px", marginBottom: phone ? 14 : 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>

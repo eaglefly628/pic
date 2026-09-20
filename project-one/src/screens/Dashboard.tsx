@@ -6,6 +6,7 @@ import { useVault } from "../vault/VaultContext";
 import { fmt } from "../lib/format";
 import { useCountUp, rise, reduceMotion } from "../lib/anim";
 import { useBreakpoint } from "../lib/breakpoint";
+import LockBar from "./LockBar";
 
 function greetingWord() {
   const h = new Date().getHours();
@@ -79,7 +80,7 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
       {phone && <div className="fv-rise" style={{ ...rise(50), marginBottom: 14 }}>{netCard}</div>}
 
       <div className="fv-rise fv-keep-cols" style={{ ...rise(70), display: "grid", gridTemplateColumns: phone ? "1fr 1fr" : "repeat(3,1fr)", gap: phone ? 12 : 16, marginBottom: phone ? 14 : 18 }}>
-        <MetricCard label="总资产" value={t.assetsRaw} chip="资产合计" chipNote={`${view.meta.accountCount} 个账户`} chipColor="var(--green)" compact={phone} />
+        <MetricCard label="总资产" value={t.assetsRaw} chip="资产合计" chipNote={`${view.meta.inTotalCount} 个账户`} chipColor="var(--green)" compact={phone} />
         <MetricCard label="总负债" value={t.liabRaw} chip="含信用卡/贷款" chipNote="负债合计" chipColor="var(--red)" compact={phone} />
         {!phone && netCard}
       </div>
@@ -99,6 +100,8 @@ export default function Dashboard({ view, onOpen, range, setRange }: { view: Vie
 
         <DonutCard donut={view.donut} />
       </div>
+
+      {view.offBalance.on && view.offBalance.count > 0 && <OffBalanceCard ob={view.offBalance} onOpen={onOpen} phone={phone} />}
 
       {view.monthlyChanges.length > 0 && (
         <div className="fv-rise" style={{ ...card, ...rise(210), padding: phone ? "16px 16px" : "18px 22px", marginBottom: 18 }}>
@@ -227,8 +230,43 @@ function TrendChart({ view }: { view: View }) {
   );
 }
 
-function DonutCard({ donut }: { donut: View["donut"] }) {
-  const [hi, setHi] = useState<number | null>(null);
+/** 独立运营资产（家族信托这类）：不进上面那些总数，单独一张卡。 */
+function OffBalanceCard({ ob, onOpen, phone }: { ob: View["offBalance"]; onOpen: (id: string) => void; phone: boolean }) {
+  return (
+    <div className="fv-rise" style={{ ...rise(175), ...card, padding: phone ? "18px 16px 8px" : "20px 22px 10px", marginBottom: phone ? 14 : 18 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 2 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>独立运营资产</div>
+        <div style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>{ob.count} 个账户 · 不计入上面的净资产与资产构成</div>
+        <div style={{ flex: 1, minWidth: 0 }} />
+        <div style={{ fontSize: phone ? 20 : 22, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{ob.total}</div>
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginBottom: 14 }}>
+        连同家庭总资产合计 <strong style={{ color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{ob.grandTotal}</strong>
+        {ob.annualInterest !== 0 && <> · 预计年化收益 <strong style={{ color: "var(--green)", fontVariantNumeric: "tabular-nums" }}>{fmt(ob.annualInterest)}</strong></>}
+      </div>
+      {ob.accounts.map((a, i) => (
+        <div key={a.id} onClick={() => onOpen(a.id)} className="fv-row"
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: phone ? "12px 2px" : "12px 4px", borderTop: i === 0 ? "0.5px solid var(--separator)" : "0.5px solid var(--separator)", cursor: "pointer", flexWrap: phone ? "wrap" : "nowrap" }}>
+          <span style={{ width: 9, height: 9, borderRadius: 3, background: a.color, flex: "none" }} />
+          <div style={{ minWidth: 0, flex: phone ? "1 1 auto" : "0 0 auto", width: phone ? undefined : 170 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {a.type} · 归属 {a.owner}{a.institution ? ` · ${a.institution}` : ""}
+            </div>
+          </div>
+          {!phone && <div style={{ flex: 1, minWidth: 90 }}>{a.lock ? <LockBar lock={a.lock} compact /> : <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>不锁定</span>}</div>}
+          <div style={{ textAlign: "right", flex: "none", minWidth: 0, marginLeft: phone ? "auto" : 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{a.balance}</div>
+            <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>年化 {a.ratePct}</div>
+          </div>
+          {phone && a.lock && <div style={{ flexBasis: "100%" }}><LockBar lock={a.lock} compact /></div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DonutCard({ donut }: { donut: View["donut"] }) {  const [hi, setHi] = useState<number | null>(null);
   if (donut.length === 0) {
     return (
       <div style={{ ...card, padding: "20px 22px" }}>

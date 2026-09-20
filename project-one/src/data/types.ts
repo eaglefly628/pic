@@ -1,12 +1,12 @@
 // 统一数据模型 —— 真实数据（由 Excel 导入）与示例数据都遵循此结构。
 // 应用的所有视图（总资产 / 趋势 / 构成 / 账户 / 快照）都从这里计算得出。
 
-export type Category = "liquid" | "invest" | "estate" | "fixed" | "debt";
+export type Category = "liquid" | "invest" | "estate" | "fixed" | "debt" | "trust";
 
 export interface AccountMeta {
   id: string;
   name: string;
-  /** 分组：流动资金 / 投资理财 / 不动产 / 负债 */
+  /** 分组：流动资金 / 投资理财 / 不动产 / 负债 / 家族信托 */
   cat: Category;
   /** 展示用的细类型，如「储蓄/活期」「证券/股票」 */
   type: string;
@@ -16,6 +16,16 @@ export interface AccountMeta {
   color: string;
   /** 年化利率（可选，来自表格第二行） */
   rate?: number;
+
+  // ── 独立运营资产（家族信托这类）的额外设定 ──────────────────
+  /** 独立运营：不计入家庭总资产（净资产、总资产/负债、资产构成、净值曲线都不算它），
+   *  在「独立运营资产」里单独列示。账户本身照常出现在账户列表和利息预测里。
+   *  默认 undefined = 计入，行为跟以前完全一样，老数据不受影响。 */
+  offBalance?: boolean;
+  /** 锁定起始日 YYYY-MM-DD */
+  lockStart?: string;
+  /** 锁定期（月）。24 = 2 年。0 / undefined = 不锁定 */
+  lockMonths?: number;
 }
 
 export interface Snapshot {
@@ -51,4 +61,7 @@ export interface Dataset {
   monthNotes?: Record<string, string>;
   /** 退休消耗预测的设定 */
   retirement?: RetirementPlan;
+  /** 可选功能开关。默认全不开，界面和算法跟以前一模一样。
+   *  trust = 家族信托 / 独立运营资产（面向资产规模较大的家庭，普通用户用不到，不默认打开）。 */
+  features?: { trust?: boolean };
 }

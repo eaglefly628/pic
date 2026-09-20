@@ -85,7 +85,9 @@ function AccountRow({ acc, onOpen, showCat }: { acc: AccVM; onOpen: (id: string)
           <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{acc.name}</div>
           <div style={{ fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ color: "var(--text-tertiary)" }}>{showCat ? acc.catTitle : acc.type} · </span>
-            <span style={{ color: acc.overdue ? "var(--red)" : acc.stale ? "var(--orange)" : "var(--text-tertiary)", fontWeight: 400 }}>{acc.ago}</span>
+            {acc.offBalance
+              ? <span style={{ color: "var(--accent)", fontWeight: 500 }}>独立运营{acc.lock && !acc.lock.unlocked ? ` · ${acc.lock.label}` : ""}</span>
+              : <span style={{ color: acc.overdue ? "var(--red)" : acc.stale ? "var(--orange)" : "var(--text-tertiary)", fontWeight: 400 }}>{acc.ago}</span>}
           </div>
         </div>
         <div style={{ textAlign: "right", flex: "none", minWidth: 0 }}>
@@ -106,6 +108,11 @@ function AccountRow({ acc, onOpen, showCat }: { acc: AccVM; onOpen: (id: string)
         <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{acc.sub}</div>
       </div>
       <span style={{ fontSize: 11, color: "var(--text-secondary)", background: "var(--fill-quaternary)", padding: "3px 9px", borderRadius: 6, whiteSpace: "nowrap" }}>{showCat ? acc.catTitle : acc.type}</span>
+      {acc.offBalance && (
+        <span title="不计入家庭总资产，在仪表盘「独立运营资产」里单独列示" style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 9px", borderRadius: 6, whiteSpace: "nowrap" }}>
+          独立运营{acc.lock && !acc.lock.unlocked ? ` · ${acc.lock.label}` : ""}
+        </span>
+      )}
       <div style={{ flex: 1, minWidth: 20, maxWidth: 64 }}>
         <div style={{ height: 5, borderRadius: 3, background: "var(--track)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: acc.pctWidth, background: acc.color, borderRadius: 3 }} />

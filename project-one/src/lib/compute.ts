@@ -12,8 +12,64 @@ export const CAT_TITLE: Record<Category, string> = {
   estate: "家庭房产",
   fixed: "家庭其他固定资产",
   debt: "负债",
+  trust: "家族信托",
 };
-export const CAT_ORDER: Category[] = ["liquid", "invest", "estate", "fixed", "debt"];
+export const CAT_ORDER: Category[] = ["liquid", "invest", "estate", "fixed", "debt", "trust"];
+
+/** 「家族信托 / 独立运营资产」是可选功能，默认关闭（见 Dataset.features）。
+ *  关闭时 offBalance 一律当没设过——所有账户照常计入家庭总资产，
+ *  所以把开关关掉不会让任何一笔钱从总数里凭空消失，只是不再单独列示。 */
+export function trustEnabled(ds: Dataset): boolean {
+  return !!ds.features?.trust;
+}
+/** 这个账户算不算进家庭总资产（净资产、总资产/负债、资产构成、净值曲线） */
+export function countsInTotal(ds: Dataset, a: AccountMeta): boolean {
+  return !(a.offBalance && trustEnabled(ds));
+}
+
+/** 加 n 个月，并把「1月31日 + 1个月」这种夹到当月最后一天，不要溢出到 3 月 */
+function addMonths(d: Date, n: number): Date {
+  const day = d.getDate();
+  const t = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  t.setDate(Math.min(day, new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()));
+  return t;
+}
+
+export interface LockInfo {
+  start: string; end: string; months: number;
+  totalDays: number; leftDays: number;
+  /** 0~1，已经过去的比例 */
+  pct: number;
+  unlocked: boolean;
+  /** 「还锁 1 年 3 个月」/「还锁 45 天」/「已解锁」 */
+  label: string;
+}
+
+/** 锁定期。没设起始日或期限就返回 null（= 不锁定）。 */
+export function lockInfo(a: AccountMeta, now = new Date()): LockInfo | null {
+  if (!a.lockStart || !a.lockMonths) return null;
+  const start = new Date(a.lockStart + "T00:00:00");
+  if (isNaN(start.getTime())) return null;
+  const end = addMonths(start, a.lockMonths);
+  const DAY = 86_400_000;
+  const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY));
+  const leftDays = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / DAY));
+  const unlocked = leftDays === 0;
+  let label: string;
+  if (unlocked) label = "已解锁";
+  else if (leftDays <= 60) label = `还锁 ${leftDays} 天`;
+  else {
+    const m = Math.round(leftDays / 30.44);
+    label = m >= 12 ? `还锁 ${Math.floor(m / 12)} 年${m % 12 ? ` ${m % 12} 个月` : ""}` : `还锁 ${m} 个月`;
+  }
+  return {
+    start: a.lockStart,
+    end: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`,
+    months: a.lockMonths, totalDays, leftDays,
+    pct: Math.max(0, Math.min(1, (totalDays - leftDays) / totalDays)),
+    unlocked, label,
+  };
+}
 
 // 资产构成分组的展示颜色。走 CSS 变量，跟着明暗主题各用一套（见 styles.css 的 --cat-*）。
 // 核心 5 类是经 CVD/对比度校验的「全对可分」组；实际数据也正好落在这 5 类里。
@@ -57,10 +113,10 @@ export function latestBalances(ds: Dataset): Record<string, number> {
   return out;
 }
 
-/** 当前净资产（所有账户最新余额之和，含负债） */
+/** 当前净资产（计入家庭总资产的账户最新余额之和，含负债；独立运营资产不算在内） */
 export function currentNetWorth(ds: Dataset): number {
   const lb = latestBalances(ds);
-  return ds.accounts.reduce((s, a) => s + lb[a.id], 0);
+  return ds.accounts.filter((a) => countsInTotal(ds, a)).reduce((s, a) => s + lb[a.id], 0);
 }
 
 /** 预计年利息合计（按各账户自身年化利率，默认 0；rate 为小数） */
@@ -98,10 +154,11 @@ export function accountSeries(ds: Dataset, id: string): { date: string; v: numbe
  *  真要让一个账户从历史里消失，用 deleteAccount——那会把它从所有快照里删干净。 */
 export function netSeries(ds: Dataset): { date: string; v: number }[] {
   const snaps = [...ds.snapshots].sort((a, b) => a.date.localeCompare(b.date));
+  const accs = ds.accounts.filter((a) => countsInTotal(ds, a));   // 独立运营资产不进家庭净值曲线
   const carried: Record<string, number> = {};
   return snaps.map((s) => {
     let sum = 0;
-    for (const a of ds.accounts) {
+    for (const a of accs) {
       const v = s.balances[a.id];
       if (v != null) carried[a.id] = v;
       sum += carried[a.id] ?? 0;
@@ -220,12 +277,16 @@ export function buildView(ds: Dataset, ui: UIState) {
   const latest: Record<string, number> = {};
   for (const a of accs) latest[a.id] = lastBalance(ds.snapshots, a.id);
 
-  const totalAssets = accs.reduce((s, a) => s + Math.max(0, latest[a.id]), 0);
-  const totalLiab = accs.reduce((s, a) => s + Math.min(0, latest[a.id]), 0);
+  // 独立运营资产（家族信托这类）不进总资产/负债/净资产/资产构成，单独成块
+  const inTotal = accs.filter((a) => countsInTotal(ds, a));
+  const offAccs = trustEnabled(ds) ? accs.filter((a) => a.offBalance) : [];
+
+  const totalAssets = inTotal.reduce((s, a) => s + Math.max(0, latest[a.id]), 0);
+  const totalLiab = inTotal.reduce((s, a) => s + Math.min(0, latest[a.id]), 0);
   const net = totalAssets + totalLiab;
 
   // 较上期变化
-  const netPrev = prev ? accs.reduce((s, a) => s + (prev.balances[a.id] ?? latest[a.id]), 0) : net;
+  const netPrev = prev ? inTotal.reduce((s, a) => s + (prev.balances[a.id] ?? latest[a.id]), 0) : net;
   const netDelta = net - netPrev;
   const netPct = netPrev ? netDelta / Math.abs(netPrev) : 0;
 
@@ -258,7 +319,7 @@ export function buildView(ds: Dataset, ui: UIState) {
 
   // ---- 资产构成（按 comp 分组，仅资产）----
   const compMap = new Map<string, number>();
-  for (const a of accs) {
+  for (const a of inTotal) {
     const v = latest[a.id];
     if (v <= 0) continue;
     const key = (a as AccountMeta & { comp?: string }).comp || "其他";
@@ -334,6 +395,8 @@ export function buildView(ds: Dataset, ui: UIState) {
       deltaText: delta == null ? "首次" : delta === 0 ? "持平" : fmtSigned(delta),
       deltaColor: delta == null || delta === 0 ? "var(--text-tertiary)" : delta > 0 ? "var(--green)" : "var(--red)",
       prevDate: series.length >= 2 ? series[series.length - 2].date : null,
+      offBalance: !countsInTotal(ds, a),          // 独立运营：列表里打个标，说明它没进总数
+      lock: lockInfo(a),
     };
   };
   const byAbs = (a: AccountMeta, b: AccountMeta) => Math.abs(latest[b.id]) - Math.abs(latest[a.id]);
@@ -397,8 +460,38 @@ export function buildView(ds: Dataset, ui: UIState) {
       };
     });
 
+  const offTotalRaw = offAccs.reduce((s, a) => s + latest[a.id], 0);
+  const offBalance = {
+    on: trustEnabled(ds),
+    count: offAccs.length,
+    totalRaw: offTotalRaw,
+    total: fmt(offTotalRaw),
+    /** 连同独立运营资产在内的「全部家当」——家庭总资产 + 独立运营 */
+    grandTotalRaw: net + offTotalRaw,
+    grandTotal: fmt(net + offTotalRaw),
+    annualInterest: offAccs.reduce((s, a) => s + latest[a.id] * (a.rate ?? 0), 0),
+    accounts: offAccs
+      .slice()
+      .sort((a, b) => Math.abs(latest[b.id]) - Math.abs(latest[a.id]))
+      .map((a) => {
+        const lk = lockInfo(a);
+        return {
+          id: a.id, name: a.name, color: a.color,
+          type: (a as AccountMeta & { comp?: string }).comp ?? a.type,
+          owner: a.owner ?? "全家",
+          institution: a.institution && a.institution !== "—" ? a.institution : "",
+          balance: fmt(latest[a.id]), balanceRaw: latest[a.id],
+          ratePct: a.rate != null && a.rate !== 0 ? (a.rate * 100).toFixed(2) + "%" : "—",
+          annualInterest: fmt(latest[a.id] * (a.rate ?? 0)),
+          lock: lk,
+        };
+      }),
+  };
+
   return {
-    meta: { vaultName: ds.vaultName, userName: ds.userName, real: !!ds.real, accountCount: accs.length },
+    // accountCount = 账户列表里一共有几个（侧边栏徽标、「更多」页用它）；
+    // inTotalCount = 其中有几个计入家庭总资产（「总资产」卡下面那行用它，独立运营的不算）
+    meta: { vaultName: ds.vaultName, userName: ds.userName, real: !!ds.real, accountCount: accs.length, inTotalCount: inTotal.length },
     totals: {
       totalAssets: fmt(totalAssets),
       totalLiabilities: fmt(totalLiab),
@@ -422,6 +515,7 @@ export function buildView(ds: Dataset, ui: UIState) {
     },
     donut,
     recent,
+    offBalance,
     groups,
     flatAccounts,
     byUpdated,
@@ -431,6 +525,10 @@ export function buildView(ds: Dataset, ui: UIState) {
       name: da.name,
       type: daComp,
       color: da.color,
+      offBalance: !!da.id && !countsInTotal(ds, da),
+      lock: da.id ? lockInfo(da) : null,
+      ratePct: da.rate != null && da.rate !== 0 ? (da.rate * 100).toFixed(2) + "%" : null,
+      owner: da.owner ?? "全家",
       initial: da.name.slice(0, 1),
       sub: (da.institution && da.institution !== "—" ? da.institution + " · " : "") + "归属 " + (da.owner ?? "全家") + " · " + daComp,
       balance: fmt(dLast),

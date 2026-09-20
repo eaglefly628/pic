@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useVault } from "../vault/VaultContext";
-import { CAT_TITLE, latestBalances } from "../lib/compute";
+import { CAT_TITLE, latestBalances, trustEnabled } from "../lib/compute";
 import type { Dataset } from "../data/types";
 import { fmt } from "../lib/format";
 import { card } from "../ui";
@@ -26,6 +26,8 @@ export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRa
     })
     .sort((x, y) => Math.abs(y.annual) - Math.abs(x.annual));
   const totalAnnual = rows.reduce((s, r) => s + r.annual, 0);
+  // 独立运营的账户（家族信托这类）也有利息，但它们不在家庭总资产里，合计行单独说明一句
+  const offAnnual = trustEnabled(dataset) ? rows.filter((r) => r.a.offBalance).reduce((s, r) => s + r.annual, 0) : 0;
   const yAnim = useCountUp(totalAnnual);
   const mAnim = useCountUp(totalAnnual / 12);
   const dAnim = useCountUp(totalAnnual / 365);
@@ -86,6 +88,11 @@ export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRa
             <span style={{ width: 140, textAlign: "right", fontWeight: 700, color: totalAnnual < 0 ? "var(--red)" : "var(--green)", fontVariantNumeric: "tabular-nums" }}>{fmt(totalAnnual)}</span>
             <span style={{ width: 120, textAlign: "right", fontWeight: 600, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{fmt(totalAnnual / 12)}</span>
           </div>
+          {offAnnual !== 0 && (
+            <div style={{ padding: "9px 22px", borderTop: "0.5px solid var(--separator)", fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.7 }}>
+              其中 <strong style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }}>{fmt(offAnnual)}</strong> 来自独立运营资产（不计入家庭总资产，但利息照常预测）。
+            </div>
+          )}
         </div>
       )}
     </div>
