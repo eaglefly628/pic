@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 家族信托 / 独立运营资产的回归测试：
-//   ① 默认关闭：分组里没有「家族信托」，仪表盘没有多出来的卡，一切照旧
-//   ② 设置里打开后，分组里才出现「家族信托」
+//   ① 默认开启：设置里开关是开的，分组里直接有「家族信托」（产品面向有一定资产规模的家庭）
+//   ② 关掉再打开：关掉后分组里就没有了，入口收起来
 //   ③ 选成家族信托会自动给一套默认：独立运营 + 今天起锁 2 年，解锁日算对
 //   ④ 建好之后：净资产、总资产一分没变（信托不进总数），单独一张卡列出来，合计对得上
 //   ⑤ 账户列表有「独立运营」标，详情页有锁定期进度条，利息预测单独说明
@@ -51,27 +51,35 @@ const money = (s) => Number(String(s || '').replace(/[^\d.-]/g, ''));
   const openAccEditor = async () => { await nav(/^资金账户/); await p.getByRole('button', { name: /新增账户/ }).first().click(); await p.waitForTimeout(600); };
   const catSelect = () => p.locator('select').first();
   const settingsSwitch = () => p.locator('label.fv-switch');
+  const switchOn = async () => await p.locator('label.fv-switch input[type="checkbox"]').first().isChecked();
 
-  console.log('① 默认关闭时跟以前一样');
+  console.log('① 默认就是开的');
   await nav(/^仪表盘/);
   const t0 = await readTotals();
   check(t0.net > 0 && t0.assets > 0, `读到基线：净资产 ${t0.net.toLocaleString()} / 总资产 ${t0.assets.toLocaleString()}`);
-  check(!/独立运营资产/.test(await body()), '仪表盘没有「独立运营资产」卡');
+  check(!/独立运营资产/.test(await body()), '还没建信托账户时不出现「独立运营资产」卡');
+  await nav(/^设置$/);
+  check(await settingsSwitch().count() === 1, '设置「功能模块」里有这个开关');
+  check(await switchOn(), '开关默认就是打开的（产品面向有一定资产规模的家庭）');
+  check(!/用不到就别开/.test(await body()), '文案不再把它当小众功能劝退');
   await openAccEditor();
-  let cats = await p.locator('select').first().locator('option').allTextContents();
-  check(!cats.includes('家族信托'), `分组里没有「家族信托」：${cats.join('/')}`);
-  check(!/独立运营设定/.test(await body()), '没有「独立运营设定」这一块');
+  let cats = await catSelect().locator('option').allTextContents();
+  check(cats.includes('家族信托'), `分组里直接就有「家族信托」：${cats.join('/')}`);
   await p.getByRole('button', { name: /^取消$/ }).click(); await p.waitForTimeout(500);
 
-  console.log('\n② 设置里打开');
+  console.log('\n② 家里没有这类资产可以关掉');
   await nav(/^设置$/);
-  check(await settingsSwitch().count() === 1, '设置里有「家族信托 / 独立运营资产」开关');
-  check(/用不到就别开/.test(await body()), '说清楚了这是给谁用的');
   await settingsSwitch().click(); await p.waitForTimeout(700);
-  check(/已开启/.test(await body()), '打开后给了下一步指引');
+  check(!(await switchOn()), '关掉了');
+  check(/已关闭/.test(await body()), '说明了关掉之后会怎样');
   await openAccEditor();
   cats = await catSelect().locator('option').allTextContents();
-  check(cats.includes('家族信托'), `分组里出现「家族信托」：${cats.join('/')}`);
+  check(!cats.includes('家族信托'), `关掉后分组里就没有了：${cats.join('/')}`);
+  check(!/独立运营设定/.test(await body()), '「独立运营设定」那一块也收起来了');
+  await p.getByRole('button', { name: /^取消$/ }).click(); await p.waitForTimeout(500);
+  await nav(/^设置$/);
+  await settingsSwitch().click(); await p.waitForTimeout(700);   // 再打开，继续往下测
+  await openAccEditor();
 
   console.log('\n③ 选成家族信托的默认设定');
   await catSelect().selectOption({ label: '家族信托' }); await p.waitForTimeout(600);

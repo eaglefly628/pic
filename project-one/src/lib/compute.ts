@@ -16,11 +16,13 @@ export const CAT_TITLE: Record<Category, string> = {
 };
 export const CAT_ORDER: Category[] = ["liquid", "invest", "estate", "fixed", "debt", "trust"];
 
-/** 「家族信托 / 独立运营资产」是可选功能，默认关闭（见 Dataset.features）。
- *  关闭时 offBalance 一律当没设过——所有账户照常计入家庭总资产，
- *  所以把开关关掉不会让任何一笔钱从总数里凭空消失，只是不再单独列示。 */
+/** 「家族信托 / 独立运营资产」默认开启——本产品面向有一定资产规模的家庭，
+ *  家族信托是这类家庭资产里很常规的一块，不该藏在开关后面。
+ *  家里没有这类资产的人可以在设置里关掉（features.trust = false），界面会跟着收起来。
+ *  关掉时 offBalance 一律当没设过——所有账户照常计入家庭总资产，
+ *  所以关开关不会让任何一笔钱从总数里凭空消失，只是不再单独列示。 */
 export function trustEnabled(ds: Dataset): boolean {
-  return !!ds.features?.trust;
+  return ds.features?.trust !== false;
 }
 /** 这个账户算不算进家庭总资产（净资产、总资产/负债、资产构成、净值曲线） */
 export function countsInTotal(ds: Dataset, a: AccountMeta): boolean {

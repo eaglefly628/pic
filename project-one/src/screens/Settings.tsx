@@ -4,6 +4,7 @@ import { useTheme } from "../lib/theme";
 import { passwordStrength } from "../lib/crypto";
 import { clearAllVaultData, listBackups, addBackup, restoreBackup, deleteBackup, exportBlobString, importBlobString, MAX_BACKUPS, StorageFullError } from "../lib/storage";
 import { hasPwBox, createPwBox, unlockPwBox, changePwBoxPassword, clearPwBox, pwSession } from "../vault/pwStore";
+import { trustEnabled } from "../lib/compute";
 import { Btn, Field, Select, Switch, TextField, card } from "../ui";
 import { IconDownload, IconUpload, IconCheck } from "../icons";
 
@@ -23,8 +24,8 @@ export default function Settings() {
   const [pwOn, setPwOn] = useState(hasPwBox());
   const [npw, setNpw] = useState(""); const [cpw, setCpw] = useState(""); const [pwBoxMsg, setPwBoxMsg] = useState("");
 
-  // 可选功能：家族信托 / 独立运营资产
-  const trustOn = !!data?.dataset.features?.trust;
+  // 功能模块：家族信托 / 独立运营资产（默认开启，见 compute.trustEnabled）
+  const trustOn = data ? trustEnabled(data.dataset) : true;
   const trustAccounts = (data?.dataset.accounts ?? []).filter((a) => a.offBalance);
   const toggleTrust = (v: boolean) => {
     // 关掉时那些账户不会消失、也不会被改——只是重新计回家庭总资产。说清楚再关。
@@ -208,19 +209,23 @@ export default function Settings() {
         {pwBoxMsg === "ok" ? <div style={{ fontSize: 12.5, color: "var(--green)", marginTop: 10, display: "flex", alignItems: "center", gap: 4 }}><IconCheck stroke="var(--green)" />已完成</div> : pwBoxMsg && <div style={{ fontSize: 12.5, color: "var(--red)", marginTop: 10 }}>{pwBoxMsg}</div>}
       </Section>
 
-      {/* 可选功能 */}
-      <Section title="可选功能">
+      {/* 功能模块 */}
+      <Section title="功能模块">
         <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.7, marginBottom: 4 }}>
-          这些是给特定需求准备的，默认都不打开。不打开时界面和算法跟没有这个功能时完全一样。
+          家里没有对应的资产就关掉，相关的入口和卡片会跟着收起来，账户和余额不受影响。
         </div>
         <Row label="家族信托 / 独立运营资产"
-          hint="给设了家族信托、家族基金这类资产的家庭。打开后账户可以标成「不计入家庭总资产」，单独列示并跟踪锁定期。用不到就别开。">
+          hint="家族信托、家族基金这类独立于日常收支运作的资产：不计入家庭总资产，单独列示并跟踪锁定期、归属人和年化。">
           <Switch checked={trustOn} onChange={toggleTrust} />
         </Row>
-        {trustOn && (
+        {trustOn ? (
           <div style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.7, paddingTop: 10 }}>
-            已开启。到「资金账户 → 新增账户」把分组选成<strong>家族信托</strong>，就能设归属人、年化利率和锁定期。
+            到「资金账户 → 新增账户」把分组选成<strong>家族信托</strong>，就能设归属人、年化利率和锁定期。
             {trustAccounts.length > 0 && <>当前有 <strong>{trustAccounts.length}</strong> 个独立运营账户。</>}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.7, paddingTop: 10 }}>
+            已关闭。账户分组里不再出现「家族信托」，之前标成独立运营的账户会照常计入家庭总资产。
           </div>
         )}
       </Section>

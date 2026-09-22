@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVault } from "./vault/VaultContext";
 import { useTheme } from "./lib/theme";
-import { buildView, type RangeKey } from "./lib/compute";
+import { buildView, trustEnabled, type RangeKey } from "./lib/compute";
 import { useBreakpoint } from "./lib/breakpoint";
 import { isEmbedded, goHomeHub } from "./lib/embed";
 import type { VaultData } from "./vault/types";
@@ -331,7 +331,7 @@ function Shell({ data }: { data: VaultData }) {
         <AccountEditor
           open={accEditor.open}
           initial={accEditor.editing ? currentAcc : undefined}
-          trustOn={!!data.dataset.features?.trust}
+          trustOn={trustEnabled(data.dataset)}
           onClose={() => setAccEditor({ open: false, editing: false })}
           onSubmit={(meta, balance) => {
             if (accEditor.editing && currentAcc) update((d) => updateAccount(d.dataset, currentAcc.id, meta));

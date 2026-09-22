@@ -61,7 +61,7 @@ export interface Dataset {
   monthNotes?: Record<string, string>;
   /** 退休消耗预测的设定 */
   retirement?: RetirementPlan;
-  /** 可选功能开关。默认全不开，界面和算法跟以前一模一样。
-   *  trust = 家族信托 / 独立运营资产（面向资产规模较大的家庭，普通用户用不到，不默认打开）。 */
+  /** 功能模块开关。只在明确关掉时才写 false，没写过 = 用默认。
+   *  trust = 家族信托 / 独立运营资产，默认开启（本产品面向有一定资产规模的家庭）。 */
   features?: { trust?: boolean };
 }
