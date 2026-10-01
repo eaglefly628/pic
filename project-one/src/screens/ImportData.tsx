@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { parseWorkbook, type ParseResult } from "../lib/parseExcel";
 import { exportDatasetToExcel } from "../lib/exportExcel";
+import { migrateStatisticalMonths } from "../lib/statMonth";
 import { Btn, Field, Select, TextField, card } from "../ui";
 import { IconImport, IconCheck, IconDownload } from "../icons";
 
@@ -37,7 +38,14 @@ export default function ImportData() {
       (result.from ? `（${result.from} ～ ${result.to}）` : "") + `\n\n` +
       `现有的账户、快照、手工补录都会被覆盖，不可撤销。建议先到「设置 · 程序内备份」建一个还原点。`;
     if (!confirm(msg)) return;
-    update((d) => { d.dataset.accounts = result.dataset.accounts; d.dataset.snapshots = result.dataset.snapshots; d.dataset.real = true; });
+    // 导入时就完成一次月度归属整理并写入版本标记；以后启动只检查标记，不会重复扫描历史记录。
+    migrateStatisticalMonths(result.dataset);
+    update((d) => {
+      d.dataset.accounts = result.dataset.accounts;
+      d.dataset.snapshots = result.dataset.snapshots;
+      d.dataset.migrations = result.dataset.migrations;
+      d.dataset.real = true;
+    });
     setDone(true);
   };
 

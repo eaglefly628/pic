@@ -19,7 +19,7 @@ export default function Unlock() {
   const submit = async () => {
     setErr("");
     if (onboard) {
-      if (pw.length < 6) return setErr("主密码至少 6 位");
+      if (pw.length < 8) return setErr("主密码至少 8 位");
       if (pw !== pw2) return setErr("两次输入不一致");
       setBusy(true);
       await vault.create(pw);

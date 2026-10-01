@@ -1,8 +1,9 @@
 // 「独立管理」独立加密库：与主金库完全分离，拥有自己的主密码、密钥与存储。
 // 即使知道主密码也无法解开独立管理（需要独立管理自己的密码）。
-import { createVault, rewrapVault, sealVault, unlockVault, type UnlockedKeys, type VaultBlob } from "../lib/crypto";
+import { createVault, needsKdfUpgrade, rewrapVault, sealVault, unlockVault, upgradeKdf, type UnlockedKeys, type VaultBlob } from "../lib/crypto";
 import type { Dataset } from "../data/types";
 import { emptyDataset } from "./ops";
+import { migrateStatisticalMonths } from "../lib/statMonth";
 
 const SKEY = "familyvault.secret.v1";
 
@@ -21,9 +22,22 @@ export async function unlockSecret(pw: string): Promise<{ data: Dataset; keys: U
   const s = localStorage.getItem(SKEY);
   if (!s) return null;
   try {
-    const blob = JSON.parse(s);
+    const blob = JSON.parse(s) as VaultBlob;
     const { data, keys } = await unlockVault<Dataset>(pw, blob);
-    return { data, keys };
+    let activeKeys = keys;
+    if (needsKdfUpgrade(blob)) {
+      try {
+        const upgraded = await upgradeKdf(keys, blob, pw);
+        localStorage.setItem(SKEY, JSON.stringify(upgraded.blob));
+        activeKeys = upgraded.keys;
+      } catch { /* 下次再升级 */ }
+    }
+    const migration = migrateStatisticalMonths(data);
+    if (migration.changed) {
+      const migrated = await sealVault(activeKeys, data);
+      localStorage.setItem(SKEY, JSON.stringify(migrated));
+    }
+    return { data, keys: activeKeys };
   } catch {
     return null; // 密码错误
   }

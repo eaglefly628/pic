@@ -41,6 +41,8 @@ export default function Secret({ onExit }: { onExit: () => void }) {
   const [status, setStatus] = useState<"loading" | "onboard" | "locked" | "unlocked">("loading");
   const [ds, setDs] = useState<Dataset | null>(null);
   const keysRef = useRef<UnlockedKeys | null>(null);
+  const dsRef = useRef<Dataset | null>(null);
+  const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const [pw, setPw] = useState(""); const [pw2, setPw2] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
 
@@ -54,18 +56,22 @@ export default function Secret({ onExit }: { onExit: () => void }) {
   const [cnpw, setCnpw] = useState(""); const [cnpw2, setCnpw2] = useState(""); const [cmsg, setCmsg] = useState("");
 
   useEffect(() => { setStatus(hasSecret() ? "locked" : "onboard"); }, []);
+  useEffect(() => { dsRef.current = ds; }, [ds]);
 
   const doChangePw = async () => {
     setCmsg("");
-    if (cnpw.length < 4) return setCmsg("新密码至少 4 位");
+    if (cnpw.length < 8) return setCmsg("新密码至少 8 位");
     if (cnpw !== cnpw2) return setCmsg("两次输入不一致");
     if (!keysRef.current) return;
+    await saveQueueRef.current;
     keysRef.current = await changeSecretPassword(keysRef.current, cnpw);
     setCpwOpen(false); setCnpw(""); setCnpw2(""); setCmsg("");
   };
-  const resetSecret = () => {
+  const resetSecret = async () => {
     if (confirm("忘记密码？将清空「独立管理」的全部数据并重新设置（不可恢复）。是否继续？")) {
+      await saveQueueRef.current;
       clearSecret(); setPw(""); setErr(""); setStatus("onboard");
+      keysRef.current = null; dsRef.current = null; setDs(null);
     }
   };
 
@@ -73,25 +79,29 @@ export default function Secret({ onExit }: { onExit: () => void }) {
   const submitPw = async () => {
     setErr("");
     if (onboard) {
-      if (pw.length < 4) return setErr("密码至少 4 位");
+      if (pw.length < 8) return setErr("密码至少 8 位");
       if (pw !== pw2) return setErr("两次输入不一致");
       setBusy(true);
       const r = await createSecret(pw, userName);
-      keysRef.current = r.keys; setDs(r.data); setSelectedId(r.data.accounts[0]?.id ?? ""); setBusy(false); setStatus("unlocked");
+      keysRef.current = r.keys; dsRef.current = r.data; setDs(r.data); setSelectedId(r.data.accounts[0]?.id ?? ""); setBusy(false); setStatus("unlocked");
     } else {
       setBusy(true);
       const r = await unlockSecret(pw);
       setBusy(false);
       if (!r) { setErr("密码错误"); setPw(""); return; }
-      keysRef.current = r.keys; setDs(r.data); setSelectedId(r.data.accounts[0]?.id ?? ""); setStatus("unlocked");
+      keysRef.current = r.keys; dsRef.current = r.data; setDs(r.data); setSelectedId(r.data.accounts[0]?.id ?? ""); setStatus("unlocked");
     }
   };
 
   const view = useMemo(() => (ds ? buildView(ds, { range, selectedId }) : null), [ds, range, selectedId]);
   const currentAcc = ds?.accounts.find((a) => a.id === view?.detail.id);
   const mutate = (fn: (d: Dataset) => void) => {
-    if (!ds || !keysRef.current) return;
-    const next = clone(ds); fn(next); setDs(next); void saveSecret(keysRef.current, next);
+    const keys = keysRef.current, current = dsRef.current;
+    if (!current || !keys) return;
+    const next = clone(current); fn(next);
+    dsRef.current = next; setDs(next);
+    const run = saveQueueRef.current.then(() => saveSecret(keys, next));
+    saveQueueRef.current = run.catch(() => { /* 单次失败不阻塞后续保存 */ });
   };
   const open = (id: string) => { setSelectedId(id); setSub("detail"); };
   const strength = passwordStrength(pw);

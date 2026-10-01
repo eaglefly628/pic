@@ -564,6 +564,8 @@
     document.getElementById('sharedcards').innerHTML = SHARED.map(scard).join('');
 
     const frame = document.getElementById('frame');
+    // 主密码只保存在当前页面的内存里。刷新/关闭页面即消失，不写 sessionStorage、localStorage 或磁盘备份。
+    let housePassword = null;
     const screens = { home: document.getElementById('home'), male: document.getElementById('male'), female: document.getElementById('female') };
     const tabs = [...document.querySelectorAll('.tab')];
     const toastEl = document.getElementById('toast'); let toastT;
@@ -579,7 +581,7 @@
     function nav(target) {
       // target 可能带子页深链后缀，如 "dev#vehicle"（卡片直接跳进子应用的某个 tab）。
       const [app, tab] = target.split('#');
-      if (app === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; refreshGateBio(); setTimeout(() => gpw.focus(), 50); return; }
+      if (app === 'finance' && !housePassword) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; refreshGateBio(); setTimeout(() => gpw.focus(), 50); return; }
       if (screens[app]) {
         Object.values(screens).forEach(s => s.classList.add('hide'));
         screens[app].classList.remove('hide');
@@ -606,7 +608,8 @@
     const enc = new TextEncoder(), dec = new TextDecoder();
     const b64 = (b) => btoa(String.fromCharCode(...new Uint8Array(b)));
     const unb64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-    const ITER = 200000, SKEY = 'home.key', LKEY = 'home.lock';
+    // 与各世界统一到 OWASP 现行建议量级；老的门禁记录里存着自己的 iter，仍能验证，验过后自动升级（见 verifyLock）
+    const ITER = 600000, LKEY = 'home.lock';
     async function deriveKey(pw, salt, iter) {
       const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']);
       return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
@@ -621,7 +624,10 @@
       const raw = localStorage.getItem(LKEY); if (!raw) return false;
       try { const o = JSON.parse(raw); const key = await deriveKey(pw, unb64(o.salt), o.iter);
         const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, key, unb64(o.ct));
-        return dec.decode(pt) === 'home-ok';
+        if (dec.decode(pt) !== 'home-ok') return false;
+        // 老门禁（迭代次数低于现行标准）：趁手里有密码，重建成更强的一份；失败不影响本次解锁
+        if (Number(o.iter || 0) < ITER) { try { await createLock(pw); } catch (e) { } }
+        return true;
       } catch (e) { return false; }
     }
     const gate = document.getElementById('gate'), gpw = document.getElementById('gpw'), gpw2 = document.getElementById('gpw2');
@@ -636,11 +642,11 @@
       gbtn.textContent = onboard ? '创建' : '解锁';
       gpw.value = ''; gpw2.value = ''; gerr.textContent = '';
     }
-    function openHouse(pw) { sessionStorage.setItem(SKEY, pw); gate.style.display = 'none'; lockbtn.classList.add('show'); const p = pendingApp; pendingApp = null; if (p) nav(p); }
+    function openHouse(pw) { housePassword = pw; gate.style.display = 'none'; lockbtn.classList.add('show'); const p = pendingApp; pendingApp = null; if (p) nav(p); }
     async function submitGate() {
       const pw = gpw.value;
       if (!hasLock()) {
-        if (pw.length < 6) { gerr.textContent = '主密码至少 6 位'; return; }
+        if (pw.length < 8) { gerr.textContent = '主密码至少 8 位'; return; }
         if (pw !== gpw2.value) { gerr.textContent = '两次输入不一致'; return; }
         gbtn.disabled = true; await createLock(pw); gbtn.disabled = false; openHouse(pw);
       } else {
@@ -649,7 +655,7 @@
       }
     }
     function lockHouse() {
-      sessionStorage.removeItem(SKEY);
+      housePassword = null;
       loadFrame('about:blank'); frame.dataset.app = ''; frame.classList.remove('show');
       Object.values(screens).forEach(s => s.classList.add('hide')); screens.home.classList.remove('hide'); setActive('home'); history.replaceState(null, '', '#home');
       lockbtn.classList.remove('show'); gate.style.display = 'none';
@@ -660,7 +666,6 @@
     lockbtn.addEventListener('click', lockHouse);
 
     let pendingApp = null;
-    if (sessionStorage.getItem(SKEY)) lockbtn.classList.add('show');
     gate.style.display = 'none';   // 大厅开放；只有进「家庭理财」才弹密码
     const gcancel = document.getElementById('gcancel');
     gcancel.addEventListener('click', () => { pendingApp = null; gate.style.display = 'none'; if (frame.dataset.app !== 'finance') nav('home'); });
@@ -714,8 +719,17 @@
       const ver = db.version; db.close();
       return { name, version: ver, stores };
     }
+    function deleteDB(name) {
+      return new Promise((res, rej) => {
+        const r = indexedDB.deleteDatabase(name);
+        const timer = setTimeout(() => rej(new Error(`数据库 ${name} 正被其它页面占用。请关闭其它本项目窗口后重试，原数据尚未被覆盖。`)), 5000);
+        r.onsuccess = () => { clearTimeout(timer); res(); };
+        r.onerror = () => { clearTimeout(timer); rej(r.error || new Error(`删除数据库 ${name} 失败`)); };
+        // blocked 不是成功；继续等待其它连接收到 versionchange 后关闭，超时再明确报错。
+      });
+    }
     async function restoreDB(d) {
-      await new Promise((res) => { const r = indexedDB.deleteDatabase(d.name); r.onsuccess = r.onerror = r.onblocked = () => res(); });
+      await deleteDB(d.name);
       const db = await new Promise((res, rej) => {
         const r = indexedDB.open(d.name, d.version || 1);
         r.onupgradeneeded = () => { const db = r.result; for (const s of d.stores) if (!db.objectStoreNames.contains(s.name)) db.createObjectStore(s.name, { keyPath: s.keyPath == null ? undefined : s.keyPath, autoIncrement: !!s.autoIncrement }); };
@@ -745,6 +759,8 @@
       let bundle; try { bundle = JSON.parse(await file.text()); } catch (e) { bkmsg.textContent = '文件无法识别'; return; }
       if (!bundle || !bundle.__home_backup) { bkmsg.textContent = '不是本系统的备份文件'; return; }
       if (!confirm('从备份恢复会用所选文件【替换】本机当前全部数据，确定继续？')) return;
+      const kept = await keepSafetyCopy();
+      if (!kept && !confirm('恢复前的安全副本没存成功。仍然继续吗？当前数据可能无法找回。')) return;
       bkmsg.textContent = '正在恢复…';
       try {
         await applyBundle(bundle);
@@ -759,6 +775,7 @@
     // ── 本机自动备份（防丢失）+ 版本号 ──────────────────────────────
     let HOME_VERSION = '';        // 由 /api/version 覆盖成服务端真实版本
     let HOME_DATA_VERSION = 0;    // 本入口支持的数据结构版本（来自 /api/version）
+    let HOME_SYNC_PROTOCOL = 0;   // 服务端要求的安全写盘协议
     let lastSig = '';
     const verlabel = document.getElementById('verlabel');
     const bkstatus = document.getElementById('bkstatus');
@@ -775,6 +792,7 @@
       // baseSavedAt = 我上次跟磁盘同步到的时间戳。服务端用它判断有没有别的入口在我之后写过，
       // 有的话拒绝这次写入，免得「后写的赢」把对方的改动抹掉。
       return { __home_backup: 1, v: 1, appVersion: HOME_VERSION, origin: location.origin, localStorage: ls, indexedDB: idb,
+               syncProtocol: HOME_SYNC_PROTOCOL,
                baseSavedAt: Number(localStorage.getItem('home.diskSyncedAt') || 0) };
     }
     // 用一个 bundle 覆盖本机数据（保留本机 Touch ID 凭据）
@@ -805,12 +823,18 @@
     async function applyBundle(bundle) {
       const why = validateBundle(bundle);
       if (why) throw new Error('备份文件校验失败：' + why);
+      // 先卸载子应用，释放它们持有的 IndexedDB 连接；否则 deleteDatabase 会被永久 blocked。
+      loadFrame('about:blank'); frame.dataset.app = ''; frame.classList.remove('show');
+      await new Promise((res) => setTimeout(res, 100));
       const keepBio = localStorage.getItem('home.bio');
       localStorage.clear();
       for (const k of Object.keys(bundle.localStorage || {})) localStorage.setItem(k, bundle.localStorage[k]);
       if (keepBio != null && localStorage.getItem('home.bio') == null) localStorage.setItem('home.bio', keepBio);
+      const incoming = new Set((bundle.indexedDB || []).map((d) => d.name));
+      // “替换全部数据”必须也清掉备份里不存在的本项目数据库，否则旧记录会在恢复后复活。
+      for (const name of ['familygallery', 'familyvault', 'devworld']) if (!incoming.has(name)) await deleteDB(name);
       for (const d of (bundle.indexedDB || [])) await restoreDB(d);
-      sessionStorage.removeItem(SKEY);
+      housePassword = null;
     }
     // 便宜的内容指纹：只在数据真的变了才写盘，避免反复重写
     const sigOf = (s) => { let h = 0; const step = Math.max(1, s.length >> 12); for (let i = 0; i < s.length; i += step) h = (h * 131 + s.charCodeAt(i)) >>> 0; return s.length + ':' + h; };
@@ -847,11 +871,14 @@
           if (bkdir) bkdir.textContent = '目录：' + r.dir;
         }
         else if (r && r.error === 'reject-downgrade') { if (bkstatus) bkstatus.textContent = '⚠️ ' + (r.hint || '本入口版本偏旧，数据未写入（磁盘上是更新版本写的）。请更新本入口。'); }
-        else if (r && r.error === 'stale') {
+        else if (r && (r.error === 'stale' || r.error === 'legacy-client' || r.error === 'missing-base')) {
           // 另一个入口在我之后写过盘。不覆盖它，也不自动拉（拉会丢我这边没存的改动），让人决定。
           if (bkstatus) bkstatus.innerHTML = '<b style="color:#b23f34">未写盘：磁盘上有更新的数据。</b>'
-            + '另一个入口（安装版 / 另一个窗口）在 ' + fmtTime(r.diskSavedAt) + ' 写过，为了不抹掉它的改动，本窗口这次没有覆盖。'
-            + '<br>如果你这边没有要保留的改动，刷新页面会拉取最新；如果有，先用「导出全部」留一份再刷新。';
+            + (r.error === 'legacy-client' || r.error === 'missing-base'
+              ? '当前页面版本过旧，为了不覆盖新数据，本次没有写入。请关闭旧入口并用最新版打开。'
+              : '另一个入口（安装版 / 另一个窗口）在 ' + fmtTime(r.diskSavedAt) + ' 写过，为了不抹掉它的改动，本窗口这次没有覆盖。')
+            + (r.conflictCopy ? '<br>这边的内容已保存在冲突副本：' + r.conflictCopy : '')
+            + '<br>如果你这边没有要保留的改动，刷新页面会拉取最新；如果有，也可以先用「导出全部」再刷新。';
           if (reason !== 'interval') toast('磁盘上有更新的数据，本次未覆盖（详见设置）');
         }
         else { markNoBackend(r ? '写盘被拒绝' : '写盘请求没有响应'); }   // 原来这里什么都不做，失败是完全静默的
@@ -947,6 +974,7 @@
           if (el) el.hidden = true;
           HOME_VERSION = r.version;                 // 原始号(如 0.3.0)，用于备份元数据
           HOME_DATA_VERSION = Number(r.dataVersion || 0);
+          HOME_SYNC_PROTOCOL = Number(r.syncProtocol || 0);
           if (verlabel) {
             const dev = r.channel === 'dev';
             verlabel.textContent = 'v' + (r.label || r.version) + (dev ? ' · 开发版' : ' · 发布版');
@@ -1045,7 +1073,7 @@
       } else {
         biobox.innerHTML = '<button class="pbtn soft" id="bioon">启用 Touch ID</button><span class="shint" style="margin-top:0">需先解锁过「家庭理财」再启用</span>';
         document.getElementById('bioon').addEventListener('click', async () => {
-          const pw = sessionStorage.getItem(SKEY);
+          const pw = housePassword;
           if (!pw) { biomsg.textContent = '请先进入并解锁「家庭理财」一次，再来启用'; return; }
           biomsg.textContent = '请按 Touch ID…'; const b = document.getElementById('bioon'); b.disabled = true;
           try { await bioEnable(pw); biomsg.textContent = '已启用 Touch ID'; refreshBioBox(); refreshGateBio(); }
@@ -1071,10 +1099,13 @@
     // 顶栏那枚警示点一下直接开设置，省得用户不知道去哪看
     document.getElementById('nobk').addEventListener('click', () => document.getElementById('setbtn').click());
 
-    // 子应用（iframe 里的理财等）请求回大厅首页。只认同源消息。
+    // 子应用（iframe 里的理财等）请求回大厅首页或领取一次内存主密码。只认当前同源 iframe。
     window.addEventListener('message', (e) => {
-      if (e.origin !== location.origin) return;
+      if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
       if (e.data && e.data.__homeNav === 'home') nav('home');
+      if (e.data && typeof e.data.__homeKeyRequest === 'string' && frame.dataset.app === 'finance') {
+        e.source.postMessage({ __homeKeyResponse: e.data.__homeKeyRequest, password: housePassword }, location.origin);
+      }
     });
 
     const start = (location.hash || '#home').slice(1);

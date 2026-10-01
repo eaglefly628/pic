@@ -3,6 +3,7 @@
 
 import type { AccountMeta, Category, Dataset, Snapshot } from "../data/types";
 import { fmt, fmtSigned, fmtWan, fmtPct } from "./format";
+import { collapseStatisticalMonths, latestClosedMonthEnd, periodOf, snapshotMonth, statisticalMonthKey } from "./statMonth";
 
 export type RangeKey = "3m" | "1y" | "all";
 
@@ -79,6 +80,7 @@ export function lockInfo(a: AccountMeta, now = new Date()): LockInfo | null {
 const COMP_COLOR: Record<string, string> = {
   现金及银行: "var(--cat-1)",
   "理财/固收": "var(--cat-2)",
+  美债: "var(--cat-2)",
   股票: "var(--cat-3)",
   房产: "var(--cat-4)",
   基金: "var(--cat-5)",
@@ -135,11 +137,11 @@ function freshness(dateISO: string): { label: string; days: number } {
 }
 
 /** 某账户的历史序列（去掉无记录的点） */
-export function accountSeries(ds: Dataset, id: string): { date: string; v: number }[] {
-  const out: { date: string; v: number }[] = [];
+export function accountSeries(ds: Dataset, id: string): { date: string; period?: string; v: number }[] {
+  const out: { date: string; period?: string; v: number }[] = [];
   for (const s of ds.snapshots) {
     const v = s.balances[id];
-    if (v != null) out.push({ date: s.date, v });
+    if (v != null) out.push({ date: s.date, period: snapshotMonth(s), v });
   }
   return out;
 }
@@ -154,7 +156,7 @@ export function accountSeries(ds: Dataset, id: string): { date: string; v: numbe
  *  正确语义是沿用它最近一次记录的余额（跟 addSnapshot 手工建快照时的结转一致）；
  *  账户第一次出现之前才算 0（那时候它还不存在）。
  *  真要让一个账户从历史里消失，用 deleteAccount——那会把它从所有快照里删干净。 */
-export function netSeries(ds: Dataset): { date: string; v: number }[] {
+export function netSeries(ds: Dataset): { date: string; period?: string; v: number }[] {
   const snaps = [...ds.snapshots].sort((a, b) => a.date.localeCompare(b.date));
   const accs = ds.accounts.filter((a) => countsInTotal(ds, a));   // 独立运营资产不进家庭净值曲线
   const carried: Record<string, number> = {};
@@ -165,15 +167,16 @@ export function netSeries(ds: Dataset): { date: string; v: number }[] {
       if (v != null) carried[a.id] = v;
       sum += carried[a.id] ?? 0;
     }
-    return { date: s.date, v: sum };
+    return { date: s.date, period: snapshotMonth(s), v: sum };
   });
 }
 
-/** 最近 n 个月的月份键（"2026-09"），升序，最后一个是今天所在的月。 */
+/** 最近 n 个已完成统计月的月份键（"2026-09"）。月初不会凭空先插入一个当月。 */
 export function lastMonthKeys(n: number, end = new Date()): string[] {
   const out: string[] = [];
+  const [endYear, endMonth] = latestClosedMonthEnd(end).split("-").map(Number);
   for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(end.getFullYear(), end.getMonth() - i, 1);
+    const d = new Date(endYear, endMonth - 1 - i, 1);
     out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
   return out;
@@ -183,46 +186,39 @@ export function lastMonthKeys(n: number, end = new Date()): string[] {
  *  某个月没记就沿用上一期（跟净值的结转语义一致，不是归零）；
  *  第一条记录之前给 null——那时这本账还不存在，画成 0 会凭空多出一段假的平线。
  *  两本账（家庭账 / 独立管理）快照日期各记各的，要叠在一张图上就得先这样对齐。 */
-export function alignMonthly(series: { date: string; v: number }[], months: string[]): (number | null)[] {
-  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+export function alignMonthly(series: { date: string; period?: string; v: number }[], months: string[]): (number | null)[] {
+  const sorted = collapseStatisticalMonths(series);
   let i = 0;
   let cur: number | null = null;
   return months.map((m) => {
-    const end = m + "-31";   // ISO 日期是补零的，该月任何一天都 ≤ "YYYY-MM-31"
-    while (i < sorted.length && sorted[i].date <= end) { cur = sorted[i].v; i++; }
+    while (i < sorted.length && periodOf(sorted[i]) <= m) { cur = sorted[i].v; i++; }
     return cur;
   });
 }
 
 /** 同一个月可能记了好几笔——「每月」视图里只保留当月最后一次（最新那笔），
  *  避免一个月出现好几个节点。返回按月升序、每月一个点。 */
-function collapseMonthly<T extends { date: string }>(series: T[]): T[] {
-  const byMonth = new Map<string, T>();
-  for (const p of series) {
-    const k = p.date.slice(0, 7);
-    const ex = byMonth.get(k);
-    if (!ex || p.date >= ex.date) byMonth.set(k, p); // 当月日期更靠后的覆盖前面的
-  }
-  return [...byMonth.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+export function collapseMonthly<T extends { date: string; period?: string }>(series: T[]): T[] {
+  return collapseStatisticalMonths(series);
 }
 
-function monthLabel(iso: string): string {
-  const [, m] = iso.split("-");
+function monthLabel(iso: string, period?: string): string {
+  const [, m] = (period || statisticalMonthKey(iso)).split("-");
   return parseInt(m, 10) + "月";
 }
-function ymLabel(iso: string): string {
-  const [y, m] = iso.split("-");
+function ymLabel(iso: string, period?: string): string {
+  const [y, m] = (period || statisticalMonthKey(iso)).split("-");
   return `${y.slice(2)}/${m}`;
 }
 
-function filterRange<T extends { date: string }>(series: T[], range: RangeKey): T[] {
+function filterRange<T extends { date: string; period?: string }>(series: T[], range: RangeKey): T[] {
   if (range === "all" || series.length === 0) return series;
-  const last = new Date(series[series.length - 1].date);
+  const last = new Date(periodOf(series[series.length - 1]) + "-01T00:00:00");
   const months = range === "3m" ? 3 : 12;
   const cut = new Date(last);
   cut.setMonth(cut.getMonth() - months);
-  const cutIso = cut.toISOString().slice(0, 10);
-  const filtered = series.filter((p) => p.date >= cutIso);
+  const cutKey = `${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, "0")}`;
+  const filtered = series.filter((p) => periodOf(p) >= cutKey);
   return filtered.length >= 2 ? filtered : series.slice(-2);
 }
 
@@ -273,8 +269,9 @@ export interface UIState {
 
 export function buildView(ds: Dataset, ui: UIState) {
   const accs = ds.accounts;
-  const last = ds.snapshots[ds.snapshots.length - 1];
-  const prev = ds.snapshots[ds.snapshots.length - 2];
+  const monthlySnapshots = collapseMonthly([...ds.snapshots].sort((a, b) => a.date.localeCompare(b.date)));
+  const last = monthlySnapshots[monthlySnapshots.length - 1];
+  const prev = monthlySnapshots[monthlySnapshots.length - 2];
 
   const latest: Record<string, number> = {};
   for (const a of accs) latest[a.id] = lastBalance(ds.snapshots, a.id);
@@ -293,23 +290,23 @@ export function buildView(ds: Dataset, ui: UIState) {
   const netPct = netPrev ? netDelta / Math.abs(netPrev) : 0;
 
   // ---- 趋势 ----
-  const fullNet = netSeries(ds);
+  const fullNet = collapseMonthly(netSeries(ds));
   const series = filterRange(fullNet, ui.range);
   const tc = buildChart(series.map((p) => p.v), 600, 200, 44, 8, 16, 30);
-  const trendXLabels = pickXLabels(series.map((p) => ymLabel(p.date)), tc.pts);
+  const trendXLabels = pickXLabels(series.map((p) => ymLabel(p.date, p.period)), tc.pts);
   const trendPoints = series.map((p, i) => ({ x: tc.pts[i].x, y: tc.pts[i].y, date: p.date, value: p.v }));
 
   // 净资产每月变化量（近 12 个月，独立于时间范围）；同月多笔只取当月最后一笔
-  const recentNet = collapseMonthly(fullNet).slice(-13);
+  const recentNet = fullNet.slice(-13);
   const mcMax = recentNet.reduce((m, p, i) => (i === 0 ? m : Math.max(m, Math.abs(p.v - recentNet[i - 1].v))), 0) || 1;
   const mNotes = ds.monthNotes || {};
   const monthlyChanges = recentNet
-    .map((p, i) => (i === 0 ? null : { label: ymLabel(p.date), key: p.date.slice(0, 7), delta: p.v - recentNet[i - 1].v }))
-    .filter((x): x is { label: string; key: string; delta: number } => x != null)
+    .map((p, i) => (i === 0 ? null : { label: ymLabel(p.date, p.period), key: periodOf(p), rawKey: p.date.slice(0, 7), delta: p.v - recentNet[i - 1].v }))
+    .filter((x): x is { label: string; key: string; rawKey: string; delta: number } => x != null)
     .map((c) => ({
       label: c.label,
       key: c.key,
-      note: mNotes[c.key] || "",
+      note: mNotes[c.key] || mNotes[c.rawKey] || "",
       text: c.delta >= 0 ? "+" + fmtWan(c.delta) : fmtWan(c.delta),
       up: c.delta >= 0,
       ratio: Math.abs(c.delta) / mcMax,
@@ -317,7 +314,7 @@ export function buildView(ds: Dataset, ui: UIState) {
   const rangeCaption =
     ui.range === "3m" ? "最近 3 个月 · 按月快照"
       : ui.range === "1y" ? "最近 12 个月 · 按月快照"
-        : `全部历史 · ${fullNet[0] ? fullNet[0].date.slice(0, 7) : ""} 至今`;
+        : `全部历史 · ${fullNet[0] ? periodOf(fullNet[0]) : ""} 至今`;
 
   // ---- 资产构成（按 comp 分组，仅资产）----
   const compMap = new Map<string, number>();
@@ -372,7 +369,7 @@ export function buildView(ds: Dataset, ui: UIState) {
     const upd = lastDate(ds.snapshots, a.id);
     const wa = upd ? freshness(upd) : null;
     // 本次余额 vs 上一次余额的差值
-    const series = accountSeries(ds, a.id);
+    const series = collapseMonthly(accountSeries(ds, a.id));
     const curr = series.length ? series[series.length - 1].v : null;
     const prev = series.length >= 2 ? series[series.length - 2].v : null;
     const delta = curr != null && prev != null ? curr - prev : null;
@@ -436,14 +433,14 @@ export function buildView(ds: Dataset, ui: UIState) {
   const detailDots = detailShown.map((p, i) => ({
     x: dc.pts[i] ? dc.pts[i].x.toFixed(1) : "0",
     y: dc.pts[i] ? dc.pts[i].y.toFixed(1) : "0",
-    label: monthLabel(p.date),
+    label: monthLabel(p.date, p.period),
   }));
   const dFirst = detailShown[0]?.v ?? 0;
   const dLast = detailShown[detailShown.length - 1]?.v ?? 0;
   const dDelta = dLast - dFirst;
   // 每期（每月）变化量，用于柱状预览
   const detailChanges = detailShown
-    .map((p, i) => (i === 0 ? null : { label: monthLabel(p.date), delta: p.v - detailShown[i - 1].v }))
+    .map((p, i) => (i === 0 ? null : { label: monthLabel(p.date, p.period), delta: p.v - detailShown[i - 1].v }))
     .filter((x): x is { label: string; delta: number } => x != null);
   const changeMax = detailChanges.reduce((m, c) => Math.max(m, Math.abs(c.delta)), 0) || 1;
   const snapshots = ds2

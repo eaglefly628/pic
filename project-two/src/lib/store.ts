@@ -25,7 +25,11 @@ function open(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(S_CONFIG)) db.createObjectStore(S_CONFIG);
       if (!db.objectStoreNames.contains(S_FACES)) db.createObjectStore(S_FACES);
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => { db.close(); dbp = null; };
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbp;

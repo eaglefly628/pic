@@ -1,6 +1,7 @@
 // 对某个 Dataset 的纯修改操作（主账户与「私房钱」独立账户复用）。
 import type { AccountMeta, Dataset, Snapshot } from "../data/types";
 import { uid } from "../ui";
+import { latestClosedMonthEnd, migrateStatisticalMonths, statisticalMonthKey } from "../lib/statMonth";
 
 export type AccountInput = Omit<AccountMeta, "id"> & { comp?: string };
 
@@ -17,7 +18,8 @@ export function addAccount(ds: Dataset, meta: AccountInput, balance: number) {
   ds.accounts.push({ ...meta, id } as AccountMeta);
   const snaps = ds.snapshots;
   if (snaps.length === 0) {
-    snaps.push({ date: new Date().toISOString().slice(0, 10), balances: { [id]: balance }, source: "manual", touched: [id] });
+    const date = latestClosedMonthEnd();
+    snaps.push({ date, period: statisticalMonthKey(date), balances: { [id]: balance }, source: "manual", touched: [id] });
   } else {
     const last = snaps[snaps.length - 1];
     last.balances[id] = balance;
@@ -66,6 +68,7 @@ export function addSnapshot(ds: Dataset, accId: string, date: string, amount: nu
   const snaps = ds.snapshots;
   const existing = snaps.find((s) => s.date === date);
   if (existing) {
+    existing.period = statisticalMonthKey(date);
     existing.balances[accId] = amount;
     // 第一次给这条旧快照区分 touched 时，把它当时已有的账户都当"确实记录过"兜底，
     // 不然这次编辑会让同一期里其它账户的"最后更新"莫名回退到更早的一条快照。
@@ -76,7 +79,7 @@ export function addSnapshot(ds: Dataset, accId: string, date: string, amount: nu
   const balances: Record<string, number | null> = {};
   for (const a of ds.accounts) balances[a.id] = lastKnownOnOrBefore(snaps, a.id, date);
   balances[accId] = amount;
-  snaps.push({ date, balances, source: "manual", touched: [accId] });
+  snaps.push({ date, period: statisticalMonthKey(date), balances, source: "manual", touched: [accId] });
   snaps.sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -94,5 +97,7 @@ export function deleteSnapshotEntry(ds: Dataset, accId: string, date: string) {
 
 /** 空的「私房钱」独立数据集 */
 export function emptyDataset(name: string, userName: string): Dataset {
-  return { vaultName: name, userName, real: false, accounts: [], snapshots: [] };
+  const ds: Dataset = { vaultName: name, userName, real: false, accounts: [], snapshots: [] };
+  migrateStatisticalMonths(ds);
+  return ds;
 }

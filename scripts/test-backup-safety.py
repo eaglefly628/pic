@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """备份安全回归测试——不起服务器，直接调 run.py 里的函数，数据目录用临时目录（不碰真实数据）。
   ① 分层保留：最近 40 次全留；30 天内每天留当天最后一份；12 周每周留一份；keep- 安全副本单独留 10 份
-  ② 乐观并发：baseSavedAt 比磁盘旧 → 拒绝(stale)，磁盘不动；内容没变 → unchanged；老客户端不带字段 → 放行
+  ② 乐观并发：baseSavedAt 比磁盘旧 → 拒绝(stale)，磁盘不动；内容没变 → unchanged；老客户端不能覆盖且留冲突副本
   ③ baseSavedAt 只用于校验、不落盘
   ④ backup_get 防目录穿越（../、绝对路径、backups/ 外的软链接都拿不到）
   ⑤ 新写的文件权限 600；_tighten_perms 把旧版留下的 644 收成 600
@@ -114,8 +114,10 @@ for f in (TMP / "current.home", TMP / "meta.json"):
         f.unlink()
 
 
-def save(ls, base=None):
+def save(ls, base=None, protocol=True):
     b = {"__home_backup": 1, "v": 1, "localStorage": ls, "indexedDB": []}
+    if protocol:
+        b["syncProtocol"] = run.SYNC_PROTOCOL
     if base is not None:
         b["baseSavedAt"] = base
     time.sleep(0.003)      # savedAt 是毫秒，保证单调
@@ -132,15 +134,17 @@ r3 = save({"k": "v3"}, base=t1)
 check(r3.get("ok") is False and r3.get("error") == "stale" and r3.get("diskSavedAt") == t2, "baseSavedAt 过期 → 拒绝(stale)，并告知磁盘时间")
 cur = json.loads((TMP / "current.home").read_text(encoding="utf-8"))
 check(cur["localStorage"]["k"] == "v2" and cur["savedAt"] == t2, "被拒绝时磁盘内容纹丝不动")
-r4 = save({"k": "v4"})
-check(r4.get("ok") is True, "老客户端不带 baseSavedAt → 向后兼容放行")
-t4 = r4["savedAt"]
-r5 = save({"k": "v4"}, base=0)
-check(r5.get("ok") is True and r5.get("unchanged") is True and r5["savedAt"] == t4, "内容没变 → unchanged（不改时间戳，也不当 stale）")
+r4 = save({"k": "legacy-change"}, protocol=False)
+check(r4.get("ok") is False and r4.get("error") == "legacy-client" and r4.get("conflictCopy"), "老客户端不能覆盖，内容另存冲突副本")
+r4b = save({"k": "missing-base"})
+check(r4b.get("ok") is False and r4b.get("error") == "missing-base" and r4b.get("conflictCopy"), "缺少 baseSavedAt 的客户端不能覆盖")
+r5 = save({"k": "v2"}, base=0, protocol=False)
+check(r5.get("ok") is True and r5.get("unchanged") is True and r5["savedAt"] == t2, "内容没变 → unchanged（旧页面也不会制造重复写入）")
 cur = json.loads((TMP / "current.home").read_text(encoding="utf-8"))
 check("baseSavedAt" not in cur, "③ baseSavedAt 不落盘")
-check(cur.get("dataVersion") == run.DATA_VERSION and cur.get("appVersion") == run.APP_VERSION, "落盘带 dataVersion / appVersion")
-check(len(list(BK.glob("我家里的一切-备份-*.home"))) == 3, "三次有效写入 → 三份历史备份")
+check(cur.get("dataVersion") == run.DATA_VERSION and cur.get("appVersion") == run.APP_VERSION and cur.get("syncProtocol") == run.SYNC_PROTOCOL, "落盘带 dataVersion / appVersion / syncProtocol")
+check(len(list(BK.glob("我家里的一切-备份-*.home"))) == 2, "两次有效写入 → 两份自动历史备份")
+check(len(list(BK.glob("keep-*.home"))) == 3, "三次被拒（过期、旧客户端、缺基线）的改动各自保留为冲突副本")
 
 # ───────── ④ 防穿越 ─────────
 print("④ backup_get 防穿越")

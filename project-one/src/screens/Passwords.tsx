@@ -40,10 +40,14 @@ function PwGate({ clearSec }: { clearSec: number }) {
       items={sess.items}
       clearSec={clearSec}
       onMutate={(fn) => {
-        const next = clone(sess.items); fn(next);
-        void savePwBox(sess.keys, next);
-        const ns = { keys: sess.keys, items: next };
-        pwSession.set(ns); setSess(ns);
+        setSess((current) => {
+          if (!current) return current;
+          const next = clone(current.items); fn(next);
+          void savePwBox(current.keys, next);
+          const ns = { keys: current.keys, items: next };
+          pwSession.set(ns);
+          return ns;
+        });
       }}
     />
   );

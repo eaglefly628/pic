@@ -36,7 +36,7 @@ export default function Settings() {
 
   const enablePwBox = async () => {
     setPwBoxMsg("");
-    if (npw.length < 4) return setPwBoxMsg("密码至少 4 位");
+    if (npw.length < 8) return setPwBoxMsg("密码至少 8 位");
     await createPwBox(npw, data?.passwords ?? []);
     update((d) => { d.passwords = []; }); // 已迁移到独立加密库
     pwSession.set(null); setPwOn(true); setNpw(""); setPwBoxMsg("ok");
@@ -44,7 +44,7 @@ export default function Settings() {
   };
   const changePwBox = async () => {
     setPwBoxMsg("");
-    if (npw.length < 4) return setPwBoxMsg("新密码至少 4 位");
+    if (npw.length < 8) return setPwBoxMsg("新密码至少 8 位");
     const r = await unlockPwBox(cpw);
     if (!r) return setPwBoxMsg("当前密码错误");
     await changePwBoxPassword(r.keys, npw);
@@ -89,7 +89,7 @@ export default function Settings() {
 
   const doChangePw = async () => {
     setPwMsg("");
-    if (pw.length < 6) return setPwMsg("新密码至少 6 位");
+    if (pw.length < 8) return setPwMsg("新密码至少 8 位");
     if (pw !== pw2) return setPwMsg("两次输入不一致");
     await changePassword(pw);
     setPw(""); setPw2(""); setPwMsg("ok");

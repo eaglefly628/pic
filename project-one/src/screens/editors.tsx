@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import type { AccountMeta, Category } from "../data/types";
 import type { AccountInput } from "../vault/ops";
 import { Btn, Field, Modal, Select, Switch, TextField } from "../ui";
+import { EARLY_MONTH_GRACE_DAYS, latestClosedMonthEnd, monthEndISO, statisticalMonthKey } from "../lib/statMonth";
 
 const CATS: { value: Category; label: string }[] = [
   { value: "liquid", label: "流动资金" },
@@ -12,7 +13,7 @@ const CATS: { value: Category; label: string }[] = [
 ];
 /** 家族信托是可选功能（设置里开），没开时分组列表里不出现 */
 const TRUST_CAT = { value: "trust" as Category, label: "家族信托" };
-const COMPS = ["现金及银行", "股票", "理财/固收", "基金", "黄金", "房产", "养老金", "公积金", "家族信托", "其他固定资产", "负债", "其他"].map((v) => ({ value: v, label: v }));
+const COMPS = ["现金及银行", "股票", "美债", "理财/固收", "基金", "黄金", "房产", "养老金", "公积金", "家族信托", "其他固定资产", "负债", "其他"].map((v) => ({ value: v, label: v }));
 const OWNERS = ["本人", "配偶", "全家", "父亲", "母亲", "孩子"];
 /** 锁定期预设。家族信托常见 2 年起，所以默认给 2 年。 */
 const LOCKS = [
@@ -162,11 +163,6 @@ function unlockDate(startISO: string, months: number): string {
 function localISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-/** 某月最后一天 */
-function monthEnd(year: number, monthIdx: number): Date {
-  return new Date(year, monthIdx + 1, 0);
-}
-
 export function SnapshotEditor({ open, accountName, recorded, onClose, onSubmit }: {
   open: boolean; accountName: string;
   /** 这个账户「确实记录过」的日期 → 当时余额。用来标出哪些月份漏了。 */
@@ -174,24 +170,24 @@ export function SnapshotEditor({ open, accountName, recorded, onClose, onSubmit 
   onClose: () => void; onSubmit: (date: string, amount: number) => void;
 }) {
   const today = localISO(new Date());
-  const [date, setDate] = useState(today);
+  const defaultDate = latestClosedMonthEnd();
+  const [date, setDate] = useState(defaultDate);
   const [amount, setAmount] = useState("");
   const rec = recorded ?? new Map<string, number>();
 
-  React.useEffect(() => { if (open) { setDate(today); setAmount(""); } }, [open, today]);
+  React.useEffect(() => { if (open) { setDate(defaultDate); setAmount(""); } }, [open, defaultDate]);
 
   // 最近 8 个月，标出哪几个月这个账户还没记过——「漏掉了哪一期」一眼能看出来
   const months = React.useMemo(() => {
-    const now = new Date();
+    const latest = latestClosedMonthEnd();
+    const [baseYear, baseMonth] = latest.split("-").map(Number);
     const out: { key: string; label: string; date: string; hasDate?: string }[] = [];
     for (let i = 0; i < 8; i++) {
-      const end = monthEnd(now.getFullYear(), now.getMonth() - i);
-      const key = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}`;
-      // 这个月里有没有已记录的日期（不一定正好是月末）
-      const hit = [...rec.keys()].filter((d) => d.startsWith(key)).sort().pop();
-      // 本月的「月末」还没到，钳到今天——否则会记出一条未来日期的快照
-      const target = end > now ? now : end;
-      out.push({ key, label: `${end.getMonth() + 1}月`, date: hit ?? localISO(target), hasDate: hit });
+      const d = new Date(baseYear, baseMonth - 1 - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      // 月末和次月 1–3 日都属于同一统计月；已有记录优先定位到原始日期，避免另造重复记录。
+      const hit = [...rec.keys()].filter((raw) => statisticalMonthKey(raw) === key).sort().pop();
+      out.push({ key, label: `${d.getMonth() + 1}月`, date: hit ?? monthEndISO(key), hasDate: hit });
     }
     return out;
   }, [rec, open]);
@@ -229,7 +225,7 @@ export function SnapshotEditor({ open, accountName, recorded, onClose, onSubmit 
         </span>
         <div className="fv-scroll" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
           {months.map((m) => {
-            const on = date.startsWith(m.key);
+            const on = statisticalMonthKey(date) === m.key;
             return (
               <button key={m.key} type="button" className="fv-tap" onClick={() => setDate(m.date)}
                 title={m.hasDate ? `已记录 ${m.hasDate}` : "这个月还没记过"}
@@ -247,9 +243,12 @@ export function SnapshotEditor({ open, accountName, recorded, onClose, onSubmit 
         </div>
       </div>
 
-      <Field label="日期（可以往前选，用来补记漏掉的月份）">
+      <Field label="盘点日期（默认最近一个月末）">
         <TextField type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} />
       </Field>
+      <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.6, marginTop: -7, marginBottom: 13 }}>
+        月末与次月 1–{EARLY_MONTH_GRACE_DAYS} 日归入同一个统计月；原始录入日期仍会保留。
+      </div>
       {existing != null && (
         <div style={{ fontSize: 12, color: "var(--orange)", marginTop: -7, marginBottom: 13, lineHeight: 1.6 }}>
           这一期已经记过（{fmtPlain(existing)}），确认后会覆盖成新的数字。

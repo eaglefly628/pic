@@ -100,7 +100,10 @@ APP_LABEL = APP_VERSION + ("-dev" if APP_CHANNEL == "dev" else "")   # 开发版
 #   ② 新版写的数据，老版能「只读打开」查看（不认识的新字段忽略、不删）；
 #   ③ 老版保存时，服务端拒绝用较低版本覆盖磁盘上更高版本的数据（护栏，见 backup_save）。
 # 这样开发版 / 安装版即使一时新旧不一，也只会「后者只读、不互相写坏」。
-DATA_VERSION = 3
+DATA_VERSION = 4
+# 写盘协议和数据结构版本分开：前者保证客户端带有并发基线，后者保护数据形状。
+# 老安装版不会发送 syncProtocol；它的写入会被保留成冲突副本，但不能覆盖 current.home。
+SYNC_PROTOCOL = 2
 DATA_DIR = data_dir()
 
 
@@ -145,20 +148,41 @@ def _backup_save_locked(raw: bytes) -> dict:
             # 兼容护栏：磁盘上是更高数据版本(更新的 App)写的 → 本(旧)入口拒绝覆盖，避免写坏
             stored_dv = int(old.get("dataVersion") or 0)
             if stored_dv > DATA_VERSION:
+                conflict = _save_rejected_bundle(bundle, "keep-旧版本冲突-")
                 return {"ok": False, "error": "reject-downgrade", "storedDataVersion": stored_dv, "myDataVersion": DATA_VERSION,
+                        "conflictCopy": conflict,
                         "hint": "磁盘上的数据是更新版本的 App 写的，本入口版本偏旧、已拒绝覆盖。请把本入口也更新到最新。"}
             # 内容没变就不更新时间戳——否则多入口会因时间戳变化互相触发无谓的“恢复”。
-            if _content(old) == new_content:
+            # 数据版本落后时不能在这里短路：要让当前客户端把元数据升级，之后旧安装版才会被版本护栏挡住。
+            if _content(old) == new_content and stored_dv >= DATA_VERSION:
                 return {"ok": True, "savedAt": old.get("savedAt"), "bytes": len(old_raw), "dir": str(DATA_DIR), "unchanged": True}
+            # 旧页面不带并发协议，无法证明它读到的是 current.home 的哪个版本。无条件拒绝覆盖，
+            # 但把它想写的内容另存为安全副本，避免旧入口里刚做的编辑彻底丢失。
+            if int(bundle.get("syncProtocol") or 0) != SYNC_PROTOCOL:
+                conflict = _save_rejected_bundle(bundle, "keep-旧入口冲突-")
+                return {"ok": False, "error": "legacy-client", "requiredSyncProtocol": SYNC_PROTOCOL,
+                        "conflictCopy": conflict,
+                        "hint": "这个页面版本太旧，不能安全覆盖当前数据。它的内容已另存为冲突副本；请关闭旧入口并使用最新版。"}
             # 乐观并发：客户端带上「我上次同步到的 savedAt」。磁盘上的比它新，说明另一个入口
             # （比如安装版和 VSCode 同时开着）在我之后写过——直接覆盖会把对方的改动抹掉。
             # 拒绝，让前端先把新的拉回来。老客户端不带这个字段则跳过检查（向后兼容）。
             base = bundle.get("baseSavedAt")
             disk_at = int(old.get("savedAt") or 0)
-            if isinstance(base, (int, float)) and disk_at > int(base):
+            if not isinstance(base, (int, float)):
+                conflict = _save_rejected_bundle(bundle, "keep-无并发基线-")
+                return {"ok": False, "error": "missing-base", "diskSavedAt": disk_at,
+                        "conflictCopy": conflict,
+                        "hint": "写入请求没有并发基线，已拒绝覆盖；内容已另存为冲突副本。"}
+            if disk_at > int(base):
+                conflict = _save_rejected_bundle(bundle, "keep-并发冲突-")
                 return {"ok": False, "error": "stale", "diskSavedAt": disk_at, "baseSavedAt": int(base),
+                        "conflictCopy": conflict,
                         "hint": "磁盘上的数据比你这个窗口上次同步到的更新（另一个入口写过），本次未覆盖。刷新页面会拉取最新数据。"}
+    elif int(bundle.get("syncProtocol") or 0) != SYNC_PROTOCOL:
+        return {"ok": False, "error": "legacy-client", "requiredSyncProtocol": SYNC_PROTOCOL,
+                "hint": "这个页面版本太旧，不能建立新的磁盘备份。请使用最新版。"}
     bundle.pop("baseSavedAt", None)   # 只用于校验，不落盘
+    bundle["syncProtocol"] = SYNC_PROTOCOL
     bundle["dataVersion"] = DATA_VERSION
     bundle["appVersion"] = APP_VERSION
     bundle["appChannel"] = APP_CHANNEL
@@ -175,6 +199,20 @@ def _backup_save_locked(raw: bytes) -> dict:
     except Exception:
         pass
     return {"ok": True, "savedAt": bundle["savedAt"], "bytes": len(data), "dir": str(DATA_DIR)}
+
+
+def _save_rejected_bundle(bundle: dict, prefix: str) -> str:
+    """把被拒绝覆盖的客户端状态另存为可恢复副本；调用者已经持有 _BACKUP_LOCK。"""
+    copy = dict(bundle)
+    copy.pop("baseSavedAt", None)
+    copy["rejectedAt"] = int(time.time() * 1000)
+    copy["dataVersion"] = int(copy.get("dataVersion") or 0)
+    data = json.dumps(copy, ensure_ascii=False).encode("utf-8")
+    (DATA_DIR / "backups").mkdir(parents=True, exist_ok=True)
+    path = _fresh_backup_path(prefix)
+    _atomic_write(path, data)
+    _prune_backups()
+    return path.name
 
 
 _TS_RE = re.compile(r"(\d{8})-(\d{6})")
@@ -848,7 +886,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send_json(body)
         if bare == "/api/version":
             return self._send_json({"ok": True, "version": APP_VERSION, "channel": APP_CHANNEL,
-                                    "label": APP_LABEL, "dataVersion": DATA_VERSION, "dir": str(DATA_DIR)})
+                                    "label": APP_LABEL, "dataVersion": DATA_VERSION,
+                                    "syncProtocol": SYNC_PROTOCOL, "dir": str(DATA_DIR)})
         if bare == "/api/backup/latest":
             data = backup_latest()
             if not data:

@@ -31,6 +31,8 @@ export interface AccountMeta {
 export interface Snapshot {
   /** ISO 日期 yyyy-mm-dd */
   date: string;
+  /** 明确的统计月份 YYYY-MM。月末与次月 1–3 日补录会归到同一个统计月；date 保留原始录入日期。 */
+  period?: string;
   /** 账户 id -> 当期余额（null 表示该期无记录） */
   balances: Record<string, number | null>;
   /** 来源：导入 / 手动 */
@@ -64,4 +66,8 @@ export interface Dataset {
   /** 功能模块开关。只在明确关掉时才写 false，没写过 = 用默认。
    *  trust = 家族信托 / 独立运营资产，默认开启（本产品面向有一定资产规模的家庭）。 */
   features?: { trust?: boolean };
+  /** 一次性数据迁移标记；有标记后启动不再扫描全部历史。 */
+  migrations?: {
+    statisticalMonth?: { version: number; migratedAt: number; assigned: number; collisions: number; invalidDates: number };
+  };
 }

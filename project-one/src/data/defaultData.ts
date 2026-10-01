@@ -3,6 +3,7 @@ import { sampleDataset } from "./sample";
 import type { Dataset } from "./types";
 import type { VaultData } from "../vault/types";
 import { DEFAULT_SETTINGS } from "../vault/types";
+import { migrateStatisticalMonths } from "../lib/statMonth";
 
 const real = import.meta.glob<{ default: Dataset }>("./history.json", { eager: true });
 const found = Object.values(real)[0]?.default;
@@ -15,8 +16,10 @@ function clone<T>(v: T): T {
 
 /** 首次创建金库时的初始内容 */
 export function initialVaultData(): VaultData {
+  const dataset = clone(defaultDataset);
+  migrateStatisticalMonths(dataset);
   return {
-    dataset: clone(defaultDataset),
+    dataset,
     passwords: [],
     infos: [],
     settings: { ...DEFAULT_SETTINGS },

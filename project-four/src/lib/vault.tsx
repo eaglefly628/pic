@@ -1,16 +1,17 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { DevData, DevSettings } from "../types";
-import { createVault, openVault, sealWithKey, isVaultFile, type VaultFile } from "./crypto";
+import { createVault, openVault, sealWithKey, isVaultFile, DEFAULT_ITER, type VaultFile } from "./crypto";
 import { sampleData } from "../data/devSample";
 import * as store from "./store";
 
-type Status = "loading" | "setup" | "locked" | "unlocked";
+type Status = "loading" | "setup" | "locked" | "unlocked" | "migrate";
 
 interface Ctx {
   status: Status;
   data: DevData;
   setup: (password: string) => Promise<void>;
   unlock: (password: string) => Promise<boolean>;
+  migrateLegacy: (password: string) => Promise<boolean>;
   lock: () => void;
   update: (mut: (d: DevData) => void) => Promise<void>;
   changeMaster: (oldPw: string, newPw: string) => Promise<boolean>;
@@ -43,8 +44,9 @@ function normalize(d: Partial<DevData>): DevData {
   } as DevData;
 }
 
-// 开发世界不再单独设密码：固定内部口令自动解锁/初始化（备份统一在大厅做）
-const AUTO_PW = "dev-world::no-password";
+// 历史遗留：0.4.0 之前开发世界用这个写死在源码里的固定口令加密——等于没有加密。
+// 现在只用于「认出旧库」并把数据迁移到用户自己设的主密码上，之后不再有任何地方用它加密。
+const LEGACY_PW = "dev-world::no-password";
 
 export function VaultProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
@@ -85,29 +87,53 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     const file = await store.loadVaultFile();
     if (!file) return false;
     try {
-      const { data: d, key, salt, iter } = await openVault<Partial<DevData>>(password, file);
+      let { data: d, key, salt, iter } = await openVault<Partial<DevData>>(password, file);
+      const nd = normalize(d);
+      if (iter < DEFAULT_ITER) {
+        await store.saveVaultBackup(file);
+        const upgraded = await createVault(password, nd);
+        await store.saveVaultFile(upgraded.file);
+        key = upgraded.key; salt = upgraded.salt; iter = upgraded.iter;
+      }
       keyRef.current = key; saltRef.current = salt; iterRef.current = iter;
-      setData(normalize(d)); setStatus("unlocked");
+      dataRef.current = nd;
+      setData(nd); setStatus("unlocked");
       return true;
     } catch {
       return false;
     }
   }, []);
 
-  // 开发世界不上锁：固定内部口令自动开 / 初始化；旧库若是别的密码则回落到锁屏（不抹数据）
+  // 旧库（固定口令加密）→ 引导用户设置真正的主密码后迁移；新库/别的密码 → 正常锁屏；没有库 → 首次设置。
   useEffect(() => {
     let cancelled = false;
     (async () => {
       await store.requestPersist();
-      if (await store.hasVault()) {
-        const ok = await unlock(AUTO_PW);
-        if (!ok && !cancelled) setStatus("locked");
-      } else {
-        await setup(AUTO_PW);
-      }
+      const file = await store.loadVaultFile();
+      if (cancelled) return;
+      if (!file) { setStatus("setup"); return; }
+      let legacy = false;
+      try { await openVault(LEGACY_PW, file); legacy = true; } catch { legacy = false; }
+      if (!cancelled) setStatus(legacy ? "migrate" : "locked");
     })();
     return () => { cancelled = true; };
-  }, [setup, unlock]);
+  }, []);
+
+  // 把旧的「固定口令库」重新用用户自己的主密码加密。旧库先备份，新库写成功后才算数。
+  const migrateLegacy = useCallback(async (password: string): Promise<boolean> => {
+    const file = await store.loadVaultFile();
+    if (!file) return false;
+    let d: Partial<DevData>;
+    try { ({ data: d } = await openVault<Partial<DevData>>(LEGACY_PW, file)); } catch { return false; }
+    await store.saveVaultBackup(file);   // 迁移前留底，万一中途出错还能找回
+    const nd = normalize(d);
+    const { file: nf, key, salt, iter } = await createVault(password, nd);
+    await store.saveVaultFile(nf);
+    keyRef.current = key; saltRef.current = salt; iterRef.current = iter;
+    dataRef.current = nd;
+    setData(nd); setStatus("unlocked");
+    return true;
+  }, []);
 
   const lock = useCallback(() => {
     keyRef.current = null; saltRef.current = null; iterRef.current = 0;
@@ -129,14 +155,20 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     await update((d) => { d.settings = { ...d.settings, ...s }; });
   }, [update]);
 
-  const changeMaster = useCallback(async (oldPw: string, newPw: string): Promise<boolean> => {
-    const file = await store.loadVaultFile();
-    if (!file) return false;
-    try { await openVault(oldPw, file); } catch { return false; }
-    const { file: nf, key, salt, iter } = await createVault(newPw, dataRef.current);
-    await store.saveVaultFile(nf);
-    keyRef.current = key; saltRef.current = salt; iterRef.current = iter;
-    return true;
+  const changeMaster = useCallback((oldPw: string, newPw: string): Promise<boolean> => {
+    // 先等所有普通保存完成，避免改密时把队列里尚未落盘的内容留在旧密钥版本里。
+    const run = queueRef.current.then(async () => {
+      const file = await store.loadVaultFile();
+      if (!file) return false;
+      try { await openVault(oldPw, file); } catch { return false; }
+      await store.saveVaultBackup(file);
+      const { file: nf, key, salt, iter } = await createVault(newPw, dataRef.current);
+      await store.saveVaultFile(nf);
+      keyRef.current = key; saltRef.current = salt; iterRef.current = iter;
+      return true;
+    });
+    queueRef.current = run.catch(() => { /* 同上 */ });
+    return run;
   }, []);
 
   const exportVault = useCallback(async () => {
@@ -154,17 +186,24 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, []);
 
-  const importVault = useCallback(async (file: File): Promise<"ok" | "bad"> => {
-    try {
-      const obj = JSON.parse(await file.text());
-      if (!isVaultFile(obj)) return "bad";
-      await store.saveVaultFile(obj as VaultFile);
-      keyRef.current = null; saltRef.current = null; iterRef.current = 0;
-      setData(emptyData()); setStatus("locked");
-      return "ok";
-    } catch {
-      return "bad";
-    }
+  const importVault = useCallback((file: File): Promise<"ok" | "bad"> => {
+    const run = queueRef.current.then(async () => {
+      try {
+        const obj = JSON.parse(await file.text());
+        if (!isVaultFile(obj)) return "bad" as const;
+        const current = await store.loadVaultFile();
+        if (current) await store.saveVaultBackup(current);
+        await store.saveVaultFile(obj as VaultFile);
+        keyRef.current = null; saltRef.current = null; iterRef.current = 0;
+        const empty = emptyData(); dataRef.current = empty;
+        setData(empty); setStatus("locked");
+        return "ok" as const;
+      } catch {
+        return "bad" as const;
+      }
+    });
+    queueRef.current = run.catch(() => { /* 同上 */ });
+    return run;
   }, []);
 
   const copy = useCallback((text: string, label = "内容") => {
@@ -177,7 +216,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <C.Provider value={{ status, data, setup, unlock, lock, update, changeMaster, updateSettings, exportVault, importVault, copy, toast }}>
+    <C.Provider value={{ status, data, setup, unlock, migrateLegacy, lock, update, changeMaster, updateSettings, exportVault, importVault, copy, toast }}>
       {children}
     </C.Provider>
   );
