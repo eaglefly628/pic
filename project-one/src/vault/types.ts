@@ -8,6 +8,11 @@ export interface PasswordItem {
   password: string;
   category?: string;
   notes?: string;
+  /** 储值卡/充值卡专用字段；均为可选，旧密码记录无需迁移。 */
+  issuer?: string;
+  balance?: number;
+  lastCheckedAt?: string;
+  expiresAt?: string;
   favorite?: boolean;
   createdAt: number;
   updatedAt: number;
