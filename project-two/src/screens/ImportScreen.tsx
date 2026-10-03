@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLibrary } from "../lib/library";
 import { Btn, Select, card } from "../ui";
 import { IconUpload, IconImage } from "../icons";
+import { fmtSize } from "../lib/format";
+import { getRemoteIndexStatus, pauseRemoteIndex, startRemoteIndex, type RemoteIndexStatus } from "../lib/remoteIndex";
 
 export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
   const { addFile, albums, baseDir, pickBaseDir, syncBaseDir, disconnectBaseDir } = useLibrary();
@@ -22,6 +24,50 @@ export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
   const [prog, setProg] = useState({ done: 0, total: 0, current: "" });
   const [result, setResult] = useState<{ added: number; skipped: number; failed: number } | null>(null);
   const [drag, setDrag] = useState(false);
+  const [remote, setRemote] = useState<RemoteIndexStatus | null>(null);
+  const [remoteError, setRemoteError] = useState("");
+  const [remoteBusy, setRemoteBusy] = useState(false);
+  const [remoteSource, setRemoteSource] = useState("/Volumes/24684804");
+
+  const refreshRemote = async () => {
+    try {
+      const next = await getRemoteIndexStatus();
+      setRemote(next);
+      if (next.source) setRemoteSource(next.source);
+      else if (next.sources?.length && !next.sources.some((s) => s.path === remoteSource)) setRemoteSource(next.sources[0].path);
+      setRemoteError(next.ok ? "" : (next.error || "读取照片索引失败"));
+    } catch (err) {
+      setRemoteError(err instanceof Error ? err.message : "无法连接照片索引服务");
+    }
+  };
+
+  useEffect(() => {
+    void refreshRemote();
+    const timer = window.setInterval(() => void refreshRemote(), remote?.processAlive ? 1800 : 5000);
+    return () => window.clearInterval(timer);
+    // 定时器只需跟随运行状态调整频率；路径变化不应重建定时器。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote?.processAlive]);
+
+  const startRemote = async () => {
+    setRemoteBusy(true); setRemoteError("");
+    try {
+      const next = await startRemoteIndex(remoteSource);
+      setRemote(next);
+      if (!next.ok) setRemoteError(next.error || "启动扫描失败");
+    } catch (err) {
+      setRemoteError(err instanceof Error ? err.message : "启动扫描失败");
+    } finally { setRemoteBusy(false); }
+  };
+
+  const pauseRemote = async () => {
+    setRemoteBusy(true); setRemoteError("");
+    try {
+      setRemote(await pauseRemoteIndex());
+    } catch (err) {
+      setRemoteError(err instanceof Error ? err.message : "暂停扫描失败");
+    } finally { setRemoteBusy(false); }
+  };
 
   const handleFiles = async (files: FileList | File[]) => {
     const list = Array.from(files);
@@ -47,9 +93,79 @@ export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
 
   return (
     <div style={{ padding: "24px 32px 40px", animation: "fvFade 0.3s ease", maxWidth: 760 }}>
-      {/* 媒体库文件夹（Base 目录，不拷贝） */}
+      {/* 大型 Samba 媒体库：由本机服务只读扫描，索引可暂停/续跑。 */}
       <div style={{ ...card, padding: "20px 26px", marginBottom: 18 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>媒体库文件夹（推荐 · 不拷贝）</div>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 250 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>S300 / Samba 全局索引（只读）</div>
+            <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+              通过 Wi-Fi 读取文件名、大小和时间，原照片与视频始终留在联想云储存。索引保存在本机，掉线或退出后可继续；这一阶段不会移动、复制或删除任何文件。
+            </div>
+          </div>
+          <span style={{ padding: "4px 9px", borderRadius: 20, fontSize: 11.5, color: remote?.processAlive ? "var(--green)" : "var(--text-secondary)", background: "var(--fill-quaternary)" }}>
+            {remote?.processAlive ? "● 扫描中" : remote?.status === "completed" ? "✓ 已完成" : remote?.status === "paused" ? "Ⅱ 已暂停" : "只读模式"}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <Select
+            aria-label="Samba 挂载目录"
+            value={remoteSource}
+            onChange={(e) => setRemoteSource(e.target.value)}
+            disabled={!!remote?.processAlive || remoteBusy}
+            style={{ minWidth: 270, flex: 1 }}
+            options={(remote?.sources?.length ? remote.sources : [{ name: "24684804（尚未挂载）", path: "/Volumes/24684804", readable: false, writable: false }])
+              .map((s) => ({ value: s.path, label: `${s.readable ? "✓" : "○"} ${s.name} — ${s.path}` }))}
+          />
+          {remote?.processAlive ? (
+            <Btn variant="ghost" onClick={pauseRemote} disabled={remoteBusy}>{remoteBusy ? "处理中…" : "安全暂停"}</Btn>
+          ) : (
+            <Btn onClick={startRemote} disabled={remoteBusy || !remote?.sources?.some((s) => s.path === remoteSource && s.readable)}
+              style={!remote?.sources?.some((s) => s.path === remoteSource && s.readable) ? { opacity: 0.45, cursor: "not-allowed" } : undefined}>
+              {remoteBusy ? "启动中…" : remote?.status === "paused" ? "继续扫描" : remote?.status === "completed" ? "检查新增文件" : "开始扫描"}
+            </Btn>
+          )}
+        </div>
+
+        {!remote?.sources?.some((s) => s.path === remoteSource && s.readable) && !remoteError && (
+          <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--orange)", lineHeight: 1.6 }}>
+            尚未检测到 S300。请先在 Finder 连接 <b>smb://192.168.31.247/24684804</b>，然后回到这里等待几秒。
+          </div>
+        )}
+        {remoteError && (
+          <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--red)", lineHeight: 1.6 }}>
+            {remoteError}。请从项目入口 <b>http://localhost:5180</b> 打开；直接打开 file:// 页面无法调用扫描服务。
+          </div>
+        )}
+
+        {remote && remote.status !== "not_started" && (
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: "0.5px solid var(--separator)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10 }}>
+              <Metric label="本轮已见" value={(remote.indexedThisRun || 0).toLocaleString()} />
+              <Metric label="照片" value={(remote.totals?.image?.files || 0).toLocaleString()} />
+              <Metric label="视频" value={(remote.totals?.video?.files || 0).toLocaleString()} />
+              <Metric label="媒体容量" value={fmtSize((remote.totals?.image?.bytes || 0) + (remote.totals?.video?.bytes || 0))} />
+            </div>
+            <div style={{ marginTop: 12, height: 7, background: "var(--track)", borderRadius: 6, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: remote.processAlive ? "38%" : remote.status === "completed" ? "100%" : "12%", background: "var(--accent)", borderRadius: 6, transition: "width .4s" }} />
+            </div>
+            <div style={{ marginTop: 8, fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.6, overflowWrap: "anywhere" }}>
+              已完成目录 {(remote.directories?.done || 0).toLocaleString()} · 待扫描 {(remote.directories?.pending || 0).toLocaleString()} · 错误 {(remote.errors || 0).toLocaleString()}
+              {remote.lastPath ? <> · 当前：{remote.lastPath}</> : null}
+            </div>
+            {(remote.hints?.screenshot?.files || remote.hints?.screen_recording?.files) ? (
+              <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--text-secondary)" }}>
+                初步标记：截图 {(remote.hints?.screenshot?.files || 0).toLocaleString()} · 录屏 {(remote.hints?.screen_recording?.files || 0).toLocaleString()}（只标记，尚未删除）
+              </div>
+            ) : null}
+            {remote.message && <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--orange)" }}>{remote.message}</div>}
+          </div>
+        )}
+      </div>
+
+      {/* 浏览器文件夹模式适合较小的本地媒体库。 */}
+      <div style={{ ...card, padding: "20px 26px", marginBottom: 18 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>浏览器文件夹模式（适合小型本地目录）</div>
         <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 14 }}>
           指定一个文件夹当媒体库：把全家照片都拷进这个文件夹，App 只建立索引与缩略图，<strong>原文件留在磁盘、不复制</strong>。之后点「同步」即可更新新增/删除。需 Chrome / Edge 浏览器。
         </div>
@@ -127,6 +243,15 @@ export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
           {result.added > 0 && <Btn variant="soft" onClick={goGallery}>去看图库</Btn>}
         </div>
       )}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ background: "var(--fill-quaternary)", padding: "9px 11px", borderRadius: 9 }}>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{value}</div>
     </div>
   );
 }

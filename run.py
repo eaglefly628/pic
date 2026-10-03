@@ -22,8 +22,10 @@ import json
 import mimetypes
 import os
 import re
+import signal
 import shutil
 import socketserver
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -105,6 +107,205 @@ DATA_VERSION = 4
 # 老安装版不会发送 syncProtocol；它的写入会被保留成冲突副本，但不能覆盖 current.home。
 SYNC_PROTOCOL = 2
 DATA_DIR = data_dir()
+
+# 家庭影像的大型 Samba 目录索引保存在本机，不把 SQLite 放到网络盘上，避免掉线或
+# SMB 文件锁导致数据库损坏。源目录始终只读；真正的整理/移动将来走独立审核流程。
+PHOTO_INDEX_DB = DATA_DIR / "photo-index.sqlite3"
+PHOTO_INDEX_LOG = DATA_DIR / "photo-index.log"
+PHOTO_INDEX_SCRIPT = ROOT / "project-two" / "scripts" / "photo_index.py"
+PHOTO_DEFAULT_SOURCE = Path("/Volumes/24684804")
+_PHOTO_SCAN_LOCK = threading.Lock()
+_PHOTO_SCAN_PROC = None
+_PHOTO_SCAN_LOG_HANDLE = None
+
+
+def _photo_source_path(value=None):
+    """只允许扫描 /Volumes 下已挂载的目录，避免网页借 API 枚举任意本机文件。"""
+    raw = str(value or PHOTO_DEFAULT_SOURCE).strip()
+    if not raw:
+        raise ValueError("请选择已挂载的 Samba 目录")
+    source = Path(raw).expanduser().resolve()
+    volumes = Path("/Volumes").resolve()
+    try:
+        source.relative_to(volumes)
+    except ValueError as exc:
+        raise ValueError("只允许扫描 /Volumes 下已挂载的外部或网络目录") from exc
+    if source == volumes or not source.is_dir() or not os.access(source, os.R_OK):
+        raise ValueError(f"目录不可读或尚未挂载：{source}")
+    return source
+
+
+def photo_sources():
+    """列出当前可供只读索引的挂载卷，不递归读取其中内容。"""
+    found = []
+    volumes = Path("/Volumes")
+    try:
+        children = sorted(volumes.iterdir(), key=lambda p: p.name.casefold())
+    except OSError:
+        children = []
+    for child in children:
+        try:
+            resolved = child.resolve()
+            resolved.relative_to(volumes.resolve())
+            if child.name == "Macintosh HD" or not resolved.is_dir():
+                continue
+            found.append({
+                "name": child.name,
+                "path": str(resolved),
+                "readable": os.access(resolved, os.R_OK),
+                "writable": os.access(resolved, os.W_OK),
+            })
+        except (OSError, ValueError):
+            continue
+    return found
+
+
+def _photo_process_alive():
+    global _PHOTO_SCAN_PROC, _PHOTO_SCAN_LOG_HANDLE
+    with _PHOTO_SCAN_LOCK:
+        alive = _PHOTO_SCAN_PROC is not None and _PHOTO_SCAN_PROC.poll() is None
+        if _PHOTO_SCAN_PROC is not None and not alive:
+            _PHOTO_SCAN_PROC = None
+            if _PHOTO_SCAN_LOG_HANDLE is not None:
+                try:
+                    _PHOTO_SCAN_LOG_HANDLE.close()
+                except Exception:
+                    pass
+                _PHOTO_SCAN_LOG_HANDLE = None
+        return alive
+
+
+def photo_index_status():
+    """返回索引数据库的唯一文件计数；避免暂停重试导致进度累计值重复。"""
+    alive = _photo_process_alive()
+    base = {
+        "ok": True,
+        "status": "not_started",
+        "processAlive": alive,
+        "db": str(PHOTO_INDEX_DB),
+        "sources": photo_sources(),
+        "defaultSource": str(PHOTO_DEFAULT_SOURCE),
+        "readOnly": True,
+    }
+    if not PHOTO_INDEX_DB.is_file():
+        return base
+    try:
+        uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=3) as conn:
+            conn.row_factory = sqlite3.Row
+            run = conn.execute(
+                """SELECT r.*,s.root,s.label FROM scan_runs r JOIN sources s ON s.id=r.source_id
+                   ORDER BY r.id DESC LIMIT 1"""
+            ).fetchone()
+            if not run:
+                return base
+            run_id, sid = int(run["id"]), int(run["source_id"])
+            totals = conn.execute(
+                """SELECT kind,count(*) files,coalesce(sum(size),0) bytes
+                   FROM media_files WHERE source_id=? AND status='active' GROUP BY kind""",
+                (sid,),
+            ).fetchall()
+            hints = conn.execute(
+                """SELECT classification_hint,count(*) files,coalesce(sum(size),0) bytes
+                   FROM media_files WHERE source_id=? AND status='active' AND classification_hint IS NOT NULL
+                   GROUP BY classification_hint""",
+                (sid,),
+            ).fetchall()
+            dirs = conn.execute(
+                "SELECT status,count(*) n FROM directories WHERE run_id=? GROUP BY status", (run_id,)
+            ).fetchall()
+            indexed_this_run = conn.execute(
+                "SELECT count(*) files FROM media_files WHERE source_id=? AND last_seen_run=?",
+                (sid, run_id),
+            ).fetchone()["files"]
+            top = conn.execute(
+                """SELECT CASE instr(rel_path,'/') WHEN 0 THEN '(根目录)'
+                          ELSE substr(rel_path,1,instr(rel_path,'/')-1) END topDir,
+                          count(*) files,
+                          sum(CASE WHEN kind IN ('image','video') THEN 1 ELSE 0 END) media,
+                          coalesce(sum(size),0) bytes
+                   FROM media_files WHERE source_id=? AND status='active'
+                   GROUP BY topDir ORDER BY media DESC,files DESC LIMIT 12""",
+                (sid,),
+            ).fetchall()
+        raw_status = str(run["status"])
+        interrupted = raw_status == "running" and not alive
+        base.update({
+            "status": "paused" if interrupted else raw_status,
+            "interrupted": interrupted,
+            "runId": run_id,
+            "source": str(run["root"]),
+            "startedAt": run["started_at"],
+            "finishedAt": run["finished_at"],
+            "updatedAt": run["updated_at"],
+            "indexedThisRun": indexed_this_run,
+            "errors": int(run["errors"]),
+            "lastPath": run["last_path"],
+            "message": ("上次扫描意外中断，可以安全续跑" if interrupted else run["message"]),
+            "totals": {str(r["kind"]): {"files": int(r["files"]), "bytes": int(r["bytes"])} for r in totals},
+            "hints": {str(r["classification_hint"]): {"files": int(r["files"]), "bytes": int(r["bytes"])} for r in hints},
+            "directories": {str(r["status"]): int(r["n"]) for r in dirs},
+            "topDirectories": [dict(r) for r in top],
+        })
+        return base
+    except (OSError, sqlite3.Error) as exc:
+        base.update({"ok": False, "status": "error", "error": f"无法读取照片索引：{exc}"})
+        return base
+
+
+def photo_scan_start(spec):
+    global _PHOTO_SCAN_PROC, _PHOTO_SCAN_LOG_HANDLE
+    source = _photo_source_path((spec or {}).get("source"))
+    if not PHOTO_INDEX_SCRIPT.is_file():
+        return {"ok": False, "error": "照片索引程序缺失，请重新构建项目"}
+    with _PHOTO_SCAN_LOCK:
+        if _PHOTO_SCAN_PROC is not None and _PHOTO_SCAN_PROC.poll() is None:
+            return {"ok": True, "status": "running", "processAlive": True, "source": str(source)}
+        PHOTO_INDEX_DB.parent.mkdir(parents=True, exist_ok=True)
+        log_handle = PHOTO_INDEX_LOG.open("a", encoding="utf-8")
+        try:
+            os.chmod(PHOTO_INDEX_LOG, 0o600)
+        except OSError:
+            pass
+        cmd = [sys.executable, str(PHOTO_INDEX_SCRIPT), "--db", str(PHOTO_INDEX_DB), "scan", str(source)]
+        if bool((spec or {}).get("newRun")):
+            cmd.append("--new-run")
+        try:
+            _PHOTO_SCAN_PROC = subprocess.Popen(
+                cmd, cwd=str(ROOT), stdout=log_handle, stderr=subprocess.STDOUT,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            )
+            _PHOTO_SCAN_LOG_HANDLE = log_handle
+        except Exception:
+            log_handle.close()
+            raise
+    result = photo_index_status()
+    if result.get("status") == "not_started":
+        result.update({"status": "running", "processAlive": True, "source": str(source)})
+    return result
+
+
+def photo_scan_pause():
+    with _PHOTO_SCAN_LOCK:
+        proc = _PHOTO_SCAN_PROC
+        if proc is not None and proc.poll() is None:
+            proc.send_signal(signal.SIGINT)
+            return {"ok": True, "status": "pausing", "processAlive": True}
+    result = photo_index_status()
+    result["message"] = result.get("message") or "当前没有正在运行的扫描"
+    return result
+
+
+def photo_scan_shutdown():
+    """入口退出时让索引器在当前目录边界安全落盘，留下可续跑状态。"""
+    with _PHOTO_SCAN_LOCK:
+        proc = _PHOTO_SCAN_PROC
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.send_signal(signal.SIGINT)
+            proc.wait(timeout=8)
+        except Exception:
+            pass
 
 
 def _atomic_write(path: Path, data: bytes):
@@ -333,7 +534,8 @@ def _tighten_perms():
     """启动时把旧版本留下的 644 备份文件收紧成 600（新写的文件在 _atomic_write 里已经是 600）。
     只在多用户系统上有意义；Windows 上 chmod 基本无效，失败静默。"""
     try:
-        files = [DATA_DIR / "current.home"] + list((DATA_DIR / "backups").glob("*.home"))
+        files = [DATA_DIR / "current.home", PHOTO_INDEX_DB, PHOTO_INDEX_LOG,
+                 PHOTO_INDEX_DB.with_suffix(PHOTO_INDEX_DB.suffix + ".lock")] + list((DATA_DIR / "backups").glob("*.home"))
         for f in files:
             if f.is_file() and (f.stat().st_mode & 0o077):
                 os.chmod(f, 0o600)
@@ -924,6 +1126,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             from urllib.parse import urlparse, parse_qs
             q = parse_qs(urlparse(self.path).query)
             return self._send_json(disk_ls((q.get("path") or [""])[0]))
+        if bare == "/api/photos/index/status":
+            return self._send_json(photo_index_status())
         target = resolve(self.path)
         if not target:
             self.send_error(404)
@@ -948,6 +1152,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         bare = self.path.split("?")[0]
+        if bare in ("/api/photos/index/start", "/api/photos/index/pause"):
+            origin = self.headers.get("Origin", "")
+            # localhost/127.0.0.1 的开发端口也允许；服务本身只监听环回地址。
+            if origin and not re.match(r"^http://(?:localhost|127\.0\.0\.1):\d+$", origin):
+                self.send_error(403); return
+            try:
+                ln = int(self.headers.get("Content-Length", "0") or "0")
+                spec = json.loads(self.rfile.read(ln) or b"{}") if ln else {}
+                res = photo_scan_start(spec) if bare.endswith("/start") else photo_scan_pause()
+            except Exception as e:
+                res = {"ok": False, "error": str(e)}
+            return self._send_json(res)
         if bare == "/api/backup/keep":
             origin = self.headers.get("Origin", "")
             if origin and origin not in ("http://localhost:%d" % PORT, "http://127.0.0.1:%d" % PORT):
@@ -1003,6 +1219,11 @@ def main() -> int:
             webbrowser.open(url)
         return 0
     with httpd:
+        # Electron 关闭窗口时发送 SIGTERM；转成正常退出，先让正在扫描的目录安全落盘。
+        if hasattr(signal, "SIGTERM"):
+            def _handle_term(_signum, _frame):
+                raise KeyboardInterrupt
+            signal.signal(signal.SIGTERM, _handle_term)
         _tighten_perms()
         _tag = f"v{APP_LABEL}  ·  {'开发版' if APP_CHANNEL == 'dev' else '发布版'}"
         print("┌──────────────────────────────────────────────┐")
@@ -1018,6 +1239,8 @@ def main() -> int:
             httpd.serve_forever()
         except KeyboardInterrupt:
             print("\n已退出。")
+        finally:
+            photo_scan_shutdown()
     return 0
 
 
