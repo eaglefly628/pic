@@ -5,7 +5,7 @@ import { IconUpload, IconImage } from "../icons";
 import { fmtSize } from "../lib/format";
 import { getRemoteIndexStatus, pauseRemoteIndex, startRemoteIndex, type RemoteIndexStatus } from "../lib/remoteIndex";
 
-export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
+export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => void; goIndex: () => void }) {
   const { addFile, albums, baseDir, pickBaseDir, syncBaseDir, disconnectBaseDir } = useLibrary();
   const [bprog, setBprog] = useState<{ done: number; total: number } | null>(null);
   const runBase = async (fn: (cb: (d: number, t: number) => void) => Promise<void>) => {
@@ -159,6 +159,7 @@ export default function ImportScreen({ goGallery }: { goGallery: () => void }) {
               </div>
             ) : null}
             {remote.message && <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--orange)" }}>{remote.message}</div>}
+            {remote.status === "completed" && <div style={{ marginTop: 12 }}><Btn variant="soft" onClick={goIndex}>查看完整索引报告与下一步</Btn></div>}
           </div>
         )}
       </div>

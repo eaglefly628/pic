@@ -66,3 +66,6 @@ export const IconImage = ({ size = 30, stroke = "#fff", width = 1.6 }: P) => (
 export const IconWand = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
   <svg {...base(size, stroke, width)}><path d="M5 19 16 8" /><path d="m15 4 .6 1.6L17 6l-1.4.4L15 8l-.6-1.6L13 6l1.4-.4Z" /><path d="m19 11 .5 1.3 1.5.5-1.5.5-.5 1.3-.5-1.3-1.5-.5 1.5-.5Z" /></svg>
 );
+export const IconDatabase = ({ size = 17, stroke = "currentColor", width = 1.7 }: P) => (
+  <svg {...base(size, stroke, width)}><ellipse cx="12" cy="5.5" rx="8" ry="3" /><path d="M4 5.5v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /><path d="M4 11.5v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></svg>
+);

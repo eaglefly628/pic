@@ -228,6 +228,18 @@ def photo_index_status():
                    GROUP BY topDir ORDER BY media DESC,files DESC LIMIT 12""",
                 (sid,),
             ).fetchall()
+            extensions = conn.execute(
+                """SELECT CASE WHEN extension='' THEN '(无扩展名)' ELSE upper(extension) END extension,
+                          kind,count(*) files,coalesce(sum(size),0) bytes
+                   FROM media_files WHERE source_id=? AND status='active' AND kind IN ('image','video')
+                   GROUP BY kind,extension ORDER BY files DESC LIMIT 16""",
+                (sid,),
+            ).fetchall()
+            skipped = conn.execute(
+                """SELECT rel_path,last_error FROM directories
+                   WHERE run_id=? AND status='skipped' ORDER BY rel_path""",
+                (run_id,),
+            ).fetchall()
         raw_status = str(run["status"])
         interrupted = raw_status == "running" and not alive
         base.update({
@@ -246,11 +258,57 @@ def photo_index_status():
             "hints": {str(r["classification_hint"]): {"files": int(r["files"]), "bytes": int(r["bytes"])} for r in hints},
             "directories": {str(r["status"]): int(r["n"]) for r in dirs},
             "topDirectories": [dict(r) for r in top],
+            "extensions": [dict(r) for r in extensions],
+            "skippedDirectories": [dict(r) for r in skipped],
+            "dbBytes": PHOTO_INDEX_DB.stat().st_size if PHOTO_INDEX_DB.is_file() else 0,
         })
         return base
     except (OSError, sqlite3.Error) as exc:
         base.update({"ok": False, "status": "error", "error": f"无法读取照片索引：{exc}"})
         return base
+
+
+def photo_index_files(params):
+    """分页浏览本机照片索引；只返回元数据，不读取或传输媒体内容。"""
+    if not PHOTO_INDEX_DB.is_file():
+        return {"ok": True, "total": 0, "items": []}
+    try:
+        limit = min(200, max(1, int((params.get("limit") or ["100"])[0])))
+        offset = max(0, int((params.get("offset") or ["0"])[0]))
+    except ValueError:
+        limit, offset = 100, 0
+    kind = str((params.get("kind") or [""])[0]).lower()
+    if kind not in ("image", "video", "sidecar", "other"):
+        kind = ""
+    query = str((params.get("q") or [""])[0]).strip()[:100]
+    uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+    try:
+        with sqlite3.connect(uri, uri=True, timeout=3) as conn:
+            conn.row_factory = sqlite3.Row
+            source = conn.execute("SELECT source_id FROM scan_runs ORDER BY id DESC LIMIT 1").fetchone()
+            if not source:
+                return {"ok": True, "total": 0, "items": []}
+            where = ["source_id=?", "status='active'"]
+            values = [int(source["source_id"])]
+            if kind:
+                where.append("kind=?")
+                values.append(kind)
+            if query:
+                escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                where.append("rel_path LIKE ? ESCAPE '\\'")
+                values.append(f"%{escaped}%")
+            clause = " AND ".join(where)
+            total = int(conn.execute(f"SELECT count(*) n FROM media_files WHERE {clause}", values).fetchone()["n"])
+            rows = conn.execute(
+                f"""SELECT rel_path AS relPath,name,kind,extension,size,mtime_ns AS mtimeNs,
+                            classification_hint AS classificationHint,status
+                     FROM media_files WHERE {clause}
+                     ORDER BY rel_path COLLATE NOCASE LIMIT ? OFFSET ?""",
+                [*values, limit, offset],
+            ).fetchall()
+        return {"ok": True, "total": total, "offset": offset, "limit": limit, "items": [dict(r) for r in rows]}
+    except (OSError, sqlite3.Error) as exc:
+        return {"ok": False, "error": f"无法读取索引记录：{exc}", "total": 0, "items": []}
 
 
 def photo_scan_start(spec):
@@ -294,6 +352,18 @@ def photo_scan_pause():
     result = photo_index_status()
     result["message"] = result.get("message") or "当前没有正在运行的扫描"
     return result
+
+
+def photo_index_reveal():
+    """只在本机文件管理器中显示固定的索引数据库，不接受网页传入路径。"""
+    target = PHOTO_INDEX_DB if PHOTO_INDEX_DB.is_file() else PHOTO_INDEX_DB.parent
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(target)])
+    elif os.name == "nt":
+        subprocess.Popen(["explorer", "/select,", str(target)])
+    else:
+        subprocess.Popen(["xdg-open", str(target.parent if target.is_file() else target)])
+    return {"ok": True, "path": str(target)}
 
 
 def photo_scan_shutdown():
@@ -1128,6 +1198,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send_json(disk_ls((q.get("path") or [""])[0]))
         if bare == "/api/photos/index/status":
             return self._send_json(photo_index_status())
+        if bare == "/api/photos/index/files":
+            from urllib.parse import urlparse, parse_qs
+            return self._send_json(photo_index_files(parse_qs(urlparse(self.path).query)))
         target = resolve(self.path)
         if not target:
             self.send_error(404)
@@ -1152,7 +1225,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         bare = self.path.split("?")[0]
-        if bare in ("/api/photos/index/start", "/api/photos/index/pause"):
+        if bare in ("/api/photos/index/start", "/api/photos/index/pause", "/api/photos/index/reveal"):
             origin = self.headers.get("Origin", "")
             # localhost/127.0.0.1 的开发端口也允许；服务本身只监听环回地址。
             if origin and not re.match(r"^http://(?:localhost|127\.0\.0\.1):\d+$", origin):
@@ -1160,7 +1233,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 ln = int(self.headers.get("Content-Length", "0") or "0")
                 spec = json.loads(self.rfile.read(ln) or b"{}") if ln else {}
-                res = photo_scan_start(spec) if bare.endswith("/start") else photo_scan_pause()
+                if bare.endswith("/start"):
+                    res = photo_scan_start(spec)
+                elif bare.endswith("/pause"):
+                    res = photo_scan_pause()
+                else:
+                    res = photo_index_reveal()
             except Exception as e:
                 res = {"ok": False, "error": str(e)}
             return self._send_json(res)
