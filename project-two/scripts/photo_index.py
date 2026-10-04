@@ -393,8 +393,21 @@ def scan(args: argparse.Namespace) -> int:
                             (dir_entries, now_ms(), sid, rel_dir),
                         )
                     conn.commit()
+                except PermissionError as exc:
+                    # NAS 常见按目录授权：单个无权限目录只记录并跳过，不能阻塞其它照片目录。
+                    conn.execute(
+                        """UPDATE directories SET status='skipped',last_error=?,updated_at=?
+                           WHERE source_id=? AND rel_path=?""",
+                        (str(exc), now_ms(), sid, rel_dir),
+                    )
+                    conn.execute(
+                        "UPDATE scan_runs SET errors=errors+1,message=?,updated_at=? WHERE id=?",
+                        (f"已跳过无权限目录：{rel_dir or '/'}", now_ms(), run_id),
+                    )
+                    conn.commit()
+                    print(json.dumps({"event": "directory_skipped", "path": rel_dir, "reason": str(exc)}, ensure_ascii=False), flush=True)
                 except OSError as exc:
-                    # 网络断开、权限丢失或单目录损坏：保留为 pending，下次从该目录重试。
+                    # 网络断开或共享盘消失：保留为 pending，下次从该目录重试。
                     conn.execute(
                         """UPDATE directories SET status='pending',last_error=?,updated_at=?
                            WHERE source_id=? AND rel_path=?""",
@@ -419,9 +432,14 @@ def scan(args: argparse.Namespace) -> int:
 
             # 只有完整遍历成功后才标记缺失，断网/暂停绝不把未看到的文件误判为已删除。
             conn.execute(
-                """UPDATE media_files SET status='missing',updated_at=?
-                   WHERE source_id=? AND status='active' AND last_seen_run<>?""",
-                (now_ms(), sid, run_id),
+                """UPDATE media_files AS m SET status='missing',updated_at=?
+                   WHERE m.source_id=? AND m.status='active' AND m.last_seen_run<>?
+                     AND NOT EXISTS (
+                       SELECT 1 FROM directories d
+                       WHERE d.source_id=m.source_id AND d.run_id=? AND d.status='skipped'
+                         AND (m.parent_path=d.rel_path OR m.parent_path LIKE d.rel_path || '/%')
+                     )""",
+                (now_ms(), sid, run_id, run_id),
             )
             stamp = now_ms()
             conn.execute(
