@@ -51,6 +51,22 @@
         "to": "payload/project-two/scripts/photo_index.py"
       },
       {
+        "from": "../project-two/scripts/photo_metadata.py",
+        "to": "payload/project-two/scripts/photo_metadata.py"
+      },
+      {
+        "from": "../project-two/scripts/photo_metadata_worker.cjs",
+        "to": "payload/project-two/scripts/photo_metadata_worker.cjs"
+      },
+      {
+        "from": "../project-two/node_modules/exifr/dist/full.umd.cjs",
+        "to": "payload/project-two/scripts/vendor/exifr.umd.cjs"
+      },
+      {
+        "from": "../project-two/node_modules/exifr/LICENSE",
+        "to": "payload/project-two/scripts/vendor/exifr.LICENSE"
+      },
+      {
         "from": "../project-three/dist",
         "to": "payload/project-three/dist"
       },

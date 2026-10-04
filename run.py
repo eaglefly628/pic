@@ -13,9 +13,10 @@
     /dev/*       -> project-four/dist（男主的开发世界）
 
 直接运行：  python run.py     （或双击 start.bat）
-数据全部保存在本机，不联网、不上传。按 Ctrl+C 退出。
+业务数据保存在本机；影像索引可按用户操作备份到已挂载的家庭存储，不上传互联网。按 Ctrl+C 退出。
 """
 import csv
+import contextlib
 import http.server
 import io
 import json
@@ -113,10 +114,15 @@ DATA_DIR = data_dir()
 PHOTO_INDEX_DB = DATA_DIR / "photo-index.sqlite3"
 PHOTO_INDEX_LOG = DATA_DIR / "photo-index.log"
 PHOTO_INDEX_SCRIPT = ROOT / "project-two" / "scripts" / "photo_index.py"
+PHOTO_METADATA_SCRIPT = ROOT / "project-two" / "scripts" / "photo_metadata.py"
+PHOTO_METADATA_LOG = DATA_DIR / "photo-metadata.log"
 PHOTO_DEFAULT_SOURCE = Path("/Volumes/24684804")
 _PHOTO_SCAN_LOCK = threading.Lock()
 _PHOTO_SCAN_PROC = None
 _PHOTO_SCAN_LOG_HANDLE = None
+_PHOTO_METADATA_LOCK = threading.Lock()
+_PHOTO_METADATA_PROC = None
+_PHOTO_METADATA_LOG_HANDLE = None
 
 
 def _photo_source_path(value=None):
@@ -175,9 +181,23 @@ def _photo_process_alive():
         return alive
 
 
+def _photo_metadata_process_alive():
+    global _PHOTO_METADATA_PROC, _PHOTO_METADATA_LOG_HANDLE
+    with _PHOTO_METADATA_LOCK:
+        alive = _PHOTO_METADATA_PROC is not None and _PHOTO_METADATA_PROC.poll() is None
+        if _PHOTO_METADATA_PROC is not None and not alive:
+            _PHOTO_METADATA_PROC = None
+            if _PHOTO_METADATA_LOG_HANDLE is not None:
+                with contextlib.suppress(Exception):
+                    _PHOTO_METADATA_LOG_HANDLE.close()
+                _PHOTO_METADATA_LOG_HANDLE = None
+        return alive
+
+
 def photo_index_status():
     """返回索引数据库的唯一文件计数；避免暂停重试导致进度累计值重复。"""
     alive = _photo_process_alive()
+    metadata_alive = _photo_metadata_process_alive()
     base = {
         "ok": True,
         "status": "not_started",
@@ -240,6 +260,43 @@ def photo_index_status():
                    WHERE run_id=? AND status='skipped' ORDER BY rel_path""",
                 (run_id,),
             ).fetchall()
+            media_total = sum(int(r["files"]) for r in totals if str(r["kind"]) in ("image", "video"))
+            metadata_analysis = {
+                "status": "running" if metadata_alive else "not_started",
+                "processAlive": metadata_alive,
+                "total": media_total,
+                "processed": 0,
+                "withTime": 0,
+                "withGps": 0,
+                "needsReview": 0,
+                "errors": 0,
+            }
+            has_analysis = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='analysis_runs'"
+            ).fetchone()
+            if has_analysis:
+                analysis = conn.execute(
+                    """SELECT * FROM analysis_runs WHERE source_id=? AND analysis_type='metadata'
+                       ORDER BY id DESC LIMIT 1""",
+                    (sid,),
+                ).fetchone()
+                if analysis:
+                    analysis_status = str(analysis["status"])
+                    if analysis_status == "running" and not metadata_alive:
+                        analysis_status = "paused"
+                    metadata_analysis.update({
+                        "status": analysis_status,
+                        "processAlive": metadata_alive,
+                        "runId": int(analysis["id"]),
+                        "total": int(analysis["total"]),
+                        "processed": int(analysis["processed"]),
+                        "withTime": int(analysis["with_time"]),
+                        "withGps": int(analysis["with_gps"]),
+                        "needsReview": int(analysis["needs_review"]),
+                        "errors": int(analysis["errors"]),
+                        "lastPath": analysis["last_path"],
+                        "message": analysis["message"],
+                    })
         raw_status = str(run["status"])
         interrupted = raw_status == "running" and not alive
         base.update({
@@ -261,6 +318,7 @@ def photo_index_status():
             "extensions": [dict(r) for r in extensions],
             "skippedDirectories": [dict(r) for r in skipped],
             "dbBytes": PHOTO_INDEX_DB.stat().st_size if PHOTO_INDEX_DB.is_file() else 0,
+            "metadataAnalysis": metadata_analysis,
         })
         return base
     except (OSError, sqlite3.Error) as exc:
@@ -333,10 +391,12 @@ def photo_scan_start(spec):
                 cmd, cwd=str(ROOT), stdout=log_handle, stderr=subprocess.STDOUT,
                 env={**os.environ, "PYTHONUNBUFFERED": "1"},
             )
+            scan_proc = _PHOTO_SCAN_PROC
             _PHOTO_SCAN_LOG_HANDLE = log_handle
         except Exception:
             log_handle.close()
             raise
+    threading.Thread(target=_backup_after_photo_job, args=(scan_proc, "scan"), daemon=True).start()
     result = photo_index_status()
     if result.get("status") == "not_started":
         result.update({"status": "running", "processAlive": True, "source": str(source)})
@@ -352,6 +412,111 @@ def photo_scan_pause():
     result = photo_index_status()
     result["message"] = result.get("message") or "当前没有正在运行的扫描"
     return result
+
+
+def photo_metadata_start(spec):
+    global _PHOTO_METADATA_PROC, _PHOTO_METADATA_LOG_HANDLE
+    if _photo_process_alive():
+        return {"ok": False, "error": "文件索引正在运行，请等待完成后再分析时间与地点"}
+    source = _photo_source_path((spec or {}).get("source"))
+    if not PHOTO_METADATA_SCRIPT.is_file():
+        return {"ok": False, "error": "时间与地点分析程序缺失，请重新构建项目"}
+    with _PHOTO_METADATA_LOCK:
+        if _PHOTO_METADATA_PROC is not None and _PHOTO_METADATA_PROC.poll() is None:
+            return {"ok": True, "metadataAnalysis": {"status": "running", "processAlive": True}}
+        log_handle = PHOTO_METADATA_LOG.open("a", encoding="utf-8")
+        with contextlib.suppress(OSError):
+            os.chmod(PHOTO_METADATA_LOG, 0o600)
+        cmd = [sys.executable, str(PHOTO_METADATA_SCRIPT), "--db", str(PHOTO_INDEX_DB)]
+        try:
+            _PHOTO_METADATA_PROC = subprocess.Popen(
+                cmd, cwd=str(ROOT), stdout=log_handle, stderr=subprocess.STDOUT,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            )
+            metadata_proc = _PHOTO_METADATA_PROC
+            _PHOTO_METADATA_LOG_HANDLE = log_handle
+        except Exception:
+            log_handle.close()
+            raise
+    threading.Thread(target=_backup_after_photo_job, args=(metadata_proc, "metadata"), daemon=True).start()
+    result = photo_index_status()
+    result.setdefault("metadataAnalysis", {}).update({"status": "running", "processAlive": True})
+    result["source"] = str(source)
+    return result
+
+
+def photo_metadata_pause():
+    with _PHOTO_METADATA_LOCK:
+        proc = _PHOTO_METADATA_PROC
+        if proc is not None and proc.poll() is None:
+            proc.send_signal(signal.SIGINT)
+            return {"ok": True, "status": "pausing"}
+    return {"ok": True, "status": "paused", "message": "当前没有正在运行的时间与地点分析"}
+
+
+def photo_index_backup():
+    """生成 SQLite 一致性快照；本机留档后，挂载可写时再复制到 S300。"""
+    if not PHOTO_INDEX_DB.is_file():
+        return {"ok": False, "error": "尚未建立照片索引"}
+    stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
+    local_dir = DATA_DIR / "backups" / "photo-index"
+    local_dir.mkdir(parents=True, exist_ok=True)
+    local_path = local_dir / f"photo-index-{stamp}.sqlite3"
+    temp_path = local_path.with_suffix(".tmp.sqlite3")
+    try:
+        with sqlite3.connect(PHOTO_INDEX_DB) as source, sqlite3.connect(temp_path) as dest:
+            source.backup(dest)
+        with contextlib.suppress(OSError):
+            os.chmod(temp_path, 0o600)
+        os.replace(temp_path, local_path)
+    finally:
+        with contextlib.suppress(OSError):
+            if temp_path.exists():
+                temp_path.unlink()
+
+    try:
+        uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=3) as conn:
+            root_row = conn.execute(
+                """SELECT s.root FROM scan_runs r JOIN sources s ON s.id=r.source_id
+                   ORDER BY r.id DESC LIMIT 1"""
+            ).fetchone()
+        root = _photo_source_path(root_row[0] if root_row else None)
+        if not os.access(root, os.W_OK):
+            raise ValueError(f"S300 当前没有写入权限：{root}")
+        remote_dir = root / "我家里的一切-索引备份"
+        remote_dir.mkdir(parents=True, exist_ok=True)
+        remote_path = remote_dir / local_path.name
+        remote_temp = remote_path.with_suffix(".uploading")
+        shutil.copy2(local_path, remote_temp)
+        os.replace(remote_temp, remote_path)
+        return {"ok": True, "bytes": local_path.stat().st_size, "localPath": str(local_path), "remotePath": str(remote_path)}
+    except Exception as exc:
+        return {"ok": False, "error": f"本机备份已保存，但尚未上传到 S300：{exc}",
+                "bytes": local_path.stat().st_size, "localPath": str(local_path)}
+
+
+def _backup_after_photo_job(proc, phase):
+    """完整扫描或元数据分析结束后自动做一致性快照；暂停不会产生冗余备份。"""
+    try:
+        exit_code = proc.wait()
+        if exit_code != 0:
+            return
+        status = photo_index_status()
+        completed = status.get("status") == "completed"
+        if phase == "metadata":
+            completed = status.get("metadataAnalysis", {}).get("status") == "completed"
+        if not completed:
+            return
+        result = photo_index_backup()
+        line = json.dumps({"event": "automatic_index_backup", "phase": phase, **result}, ensure_ascii=False)
+        with PHOTO_INDEX_LOG.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+    except Exception as exc:
+        with contextlib.suppress(Exception):
+            with PHOTO_INDEX_LOG.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"event": "automatic_index_backup_error", "phase": phase,
+                                         "error": str(exc)}, ensure_ascii=False) + "\n")
 
 
 def photo_index_reveal():
@@ -376,6 +541,12 @@ def photo_scan_shutdown():
             proc.wait(timeout=8)
         except Exception:
             pass
+    with _PHOTO_METADATA_LOCK:
+        metadata_proc = _PHOTO_METADATA_PROC
+    if metadata_proc is not None and metadata_proc.poll() is None:
+        with contextlib.suppress(Exception):
+            metadata_proc.send_signal(signal.SIGINT)
+            metadata_proc.wait(timeout=8)
 
 
 def _atomic_write(path: Path, data: bytes):
@@ -1225,7 +1396,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         bare = self.path.split("?")[0]
-        if bare in ("/api/photos/index/start", "/api/photos/index/pause", "/api/photos/index/reveal"):
+        if bare in ("/api/photos/index/start", "/api/photos/index/pause", "/api/photos/index/reveal",
+                    "/api/photos/index/backup", "/api/photos/metadata/start", "/api/photos/metadata/pause"):
             origin = self.headers.get("Origin", "")
             # localhost/127.0.0.1 的开发端口也允许；服务本身只监听环回地址。
             if origin and not re.match(r"^http://(?:localhost|127\.0\.0\.1):\d+$", origin):
@@ -1233,10 +1405,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 ln = int(self.headers.get("Content-Length", "0") or "0")
                 spec = json.loads(self.rfile.read(ln) or b"{}") if ln else {}
-                if bare.endswith("/start"):
+                if bare == "/api/photos/index/start":
                     res = photo_scan_start(spec)
-                elif bare.endswith("/pause"):
+                elif bare == "/api/photos/index/pause":
                     res = photo_scan_pause()
+                elif bare == "/api/photos/metadata/start":
+                    res = photo_metadata_start(spec)
+                elif bare == "/api/photos/metadata/pause":
+                    res = photo_metadata_pause()
+                elif bare == "/api/photos/index/backup":
+                    res = photo_index_backup()
                 else:
                     res = photo_index_reveal()
             except Exception as e:

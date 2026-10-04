@@ -1,27 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { fmtSize } from "../lib/format";
 import {
-  getRemoteIndexFiles,
+  backupRemoteIndex,
   getRemoteIndexStatus,
+  pauseMetadataAnalysis,
   revealRemoteIndex,
+  startMetadataAnalysis,
   startRemoteIndex,
-  type RemoteIndexFile,
   type RemoteIndexStatus,
 } from "../lib/remoteIndex";
-import { Btn, Select, TextField, card } from "../ui";
-
-const PAGE_SIZE = 100;
+import { Btn, card } from "../ui";
 
 export default function RemoteIndex() {
   const [data, setData] = useState<RemoteIndexStatus | null>(null);
-  const [files, setFiles] = useState<RemoteIndexFile[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [kind, setKind] = useState("");
-  const [query, setQuery] = useState("");
-  const [appliedQuery, setAppliedQuery] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState("");
 
   const loadStatus = async () => {
     try { setData(await getRemoteIndexStatus()); }
@@ -30,17 +24,10 @@ export default function RemoteIndex() {
 
   useEffect(() => { void loadStatus(); }, []);
   useEffect(() => {
-    if (!data?.processAlive) return;
+    if (!data?.processAlive && !data?.metadataAnalysis?.processAlive) return;
     const timer = window.setInterval(() => void loadStatus(), 1800);
     return () => window.clearInterval(timer);
-  }, [data?.processAlive]);
-  useEffect(() => {
-    let active = true;
-    getRemoteIndexFiles({ offset, limit: PAGE_SIZE, kind, q: appliedQuery })
-      .then((next) => { if (active) { setFiles(next.items); setTotal(next.total); setError(next.ok ? "" : (next.error || "读取记录失败")); } })
-      .catch((err) => { if (active) setError(err instanceof Error ? err.message : "读取记录失败"); });
-    return () => { active = false; };
-  }, [offset, kind, appliedQuery]);
+  }, [data?.processAlive, data?.metadataAnalysis?.processAlive]);
 
   if (!data && !error) return <div style={{ padding: 32, color: "var(--text-tertiary)" }}>正在读取本机索引…</div>;
   if (!data) return <div style={{ padding: 32, color: "var(--red)" }}>{error}</div>;
@@ -63,8 +50,36 @@ export default function RemoteIndex() {
     finally { setBusy(false); }
   };
 
+  const analyzeMetadata = async () => {
+    if (!data.source) return;
+    setBusy(true); setError("");
+    try {
+      const next = await startMetadataAnalysis(data.source);
+      setData(next);
+      if (!next.ok) setError(next.error || "时间与地点分析启动失败");
+    } catch (err) { setError(err instanceof Error ? err.message : "时间与地点分析启动失败"); }
+    finally { setBusy(false); }
+  };
+
+  const pauseMetadata = async () => {
+    setBusy(true);
+    try { await pauseMetadataAnalysis(); await loadStatus(); }
+    catch (err) { setError(err instanceof Error ? err.message : "暂停分析失败"); }
+    finally { setBusy(false); }
+  };
+
+  const backupIndex = async () => {
+    setBusy(true); setBackupMessage(""); setError("");
+    try {
+      const result = await backupRemoteIndex();
+      if (result.ok) setBackupMessage(`已备份到 S300：${result.remotePath}`);
+      else setBackupMessage(result.error || `本机备份已保存：${result.localPath || ""}`);
+    } catch (err) { setError(err instanceof Error ? err.message : "备份失败"); }
+    finally { setBusy(false); }
+  };
+
   return (
-    <div style={{ padding: "24px 32px 42px", maxWidth: 1020, animation: "fvFade .25s ease" }}>
+    <div className="fv-remote-index" style={{ padding: "24px 32px 42px", width: "100%", maxWidth: 1020, boxSizing: "border-box", animation: "fvFade .25s ease" }}>
       <div style={{ ...card, padding: "20px 24px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 260 }}>
@@ -75,8 +90,11 @@ export default function RemoteIndex() {
             {data.status === "completed" ? "✓ 索引完成" : data.processAlive ? "● 扫描中" : "Ⅱ 可继续"}
           </span>
           <Btn variant="ghost" onClick={() => void revealRemoteIndex()}>显示数据库</Btn>
+          <Btn variant="ghost" onClick={backupIndex} disabled={busy}>备份数据库</Btn>
           <Btn onClick={rescan} disabled={busy || data.processAlive}>{busy ? "启动中…" : "检查新增文件"}</Btn>
         </div>
+        {backupMessage && <div style={{ marginTop: 10, fontSize: 11.5, color: backupMessage.startsWith("已备份到") ? "var(--green)" : "var(--orange)", overflowWrap: "anywhere" }}>{backupMessage}</div>}
+        {error && <div style={{ marginTop: 10, fontSize: 11.5, color: "var(--red)" }}>{error}</div>}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(135px,1fr))", gap: 10, marginTop: 17 }}>
           <Metric label="全部文件" value={totalFiles.toLocaleString()} />
@@ -102,21 +120,41 @@ export default function RemoteIndex() {
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 12 }}>下一步工作流</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 10 }}>
           <WorkflowStep index="1" title="文件索引" desc="清单、类型、容量和目录结构" state="已完成" active />
-          <WorkflowStep index="2" title="时间与地点" desc="提取 EXIF / 视频时间 / GPS，标记不确定项" state="下一步" />
-          <WorkflowStep index="3" title="重复检测" desc="按大小筛选，再用哈希确认完全重复" state="等待" />
-          <WorkflowStep index="4" title="清理审核" desc="人工确认后先隔离，不直接永久删除" state="等待" />
+          <WorkflowStep index="2" title="时间与地点" desc="提取照片 EXIF/GPS；视频先结合文件名与文件时间，标记不确定项"
+            state={data.metadataAnalysis?.status === "completed" ? "已完成" : data.metadataAnalysis?.processAlive ? "进行中" : "下一步"}
+            active={data.metadataAnalysis?.status === "completed"}
+            action={data.metadataAnalysis?.processAlive
+              ? <Btn variant="ghost" onClick={pauseMetadata} disabled={busy}>安全暂停</Btn>
+              : data.metadataAnalysis?.status === "completed"
+                ? <span style={{ fontSize: 11, color: "var(--green)" }}>时间与地点已分析</span>
+                : <Btn onClick={analyzeMetadata} disabled={busy}>{data.metadataAnalysis?.status === "paused" ? "继续分析" : "开始分析"}</Btn>} />
+          <WorkflowStep index="3" title="重复检测" desc="按大小筛选，再用哈希确认完全重复" state={data.metadataAnalysis?.status === "completed" ? "下一步" : "等待时间分析"}
+            action={<Btn variant="ghost" disabled style={{ opacity: .5, cursor: "not-allowed" }}>完成上一步后开放</Btn>} />
+          <WorkflowStep index="4" title="清理审核" desc="人工确认后先隔离，不直接永久删除" state="等待重复检测"
+            action={<Btn variant="ghost" disabled style={{ opacity: .5, cursor: "not-allowed" }}>完成重复检测后开放</Btn>} />
         </div>
+        {data.metadataAnalysis && data.metadataAnalysis.status !== "not_started" && (
+          <div style={{ marginTop: 13, padding: "11px 12px", borderRadius: 9, background: "var(--fill-quaternary)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11.5, color: "var(--text-secondary)" }}>
+              <span>时间地点分析：{data.metadataAnalysis.processed.toLocaleString()} / {data.metadataAnalysis.total.toLocaleString()}</span>
+              <span>GPS {(data.metadataAnalysis.withGps || 0).toLocaleString()} · 待确认 {(data.metadataAnalysis.needsReview || 0).toLocaleString()}</span>
+            </div>
+            <div style={{ height: 7, background: "var(--track)", borderRadius: 5, marginTop: 7, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${data.metadataAnalysis.total ? Math.min(100, data.metadataAnalysis.processed / data.metadataAnalysis.total * 100) : 0}%`, background: "var(--accent)", borderRadius: 5 }} />
+            </div>
+          </div>
+        )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(240px,1fr)", gap: 16, marginTop: 16 }}>
+      <div className="fv-report-split" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(240px,1fr)", gap: 16, marginTop: 16 }}>
         <div style={{ ...card, padding: "18px 22px" }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 12 }}>媒体最多的目录</div>
           <div style={{ display: "grid", gap: 10 }}>
             {(data.topDirectories || []).map((dir) => (
               <div key={dir.topDir}>
-                <div style={{ display: "flex", gap: 8, justifyContent: "space-between", fontSize: 11.5, marginBottom: 4 }}>
-                  <span title={dir.topDir} style={{ color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dir.topDir}</span>
-                  <span style={{ color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{dir.media.toLocaleString()} · {fmtSize(dir.bytes)}</span>
+                <div className="fv-directory-row" style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "baseline", fontSize: 11.5, marginBottom: 4 }}>
+                  <span title={dir.topDir} style={{ flex: "1 1 auto", minWidth: 0, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dir.topDir}</span>
+                  <span style={{ flex: "0 0 auto", color: "var(--text-tertiary)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{dir.media.toLocaleString()} · {fmtSize(dir.bytes)}</span>
                 </div>
                 <div style={{ height: 7, borderRadius: 5, background: "var(--track)", overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${Math.max(2, (dir.media / maxDir) * 100)}%`, borderRadius: 5, background: "var(--accent)" }} />
@@ -140,38 +178,8 @@ export default function RemoteIndex() {
         </div>
       </div>
 
-      <div style={{ ...card, padding: "18px 22px", marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 13 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>浏览索引记录</div>
-          <div style={{ flex: 1 }} />
-          <form onSubmit={(e) => { e.preventDefault(); setOffset(0); setAppliedQuery(query.trim()); }} style={{ display: "flex", gap: 7 }}>
-            <TextField value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索路径或文件名" style={{ width: 220, height: 32 }} />
-            <Btn variant="ghost" type="submit">搜索</Btn>
-          </form>
-          <Select value={kind} onChange={(e) => { setKind(e.target.value); setOffset(0); }} style={{ width: 120, height: 32 }} options={[
-            { value: "", label: "全部类型" }, { value: "image", label: "照片" }, { value: "video", label: "视频" }, { value: "other", label: "其他" }, { value: "sidecar", label: "辅助文件" },
-          ]} />
-        </div>
-        {error && <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 10 }}>{error}</div>}
-        <div style={{ border: "0.5px solid var(--separator)", borderRadius: 10, overflow: "hidden" }}>
-          {files.map((file, i) => (
-            <div key={file.relPath} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 72px 88px", gap: 10, alignItems: "center", padding: "8px 11px", borderTop: i ? "0.5px solid var(--separator)" : "none", background: i % 2 ? "var(--fill-quaternary)" : "transparent" }}>
-              <div title={file.relPath} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, color: "var(--text-primary)" }}>{file.relPath}</div>
-              <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", textTransform: "uppercase" }}>{file.extension || file.kind}</div>
-              <div style={{ fontSize: 11.5, textAlign: "right", color: "var(--text-tertiary)" }}>{fmtSize(file.size)}</div>
-            </div>
-          ))}
-          {!files.length && <div style={{ padding: 28, textAlign: "center", color: "var(--text-tertiary)", fontSize: 12.5 }}>没有匹配的记录</div>}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
-          <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>第 {total ? offset + 1 : 0}–{Math.min(offset + PAGE_SIZE, total)} 条，共 {total.toLocaleString()} 条</span>
-          <div style={{ flex: 1 }} />
-          <Btn variant="ghost" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>上一页</Btn>
-          <Btn variant="ghost" disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}>下一页</Btn>
-        </div>
-        <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-tertiary)", overflowWrap: "anywhere" }}>数据库：{data.db}</div>
-        {!!data.skippedDirectories?.length && <div style={{ marginTop: 4, fontSize: 11, color: "var(--orange)" }}>无权限跳过：{data.skippedDirectories.map((d) => d.rel_path || "(根目录)").join("、")}</div>}
-      </div>
+      <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-tertiary)", overflowWrap: "anywhere" }}>数据库：{data.db}</div>
+      {!!data.skippedDirectories?.length && <div style={{ marginTop: 4, fontSize: 11, color: "var(--orange)" }}>无权限跳过：{data.skippedDirectories.map((d) => d.rel_path || "(根目录)").join("、")}</div>}
     </div>
   );
 }
@@ -180,9 +188,10 @@ function Metric({ label, value }: { label: string; value: string }) {
   return <div style={{ background: "var(--fill-quaternary)", padding: "10px 12px", borderRadius: 9 }}><div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 3 }}>{label}</div><div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{value}</div></div>;
 }
 
-function WorkflowStep({ index, title, desc, state, active = false }: { index: string; title: string; desc: string; state: string; active?: boolean }) {
+function WorkflowStep({ index, title, desc, state, active = false, action }: { index: string; title: string; desc: string; state: string; active?: boolean; action?: ReactNode }) {
   return <div style={{ padding: 13, borderRadius: 10, border: `0.5px solid ${active ? "var(--accent)" : "var(--separator)"}`, background: active ? "var(--accent-soft)" : "var(--fill-quaternary)" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 21, height: 21, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: active ? "var(--accent)" : "var(--track)", color: active ? "#fff" : "var(--text-secondary)", fontSize: 11 }}>{index}</span><b style={{ fontSize: 12.5, color: "var(--text-primary)" }}>{title}</b><span style={{ marginLeft: "auto", fontSize: 10.5, color: active ? "var(--accent)" : "var(--text-tertiary)" }}>{state}</span></div>
     <div style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.55, marginTop: 7 }}>{desc}</div>
+    {action && <div style={{ marginTop: 10 }}>{action}</div>}
   </div>;
 }

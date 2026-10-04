@@ -28,26 +28,19 @@ export type RemoteIndexStatus = {
   topDirectories?: { topDir: string; files: number; media: number; bytes: number }[];
   extensions?: { extension: string; kind: string; files: number; bytes: number }[];
   skippedDirectories?: { rel_path: string; last_error: string }[];
-};
-
-export type RemoteIndexFile = {
-  relPath: string;
-  name: string;
-  kind: string;
-  extension: string;
-  size: number;
-  mtimeNs: number;
-  classificationHint?: string | null;
-  status: string;
-};
-
-export type RemoteIndexFiles = {
-  ok: boolean;
-  total: number;
-  offset: number;
-  limit: number;
-  items: RemoteIndexFile[];
-  error?: string;
+  metadataAnalysis?: {
+    status: "not_started" | "running" | "paused" | "completed" | "error";
+    processAlive: boolean;
+    runId?: number;
+    total: number;
+    processed: number;
+    withTime: number;
+    withGps: number;
+    needsReview: number;
+    errors: number;
+    lastPath?: string | null;
+    message?: string | null;
+  };
 };
 
 async function request(path: string, init?: RequestInit): Promise<RemoteIndexStatus> {
@@ -76,13 +69,16 @@ export function revealRemoteIndex() {
   return request("/api/photos/index/reveal", { method: "POST", body: "{}" });
 }
 
-export async function getRemoteIndexFiles(options: { offset?: number; limit?: number; kind?: string; q?: string } = {}): Promise<RemoteIndexFiles> {
-  const params = new URLSearchParams();
-  params.set("offset", String(options.offset || 0));
-  params.set("limit", String(options.limit || 100));
-  if (options.kind) params.set("kind", options.kind);
-  if (options.q) params.set("q", options.q);
-  const response = await fetch(`/api/photos/index/files?${params}`, { cache: "no-store" });
-  if (!response.ok) throw new Error(`索引记录服务不可用（HTTP ${response.status}）`);
-  return response.json() as Promise<RemoteIndexFiles>;
+export function startMetadataAnalysis(source: string) {
+  return request("/api/photos/metadata/start", { method: "POST", body: JSON.stringify({ source }) });
+}
+
+export function pauseMetadataAnalysis() {
+  return request("/api/photos/metadata/pause", { method: "POST", body: "{}" });
+}
+
+export async function backupRemoteIndex(): Promise<{ ok: boolean; bytes?: number; localPath?: string; remotePath?: string; error?: string }> {
+  const response = await fetch("/api/photos/index/backup", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  if (!response.ok) throw new Error(`索引备份服务不可用（HTTP ${response.status}）`);
+  return response.json();
 }

@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 IMAGE_EXTS = {
     "jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff",
     "heic", "heif", "avif", "dng", "raw", "cr2", "cr3", "nef",
@@ -161,19 +161,72 @@ def migrate(conn: sqlite3.Connection) -> None:
           reviewed_state TEXT,
           reviewed_at INTEGER,
           decision_note TEXT,
+          metadata_status TEXT,
+          capture_time_text TEXT,
+          capture_time_source TEXT,
+          capture_time_confidence TEXT,
+          latitude REAL,
+          longitude REAL,
+          location_source TEXT,
+          camera_make TEXT,
+          camera_model TEXT,
+          pixel_width INTEGER,
+          pixel_height INTEGER,
+          metadata_review_needed INTEGER NOT NULL DEFAULT 0,
+          metadata_error TEXT,
+          metadata_updated_at INTEGER,
           updated_at INTEGER NOT NULL,
           PRIMARY KEY (source_id, rel_path)
+        );
+        CREATE TABLE IF NOT EXISTS analysis_runs (
+          id INTEGER PRIMARY KEY,
+          source_id INTEGER NOT NULL REFERENCES sources(id),
+          analysis_type TEXT NOT NULL,
+          status TEXT NOT NULL,
+          started_at INTEGER NOT NULL,
+          finished_at INTEGER,
+          updated_at INTEGER NOT NULL,
+          total INTEGER NOT NULL DEFAULT 0,
+          processed INTEGER NOT NULL DEFAULT 0,
+          with_time INTEGER NOT NULL DEFAULT 0,
+          with_gps INTEGER NOT NULL DEFAULT 0,
+          needs_review INTEGER NOT NULL DEFAULT 0,
+          errors INTEGER NOT NULL DEFAULT 0,
+          last_path TEXT,
+          message TEXT
         );
         CREATE INDEX IF NOT EXISTS media_kind_idx ON media_files(source_id, kind, status);
         CREATE INDEX IF NOT EXISTS media_size_idx ON media_files(source_id, size, kind, status);
         CREATE INDEX IF NOT EXISTS media_hint_idx ON media_files(source_id, classification_hint, status);
         """
     )
+    columns = {str(r["name"]) for r in conn.execute("PRAGMA table_info(media_files)").fetchall()}
+    additions = {
+        "metadata_status": "TEXT",
+        "capture_time_text": "TEXT",
+        "capture_time_source": "TEXT",
+        "capture_time_confidence": "TEXT",
+        "latitude": "REAL",
+        "longitude": "REAL",
+        "location_source": "TEXT",
+        "camera_make": "TEXT",
+        "camera_model": "TEXT",
+        "pixel_width": "INTEGER",
+        "pixel_height": "INTEGER",
+        "metadata_review_needed": "INTEGER NOT NULL DEFAULT 0",
+        "metadata_error": "TEXT",
+        "metadata_updated_at": "INTEGER",
+    }
+    for name, declaration in additions.items():
+        if name not in columns:
+            conn.execute(f"ALTER TABLE media_files ADD COLUMN {name} {declaration}")
     row = conn.execute("SELECT version FROM schema_info LIMIT 1").fetchone()
     if row is None:
         conn.execute("INSERT INTO schema_info(version) VALUES (?)", (SCHEMA_VERSION,))
-    elif int(row["version"]) != SCHEMA_VERSION:
+    elif int(row["version"]) > SCHEMA_VERSION:
         raise RuntimeError(f"不支持的索引版本：{row['version']}")
+    elif int(row["version"]) < SCHEMA_VERSION:
+        conn.execute("UPDATE schema_info SET version=?", (SCHEMA_VERSION,))
     conn.commit()
 
 
@@ -288,6 +341,8 @@ def upsert_file(
              kind=excluded.kind,size=excluded.size,mtime_ns=excluded.mtime_ns,
              birthtime_ns=excluded.birthtime_ns,inode=excluded.inode,
              classification_hint=excluded.classification_hint,status='active',
+             metadata_status=CASE WHEN media_files.size<>excluded.size OR media_files.mtime_ns<>excluded.mtime_ns
+                                  THEN NULL ELSE media_files.metadata_status END,
              last_seen_run=excluded.last_seen_run,updated_at=excluded.updated_at""",
         (
             sid, rel, parent, name, ext, kind, int(stat.st_size), int(stat.st_mtime_ns),

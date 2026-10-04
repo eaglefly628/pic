@@ -126,4 +126,15 @@ body { background: #b8c6db; }
   background: var(--bg-card);
   color: var(--text-primary);
 }
+
+/* 远程索引报告：主应用、平板和窄窗口都不能让目录统计被右侧卡片盖住。 */
+@media (max-width: 920px) {
+  .fv-report-split { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+@media (max-width: 680px) {
+  .fv-remote-index { padding: 16px 14px 28px !important; }
+  .fv-directory-row { align-items: flex-start !important; flex-wrap: wrap; row-gap: 2px !important; }
+  .fv-directory-row > span:first-child { flex-basis: 100% !important; }
+}
 .fv-root select, .fv-root input, .fv-root textarea { color-scheme: inherit; }
