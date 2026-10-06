@@ -1,12 +1,35 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { MediaItem } from "../types";
 import { useLibrary } from "../lib/library";
 import { groupByYear, groupByMonth, onThisDay } from "../lib/format";
 import { MediaGrid } from "../components/Media";
 import { EmptyState } from "../ui";
 import { IconCalendar, IconChevron } from "../icons";
+import { getRemoteTimeline, type RemoteTimelineData } from "../lib/remoteIndex";
+import IndexedTimeline from "./IndexedTimeline";
 
 export default function Timeline({ onOpen }: { onOpen: (list: MediaItem[], i: number) => void }) {
+  const [remote, setRemote] = useState<RemoteTimelineData | null>(null);
+  const [remoteChecked, setRemoteChecked] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const load = () => getRemoteTimeline()
+      .then((next) => { if (active) { setRemote(next); setRemoteChecked(true); } })
+      .catch(() => { if (active) setRemoteChecked(true); });
+    void load();
+    const timer = window.setInterval(() => {
+      if (remote?.analysisStatus === "running") void load();
+    }, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [remote?.analysisStatus]);
+
+  if (!remoteChecked) return <div style={{ padding: "40px 32px", color: "var(--text-tertiary)", fontSize: 12 }}>正在读取时间地点索引…</div>;
+  if (remote?.ok && remote.periods.length > 0) return <IndexedTimeline summary={remote} />;
+  return <LocalTimeline onOpen={onOpen} />;
+}
+
+function LocalTimeline({ onOpen }: { onOpen: (list: MediaItem[], i: number) => void }) {
   const { items, thumbUrl } = useLibrary();
   const visible = useMemo(() => items.filter((m) => !m.private), [items]);
   const years = useMemo(() => groupByYear(visible), [visible]);

@@ -369,6 +369,138 @@ def photo_index_files(params):
         return {"ok": False, "error": f"无法读取索引记录：{exc}", "total": 0, "items": []}
 
 
+def photo_timeline(params):
+    """按月聚合本机影像索引，并在选中月份后展开离线 GPS 地点簇。"""
+    empty = {"ok": True, "periods": [], "places": [], "total": 0, "processed": 0,
+             "withTime": 0, "withGps": 0, "suspiciousTime": 0, "analysisStatus": "not_started"}
+    if not PHOTO_INDEX_DB.is_file():
+        return empty
+    period = str((params.get("period") or [""])[0]).strip()
+    if period and not re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", period):
+        return {**empty, "ok": False, "error": "月份格式无效"}
+    uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+    try:
+        with sqlite3.connect(uri, uri=True, timeout=5) as conn:
+            conn.row_factory = sqlite3.Row
+            source = conn.execute("SELECT source_id FROM scan_runs ORDER BY id DESC LIMIT 1").fetchone()
+            if not source:
+                return empty
+            sid = int(source["source_id"])
+            columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(media_files)")}
+            if "capture_time_text" not in columns:
+                return empty
+            summary = conn.execute(
+                """SELECT count(*) total,
+                          sum(CASE WHEN metadata_status='done' THEN 1 ELSE 0 END) processed,
+                          sum(CASE WHEN capture_time_text IS NOT NULL THEN 1 ELSE 0 END) with_time,
+                          sum(CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 ELSE 0 END) with_gps
+                   FROM media_files WHERE source_id=? AND status='active' AND kind IN ('image','video')""",
+                (sid,),
+            ).fetchone()
+            analysis = None
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='analysis_runs'").fetchone():
+                analysis = conn.execute(
+                    """SELECT status FROM analysis_runs WHERE source_id=? AND analysis_type='metadata'
+                       ORDER BY id DESC LIMIT 1""", (sid,),
+                ).fetchone()
+            periods_raw = conn.execute(
+                """SELECT substr(capture_time_text,1,7) period,count(*) files,
+                          sum(CASE WHEN kind='image' THEN 1 ELSE 0 END) images,
+                          sum(CASE WHEN kind='video' THEN 1 ELSE 0 END) videos,
+                          sum(CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 ELSE 0 END) gps,
+                          sum(CASE WHEN metadata_review_needed=1 THEN 1 ELSE 0 END) needs_review,
+                          coalesce(sum(size),0) bytes
+                   FROM media_files
+                   WHERE source_id=? AND status='active' AND metadata_status='done'
+                     AND capture_time_text IS NOT NULL
+                   GROUP BY substr(capture_time_text,1,7) ORDER BY period""",
+                (sid,),
+            ).fetchall()
+            periods = []
+            suspicious_time = 0
+            current_year = time.localtime().tm_year
+            for row in periods_raw:
+                key = str(row["period"] or "")
+                if not re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", key):
+                    continue
+                year = int(key[:4])
+                if year < 1990 or year > current_year + 1:
+                    suspicious_time += int(row["files"] or 0)
+                    continue
+                periods.append({
+                    "period": key, "files": int(row["files"] or 0), "images": int(row["images"] or 0),
+                    "videos": int(row["videos"] or 0), "gps": int(row["gps"] or 0),
+                    "needsReview": int(row["needs_review"] or 0), "bytes": int(row["bytes"] or 0),
+                })
+            result = {
+                "ok": True,
+                "analysisStatus": ("running" if _photo_metadata_process_alive() else "paused")
+                                  if analysis and str(analysis["status"]) == "running"
+                                  else (str(analysis["status"]) if analysis else "not_started"),
+                "total": int(summary["total"] or 0), "processed": int(summary["processed"] or 0),
+                "withTime": int(summary["with_time"] or 0), "withGps": int(summary["with_gps"] or 0),
+                "suspiciousTime": suspicious_time, "periods": periods, "places": [],
+            }
+            if not period:
+                return result
+            like = period + "%"
+            place_rows = conn.execute(
+                """SELECT round(latitude,1) latitude,round(longitude,1) longitude,count(*) files,
+                          sum(CASE WHEN kind='image' THEN 1 ELSE 0 END) images,
+                          sum(CASE WHEN kind='video' THEN 1 ELSE 0 END) videos,
+                          sum(CASE WHEN metadata_review_needed=1 THEN 1 ELSE 0 END) needs_review,
+                          coalesce(sum(size),0) bytes,min(rel_path) sample_path
+                   FROM media_files
+                   WHERE source_id=? AND status='active' AND metadata_status='done'
+                     AND capture_time_text LIKE ? AND latitude IS NOT NULL AND longitude IS NOT NULL
+                   GROUP BY round(latitude,1),round(longitude,1)
+                   ORDER BY files DESC LIMIT 24""",
+                (sid, like),
+            ).fetchall()
+            selected = next((item for item in periods if item["period"] == period), None)
+            places = []
+            represented = 0
+            for row in place_rows:
+                lat, lng = float(row["latitude"]), float(row["longitude"])
+                files = int(row["files"] or 0)
+                represented += files
+                sample = str(row["sample_path"] or "")
+                top_dir = sample.split("/", 1)[0] if sample else ""
+                lat_label = f"{abs(lat):.1f}°{'N' if lat >= 0 else 'S'}"
+                lng_label = f"{abs(lng):.1f}°{'E' if lng >= 0 else 'W'}"
+                places.append({
+                    "key": f"{lat:.1f},{lng:.1f}", "label": f"{lat_label} · {lng_label}",
+                    "latitude": lat, "longitude": lng, "files": files,
+                    "images": int(row["images"] or 0), "videos": int(row["videos"] or 0),
+                    "needsReview": int(row["needs_review"] or 0), "bytes": int(row["bytes"] or 0),
+                    "context": top_dir,
+                })
+            gps_total = int(selected["gps"] if selected else represented)
+            if gps_total > represented:
+                places.append({"key": "other-gps", "label": "其他 GPS 地点", "files": gps_total - represented,
+                               "images": 0, "videos": 0, "needsReview": 0, "bytes": 0, "context": ""})
+            unknown = conn.execute(
+                """SELECT count(*) files,sum(CASE WHEN kind='image' THEN 1 ELSE 0 END) images,
+                          sum(CASE WHEN kind='video' THEN 1 ELSE 0 END) videos,
+                          sum(CASE WHEN metadata_review_needed=1 THEN 1 ELSE 0 END) needs_review,
+                          coalesce(sum(size),0) bytes
+                   FROM media_files WHERE source_id=? AND status='active' AND metadata_status='done'
+                     AND capture_time_text LIKE ? AND (latitude IS NULL OR longitude IS NULL)""",
+                (sid, like),
+            ).fetchone()
+            if unknown and int(unknown["files"] or 0):
+                places.append({
+                    "key": "unknown", "label": "无位置信息", "files": int(unknown["files"] or 0),
+                    "images": int(unknown["images"] or 0), "videos": int(unknown["videos"] or 0),
+                    "needsReview": int(unknown["needs_review"] or 0), "bytes": int(unknown["bytes"] or 0),
+                    "context": "等待人工确认",
+                })
+            result.update({"selectedPeriod": period, "places": places})
+            return result
+    except (OSError, sqlite3.Error) as exc:
+        return {**empty, "ok": False, "error": f"无法读取时间地点索引：{exc}"}
+
+
 def photo_scan_start(spec):
     global _PHOTO_SCAN_PROC, _PHOTO_SCAN_LOG_HANDLE
     source = _photo_source_path((spec or {}).get("source"))
@@ -1372,6 +1504,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if bare == "/api/photos/index/files":
             from urllib.parse import urlparse, parse_qs
             return self._send_json(photo_index_files(parse_qs(urlparse(self.path).query)))
+        if bare == "/api/photos/timeline":
+            from urllib.parse import urlparse, parse_qs
+            return self._send_json(photo_timeline(parse_qs(urlparse(self.path).query)))
         target = resolve(self.path)
         if not target:
             self.send_error(404)
