@@ -109,13 +109,15 @@ DATA_VERSION = 4
 SYNC_PROTOCOL = 2
 DATA_DIR = data_dir()
 
-# 家庭影像的大型 Samba 目录索引保存在本机，不把 SQLite 放到网络盘上，避免掉线或
-# SMB 文件锁导致数据库损坏。源目录始终只读；真正的整理/移动将来走独立审核流程。
+# 家庭影像的大型 Samba 目录索引保存在本机，不把工作中的 SQLite 放到网络盘上，避免
+# 掉线或 SMB 文件锁导致数据库损坏。扫描/分析只读；整理必须先预演，再走独立可续跑流程。
 PHOTO_INDEX_DB = DATA_DIR / "photo-index.sqlite3"
 PHOTO_INDEX_LOG = DATA_DIR / "photo-index.log"
 PHOTO_INDEX_SCRIPT = ROOT / "project-two" / "scripts" / "photo_index.py"
 PHOTO_METADATA_SCRIPT = ROOT / "project-two" / "scripts" / "photo_metadata.py"
 PHOTO_METADATA_LOG = DATA_DIR / "photo-metadata.log"
+PHOTO_ORGANIZE_SCRIPT = ROOT / "project-two" / "scripts" / "photo_organize.py"
+PHOTO_ORGANIZE_LOG = DATA_DIR / "photo-organize.log"
 PHOTO_DEFAULT_SOURCE = Path("/Volumes/24684804")
 _PHOTO_SCAN_LOCK = threading.Lock()
 _PHOTO_SCAN_PROC = None
@@ -123,6 +125,9 @@ _PHOTO_SCAN_LOG_HANDLE = None
 _PHOTO_METADATA_LOCK = threading.Lock()
 _PHOTO_METADATA_PROC = None
 _PHOTO_METADATA_LOG_HANDLE = None
+_PHOTO_ORGANIZE_LOCK = threading.Lock()
+_PHOTO_ORGANIZE_PROC = None
+_PHOTO_ORGANIZE_LOG_HANDLE = None
 
 
 def _photo_source_path(value=None):
@@ -192,6 +197,56 @@ def _photo_metadata_process_alive():
                     _PHOTO_METADATA_LOG_HANDLE.close()
                 _PHOTO_METADATA_LOG_HANDLE = None
         return alive
+
+
+def _photo_organize_process_alive():
+    global _PHOTO_ORGANIZE_PROC, _PHOTO_ORGANIZE_LOG_HANDLE
+    with _PHOTO_ORGANIZE_LOCK:
+        alive = _PHOTO_ORGANIZE_PROC is not None and _PHOTO_ORGANIZE_PROC.poll() is None
+        if _PHOTO_ORGANIZE_PROC is not None and not alive:
+            _PHOTO_ORGANIZE_PROC = None
+            if _PHOTO_ORGANIZE_LOG_HANDLE is not None:
+                with contextlib.suppress(Exception):
+                    _PHOTO_ORGANIZE_LOG_HANDLE.close()
+                _PHOTO_ORGANIZE_LOG_HANDLE = None
+        return alive
+
+
+def photo_organize_status():
+    """返回最新整理预演/执行状态，不访问原始媒体内容。"""
+    empty = {"ok": True, "status": "not_started", "processAlive": _photo_organize_process_alive()}
+    if not PHOTO_INDEX_DB.is_file():
+        return empty
+    try:
+        uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=3) as conn:
+            conn.row_factory = sqlite3.Row
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='organize_runs'").fetchone():
+                return empty
+            row = conn.execute("SELECT * FROM organize_runs ORDER BY id DESC LIMIT 1").fetchone()
+            if not row:
+                return empty
+            status = str(row["status"])
+            alive = _photo_organize_process_alive()
+            if status == "running" and not alive:
+                status = "paused"
+            examples = conn.execute(
+                """SELECT source_rel AS sourceRel,target_rel AS targetRel,status,error
+                   FROM organize_entries WHERE run_id=? ORDER BY source_rel COLLATE NOCASE LIMIT 8""",
+                (int(row["id"]),),
+            ).fetchall()
+            return {
+                "ok": True, "runId": int(row["id"]), "status": status, "processAlive": alive,
+                "sourceRoot": row["source_root"], "targetRoot": row["target_root"],
+                "total": int(row["total"] or 0), "moved": int(row["moved"] or 0),
+                "verified": int(row["verified"] or 0), "errors": int(row["errors"] or 0),
+                "bytesTotal": int(row["bytes_total"] or 0), "bytesMoved": int(row["bytes_moved"] or 0),
+                "reliable": int(row["reliable"] or 0), "needsReview": int(row["needs_review"] or 0),
+                "lastPath": row["last_path"], "message": row["message"],
+                "examples": [dict(item) for item in examples],
+            }
+    except (OSError, sqlite3.Error) as exc:
+        return {**empty, "ok": False, "status": "error", "error": f"无法读取整理任务：{exc}"}
 
 
 def photo_index_status():
@@ -586,6 +641,72 @@ def photo_metadata_pause():
     return {"ok": True, "status": "paused", "message": "当前没有正在运行的时间与地点分析"}
 
 
+def photo_organize_plan(spec):
+    if _photo_process_alive() or _photo_metadata_process_alive() or _photo_organize_process_alive():
+        return {"ok": False, "error": "请等待当前照片任务完成后再生成整理预演"}
+    status = photo_index_status()
+    if status.get("metadataAnalysis", {}).get("status") != "completed":
+        return {"ok": False, "error": "请先完成时间与地点分析；预演不会使用未完成的日期"}
+    if not PHOTO_ORGANIZE_SCRIPT.is_file():
+        return {"ok": False, "error": "照片整理程序缺失，请重新构建项目"}
+    target_name = str((spec or {}).get("targetName") or "家庭影像库").strip()
+    result = subprocess.run(
+        [sys.executable, str(PHOTO_ORGANIZE_SCRIPT), "--db", str(PHOTO_INDEX_DB),
+         "plan", "--target-name", target_name],
+        cwd=str(ROOT), text=True, capture_output=True, timeout=120,
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+    )
+    if result.returncode != 0:
+        return {"ok": False, "error": (result.stderr or result.stdout or "生成整理预演失败").strip()}
+    planned = photo_organize_status()
+    planned["message"] = "预演已生成；尚未移动任何文件"
+    photo_index_backup()
+    return planned
+
+
+def photo_organize_start(_spec=None):
+    global _PHOTO_ORGANIZE_PROC, _PHOTO_ORGANIZE_LOG_HANDLE
+    if _photo_process_alive() or _photo_metadata_process_alive():
+        return {"ok": False, "error": "文件索引或时间分析仍在运行，请等待完成"}
+    status = photo_organize_status()
+    if status.get("status") == "not_started":
+        return {"ok": False, "error": "请先生成并检查整理预演"}
+    if status.get("status") == "completed":
+        return status
+    with _PHOTO_ORGANIZE_LOCK:
+        if _PHOTO_ORGANIZE_PROC is not None and _PHOTO_ORGANIZE_PROC.poll() is None:
+            return {**status, "status": "running", "processAlive": True}
+        log_handle = PHOTO_ORGANIZE_LOG.open("a", encoding="utf-8")
+        with contextlib.suppress(OSError):
+            os.chmod(PHOTO_ORGANIZE_LOG, 0o600)
+        try:
+            _PHOTO_ORGANIZE_PROC = subprocess.Popen(
+                [sys.executable, str(PHOTO_ORGANIZE_SCRIPT), "--db", str(PHOTO_INDEX_DB), "run"],
+                cwd=str(ROOT), stdout=log_handle, stderr=subprocess.STDOUT,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            )
+            organize_proc = _PHOTO_ORGANIZE_PROC
+            _PHOTO_ORGANIZE_LOG_HANDLE = log_handle
+        except Exception:
+            log_handle.close()
+            raise
+    threading.Thread(target=_backup_after_photo_job, args=(organize_proc, "organize"), daemon=True).start()
+    result = photo_organize_status()
+    result.update({"status": "running", "processAlive": True})
+    return result
+
+
+def photo_organize_pause():
+    with _PHOTO_ORGANIZE_LOCK:
+        proc = _PHOTO_ORGANIZE_PROC
+        if proc is not None and proc.poll() is None:
+            proc.send_signal(signal.SIGINT)
+            return {"ok": True, "status": "pausing", "processAlive": True}
+    result = photo_organize_status()
+    result["message"] = result.get("message") or "当前没有正在运行的整理任务"
+    return result
+
+
 def photo_index_backup():
     """生成 SQLite 一致性快照；本机留档后，挂载可写时再复制到 S300。"""
     if not PHOTO_INDEX_DB.is_file():
@@ -638,6 +759,8 @@ def _backup_after_photo_job(proc, phase):
         completed = status.get("status") == "completed"
         if phase == "metadata":
             completed = status.get("metadataAnalysis", {}).get("status") == "completed"
+        elif phase == "organize":
+            completed = photo_organize_status().get("status") == "completed"
         if not completed:
             return
         result = photo_index_backup()
@@ -1507,6 +1630,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if bare == "/api/photos/timeline":
             from urllib.parse import urlparse, parse_qs
             return self._send_json(photo_timeline(parse_qs(urlparse(self.path).query)))
+        if bare == "/api/photos/organize/status":
+            return self._send_json(photo_organize_status())
         target = resolve(self.path)
         if not target:
             self.send_error(404)
@@ -1532,7 +1657,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         bare = self.path.split("?")[0]
         if bare in ("/api/photos/index/start", "/api/photos/index/pause", "/api/photos/index/reveal",
-                    "/api/photos/index/backup", "/api/photos/metadata/start", "/api/photos/metadata/pause"):
+                    "/api/photos/index/backup", "/api/photos/metadata/start", "/api/photos/metadata/pause",
+                    "/api/photos/organize/plan", "/api/photos/organize/start", "/api/photos/organize/pause"):
             origin = self.headers.get("Origin", "")
             # localhost/127.0.0.1 的开发端口也允许；服务本身只监听环回地址。
             if origin and not re.match(r"^http://(?:localhost|127\.0\.0\.1):\d+$", origin):
@@ -1548,6 +1674,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     res = photo_metadata_start(spec)
                 elif bare == "/api/photos/metadata/pause":
                     res = photo_metadata_pause()
+                elif bare == "/api/photos/organize/plan":
+                    res = photo_organize_plan(spec)
+                elif bare == "/api/photos/organize/start":
+                    res = photo_organize_start(spec)
+                elif bare == "/api/photos/organize/pause":
+                    res = photo_organize_pause()
                 elif bare == "/api/photos/index/backup":
                     res = photo_index_backup()
                 else:

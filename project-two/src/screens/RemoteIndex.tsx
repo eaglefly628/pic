@@ -2,11 +2,16 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { fmtSize } from "../lib/format";
 import {
   backupRemoteIndex,
+  getPhotoOrganizeStatus,
   getRemoteIndexStatus,
+  pausePhotoOrganize,
   pauseMetadataAnalysis,
+  planPhotoOrganize,
   revealRemoteIndex,
+  startPhotoOrganize,
   startMetadataAnalysis,
   startRemoteIndex,
+  type PhotoOrganizeStatus,
   type RemoteIndexStatus,
 } from "../lib/remoteIndex";
 import { Btn, card } from "../ui";
@@ -16,12 +21,13 @@ export default function RemoteIndex() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [backupMessage, setBackupMessage] = useState("");
+  const [organize, setOrganize] = useState<PhotoOrganizeStatus | null>(null);
   const [metadataRate, setMetadataRate] = useState(0);
   const metadataSample = useRef<{ processed: number; at: number } | null>(null);
 
   const loadStatus = async () => {
     try {
-      const next = await getRemoteIndexStatus();
+      const [next, organizeNext] = await Promise.all([getRemoteIndexStatus(), getPhotoOrganizeStatus()]);
       const analysis = next.metadataAnalysis;
       if (analysis?.processAlive) {
         const now = Date.now();
@@ -40,16 +46,17 @@ export default function RemoteIndex() {
         metadataSample.current = null;
       }
       setData(next);
+      setOrganize(organizeNext);
     }
     catch (err) { setError(err instanceof Error ? err.message : "无法读取索引报告"); }
   };
 
   useEffect(() => { void loadStatus(); }, []);
   useEffect(() => {
-    if (!data?.processAlive && !data?.metadataAnalysis?.processAlive) return;
+    if (!data?.processAlive && !data?.metadataAnalysis?.processAlive && !organize?.processAlive) return;
     const timer = window.setInterval(() => void loadStatus(), 1800);
     return () => window.clearInterval(timer);
-  }, [data?.processAlive, data?.metadataAnalysis?.processAlive]);
+  }, [data?.processAlive, data?.metadataAnalysis?.processAlive, organize?.processAlive]);
 
   if (!data && !error) return <div style={{ padding: 32, color: "var(--text-tertiary)" }}>正在读取本机索引…</div>;
   if (!data) return <div style={{ padding: 32, color: "var(--red)" }}>{error}</div>;
@@ -97,6 +104,35 @@ export default function RemoteIndex() {
       if (result.ok) setBackupMessage(`已备份到 S300：${result.remotePath}`);
       else setBackupMessage(result.error || `本机备份已保存：${result.localPath || ""}`);
     } catch (err) { setError(err instanceof Error ? err.message : "备份失败"); }
+    finally { setBusy(false); }
+  };
+
+  const planOrganize = async () => {
+    setBusy(true); setError("");
+    try {
+      const next = await planPhotoOrganize();
+      setOrganize(next);
+      if (!next.ok) setError(next.error || "生成整理预演失败");
+    } catch (err) { setError(err instanceof Error ? err.message : "生成整理预演失败"); }
+    finally { setBusy(false); }
+  };
+
+  const runOrganize = async () => {
+    const count = organize?.total || 0;
+    if (!window.confirm(`将按预演在 S300 内移动 ${count.toLocaleString()} 个文件。不会覆盖、删除或合并文件；可安全暂停并续跑。确认开始？`)) return;
+    setBusy(true); setError("");
+    try {
+      const next = await startPhotoOrganize();
+      setOrganize(next);
+      if (!next.ok) setError(next.error || "启动整理失败");
+    } catch (err) { setError(err instanceof Error ? err.message : "启动整理失败"); }
+    finally { setBusy(false); }
+  };
+
+  const pauseOrganize = async () => {
+    setBusy(true); setError("");
+    try { setOrganize(await pausePhotoOrganize()); }
+    catch (err) { setError(err instanceof Error ? err.message : "暂停整理失败"); }
     finally { setBusy(false); }
   };
 
@@ -150,9 +186,19 @@ export default function RemoteIndex() {
               : data.metadataAnalysis?.status === "completed"
                 ? <span style={{ fontSize: 11, color: "var(--green)" }}>时间与地点已分析</span>
                 : <Btn onClick={analyzeMetadata} disabled={busy}>{data.metadataAnalysis?.status === "paused" ? "继续分析" : "开始分析"}</Btn>} />
-          <WorkflowStep index="3" title="重复检测" desc="按大小筛选，再用哈希确认完全重复" state={data.metadataAnalysis?.status === "completed" ? "下一步" : "等待时间分析"}
-            action={<Btn variant="ghost" disabled style={{ opacity: .5, cursor: "not-allowed" }}>完成上一步后开放</Btn>} />
-          <WorkflowStep index="4" title="清理审核" desc="人工确认后先隔离，不直接永久删除" state="等待重复检测"
+          <WorkflowStep index="3" title="按时间整理" desc="先生成预演，再在 S300 内原子移动；同步更新索引，可暂停续跑"
+            state={organize?.status === "completed" ? "已完成" : organize?.processAlive ? "进行中" : organize?.status === "planned" ? "待确认" : data.metadataAnalysis?.status === "completed" ? "可预演" : "等待时间分析"}
+            active={organize?.status === "completed"}
+            action={organize?.processAlive
+              ? <Btn variant="ghost" onClick={pauseOrganize} disabled={busy}>安全暂停</Btn>
+              : organize?.status === "planned" || organize?.status === "paused" || organize?.status === "error"
+                ? <Btn onClick={runOrganize} disabled={busy}>{organize.status === "planned" ? "确认并开始整理" : "继续整理"}</Btn>
+                : organize?.status === "completed"
+                  ? <span style={{ fontSize: 11, color: "var(--green)" }}>文件和索引均已更新</span>
+                  : <Btn onClick={planOrganize} disabled={busy || data.metadataAnalysis?.status !== "completed"}>生成整理预演</Btn>} />
+          <WorkflowStep index="4" title="重复检测" desc="稍后按大小筛选，再用哈希确认完全重复" state={organize?.status === "completed" ? "稍后处理" : "等待整理"}
+            action={<Btn variant="ghost" disabled style={{ opacity: .5, cursor: "not-allowed" }}>本阶段暂不执行</Btn>} />
+          <WorkflowStep index="5" title="清理审核" desc="人工确认后先隔离，不直接永久删除" state="等待重复检测"
             action={<Btn variant="ghost" disabled style={{ opacity: .5, cursor: "not-allowed" }}>完成重复检测后开放</Btn>} />
         </div>
         {data.metadataAnalysis && data.metadataAnalysis.status !== "not_started" && (
@@ -171,6 +217,25 @@ export default function RemoteIndex() {
             <div style={{ height: 7, background: "var(--track)", borderRadius: 5, marginTop: 7, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${data.metadataAnalysis.total ? Math.min(100, data.metadataAnalysis.processed / data.metadataAnalysis.total * 100) : 0}%`, background: "var(--accent)", borderRadius: 5 }} />
             </div>
+          </div>
+        )}
+        {organize && organize.status !== "not_started" && (
+          <div style={{ marginTop: 13, padding: "12px", borderRadius: 9, background: "var(--fill-quaternary)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 11.5, color: "var(--text-secondary)" }}>
+              <span>时间整理：{(organize.verified || 0).toLocaleString()} / {(organize.total || 0).toLocaleString()}</span>
+              <span>可信时间 {(organize.reliable || 0).toLocaleString()} · 待确认 {(organize.needsReview || 0).toLocaleString()} · {fmtSize(organize.bytesTotal || 0)}</span>
+            </div>
+            <div style={{ height: 7, background: "var(--track)", borderRadius: 5, marginTop: 7, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${organize.total ? Math.min(100, (organize.verified || 0) / organize.total * 100) : 0}%`, background: "var(--green)", borderRadius: 5 }} />
+            </div>
+            <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-tertiary)", overflowWrap: "anywhere" }}>
+              目标：{organize.targetRoot}。低可信项只生成“_待确认时间”建议并原地保留；同名文件自动加稳定后缀，绝不覆盖。
+            </div>
+            {organize.status === "planned" && !!organize.examples?.length && (
+              <div style={{ marginTop: 9, display: "grid", gap: 4 }}>
+                {organize.examples.slice(0, 4).map((item) => <div key={item.sourceRel} style={{ fontSize: 10.5, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${item.sourceRel} → ${item.targetRel}`}>{item.sourceRel} → {item.targetRel}</div>)}
+              </div>
+            )}
           </div>
         )}
       </div>

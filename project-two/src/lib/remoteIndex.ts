@@ -80,6 +80,27 @@ export type RemoteTimelineData = {
   places: RemoteTimelinePlace[];
 };
 
+export type PhotoOrganizeStatus = {
+  ok: boolean;
+  error?: string;
+  status: "not_started" | "planned" | "running" | "pausing" | "paused" | "completed" | "error";
+  processAlive: boolean;
+  runId?: number;
+  sourceRoot?: string;
+  targetRoot?: string;
+  total?: number;
+  moved?: number;
+  verified?: number;
+  errors?: number;
+  bytesTotal?: number;
+  bytesMoved?: number;
+  reliable?: number;
+  needsReview?: number;
+  lastPath?: string | null;
+  message?: string | null;
+  examples?: { sourceRel: string; targetRel: string; status: string; error?: string | null }[];
+};
+
 async function request(path: string, init?: RequestInit): Promise<RemoteIndexStatus> {
   const response = await fetch(path, {
     cache: "no-store",
@@ -126,4 +147,28 @@ export async function getRemoteTimeline(period?: string): Promise<RemoteTimeline
   const response = await fetch(`/api/photos/timeline${params.size ? `?${params}` : ""}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`时间地点索引服务不可用（HTTP ${response.status}）`);
   return response.json() as Promise<RemoteTimelineData>;
+}
+
+async function organizeRequest(path: string, body?: object): Promise<PhotoOrganizeStatus> {
+  const response = await fetch(path, body ? {
+    method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  } : { cache: "no-store" });
+  if (!response.ok) throw new Error(`照片整理服务不可用（HTTP ${response.status}）`);
+  return response.json() as Promise<PhotoOrganizeStatus>;
+}
+
+export function getPhotoOrganizeStatus() {
+  return organizeRequest("/api/photos/organize/status");
+}
+
+export function planPhotoOrganize(targetName = "家庭影像库") {
+  return organizeRequest("/api/photos/organize/plan", { targetName });
+}
+
+export function startPhotoOrganize() {
+  return organizeRequest("/api/photos/organize/start", {});
+}
+
+export function pausePhotoOrganize() {
+  return organizeRequest("/api/photos/organize/pause", {});
 }

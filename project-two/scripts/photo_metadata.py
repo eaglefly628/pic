@@ -12,6 +12,7 @@ import re
 import shutil
 import signal
 import sqlite3
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,8 @@ from photo_index import connect, exclusive_lock, now_ms
 
 
 IMAGE_METADATA_EXTS = {"jpg", "jpeg", "png", "heic", "heif", "avif", "tif", "tiff", "dng"}
+QUICKTIME_EXTS = {"mov", "mp4", "m4v", "3gp"}
+QUICKTIME_EPOCH = dt.datetime(1904, 1, 1, tzinfo=dt.timezone.utc)
 FULL_DATE_RE = re.compile(
     r"(?<!\d)(20\d{2})[-_.年]?(0[1-9]|1[0-2])[-_.月]?(0[1-9]|[12]\d|3[01])"
     r"(?:[T _-]?([01]\d|2[0-3])[-_.时:]?([0-5]\d)[-_.分:]?([0-5]\d))?",
@@ -30,6 +33,67 @@ MONTH_RE = re.compile(r"(?<!\d)(20\d{2})[年._-](0?[1-9]|1[0-2])(?:月)?(?!\d)")
 
 class StopFlag:
     requested = False
+
+
+def _atoms(handle, start: int, end: int):
+    """Yield bounded ISO BMFF/QuickTime atoms without reading media payloads."""
+    offset = start
+    while offset + 8 <= end:
+        handle.seek(offset)
+        header = handle.read(8)
+        if len(header) != 8:
+            return
+        size, atom_type = struct.unpack(">I4s", header)
+        header_size = 8
+        if size == 1:
+            extended = handle.read(8)
+            if len(extended) != 8:
+                return
+            size = struct.unpack(">Q", extended)[0]
+            header_size = 16
+        elif size == 0:
+            size = end - offset
+        if size < header_size or offset + size > end:
+            return
+        yield atom_type, offset + header_size, offset + size
+        offset += size
+
+
+def quicktime_creation_time(path: Path) -> str | None:
+    """Read the movie-header creation time using seeks only.
+
+    This avoids copying large videos over SMB and does not depend on ffprobe.
+    Zero, 1970 placeholders and implausible future values are rejected.
+    """
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            moov = next(((a, b) for kind, a, b in _atoms(handle, 0, size) if kind == b"moov"), None)
+            if not moov:
+                return None
+            mvhd = next(((a, b) for kind, a, b in _atoms(handle, *moov) if kind == b"mvhd"), None)
+            if not mvhd:
+                return None
+            start, end = mvhd
+            handle.seek(start)
+            version_flags = handle.read(4)
+            if len(version_flags) != 4:
+                return None
+            if version_flags[0] == 1:
+                raw = handle.read(8)
+                seconds = struct.unpack(">Q", raw)[0] if len(raw) == 8 else 0
+            else:
+                raw = handle.read(4)
+                seconds = struct.unpack(">I", raw)[0] if len(raw) == 4 else 0
+        if not seconds:
+            return None
+        value = QUICKTIME_EPOCH + dt.timedelta(seconds=seconds)
+        current_year = dt.datetime.now(dt.timezone.utc).year
+        if value.year < 1990 or value.year > current_year + 1:
+            return None
+        return value.isoformat()
+    except (OSError, OverflowError, struct.error, StopIteration):
+        return None
 
 
 def infer_path_time(rel_path: str, mtime_ns: int) -> tuple[str, str, str]:
@@ -190,9 +254,14 @@ def analyze(args: argparse.Namespace) -> int:
                             error = str(metadata.get("error") or "没有可读取的图片元数据")
                     except Exception as exc:
                         error = str(exc)
+                elif str(row["kind"]) == "video" and str(row["extension"]).lower() in QUICKTIME_EXTS:
+                    video_time = quicktime_creation_time(abs_path)
+                    if video_time:
+                        metadata["capturedAt"] = video_time
                 captured_at = metadata.get("capturedAt") or fallback_time
                 if metadata.get("capturedAt"):
-                    time_source, confidence = "embedded_metadata", "high"
+                    time_source = "video_container" if str(row["kind"]) == "video" else "embedded_metadata"
+                    confidence = "high"
                 latitude = metadata.get("latitude")
                 longitude = metadata.get("longitude")
                 has_gps = latitude is not None and longitude is not None
