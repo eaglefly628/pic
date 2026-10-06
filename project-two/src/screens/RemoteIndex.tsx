@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { fmtSize } from "../lib/format";
 import {
   backupRemoteIndex,
@@ -16,9 +16,31 @@ export default function RemoteIndex() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [backupMessage, setBackupMessage] = useState("");
+  const [metadataRate, setMetadataRate] = useState(0);
+  const metadataSample = useRef<{ processed: number; at: number } | null>(null);
 
   const loadStatus = async () => {
-    try { setData(await getRemoteIndexStatus()); }
+    try {
+      const next = await getRemoteIndexStatus();
+      const analysis = next.metadataAnalysis;
+      if (analysis?.processAlive) {
+        const now = Date.now();
+        const previous = metadataSample.current;
+        if (!previous || analysis.processed < previous.processed) {
+          metadataSample.current = { processed: analysis.processed, at: now };
+        } else if (analysis.processed > previous.processed) {
+          const seconds = (now - previous.at) / 1000;
+          if (seconds > 0) {
+            const currentRate = (analysis.processed - previous.processed) / seconds;
+            setMetadataRate((old) => old > 0 ? old * 0.65 + currentRate * 0.35 : currentRate);
+          }
+          metadataSample.current = { processed: analysis.processed, at: now };
+        }
+      } else {
+        metadataSample.current = null;
+      }
+      setData(next);
+    }
     catch (err) { setError(err instanceof Error ? err.message : "无法读取索引报告"); }
   };
 
@@ -139,6 +161,13 @@ export default function RemoteIndex() {
               <span>时间地点分析：{data.metadataAnalysis.processed.toLocaleString()} / {data.metadataAnalysis.total.toLocaleString()}</span>
               <span>GPS {(data.metadataAnalysis.withGps || 0).toLocaleString()} · 待确认 {(data.metadataAnalysis.needsReview || 0).toLocaleString()}</span>
             </div>
+            {data.metadataAnalysis.processAlive && (
+              <div style={{ marginTop: 5, fontSize: 11, color: "var(--text-tertiary)" }}>
+                {metadataRate > 0
+                  ? `当前约 ${metadataRate.toFixed(1)} 个/秒 · 预计剩余 ${formatDuration((data.metadataAnalysis.total - data.metadataAnalysis.processed) / metadataRate)}`
+                  : "正在采样处理速度，稍后显示预计剩余时间…"}
+              </div>
+            )}
             <div style={{ height: 7, background: "var(--track)", borderRadius: 5, marginTop: 7, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${data.metadataAnalysis.total ? Math.min(100, data.metadataAnalysis.processed / data.metadataAnalysis.total * 100) : 0}%`, background: "var(--accent)", borderRadius: 5 }} />
             </div>
@@ -186,6 +215,15 @@ export default function RemoteIndex() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return <div style={{ background: "var(--fill-quaternary)", padding: "10px 12px", borderRadius: 9 }}><div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 3 }}>{label}</div><div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{value}</div></div>;
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "不到 1 分钟";
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  if (minutes < 60) return `约 ${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `约 ${hours} 小时 ${rest} 分钟` : `约 ${hours} 小时`;
 }
 
 function WorkflowStep({ index, title, desc, state, active = false, action }: { index: string; title: string; desc: string; state: string; active?: boolean; action?: ReactNode }) {
