@@ -16,6 +16,7 @@ export type RemoteIndexStatus = {
   interrupted?: boolean;
   source?: string;
   defaultSource: string;
+  platform?: "windows" | "mac" | "linux";
   sources: RemoteSource[];
   indexedThisRun?: number;
   errors?: number;

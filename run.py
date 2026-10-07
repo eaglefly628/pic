@@ -27,6 +27,7 @@ import signal
 import shutil
 import socketserver
 import sqlite3
+import string
 import subprocess
 import sys
 import threading
@@ -119,7 +120,14 @@ PHOTO_METADATA_LOG = DATA_DIR / "photo-metadata.log"
 PHOTO_ORGANIZE_SCRIPT = ROOT / "project-two" / "scripts" / "photo_organize.py"
 PHOTO_ORGANIZE_LOG = DATA_DIR / "photo-organize.log"
 PHOTO_ORGANIZE_PROFILE = DATA_DIR / "photo-organize-profile.jsonl"
-PHOTO_DEFAULT_SOURCE = Path("/Volumes/24684804")
+if os.environ.get("HOME_PHOTO_SOURCE"):
+    PHOTO_DEFAULT_SOURCE = Path(os.environ["HOME_PHOTO_SOURCE"])
+elif os.name == "nt":
+    PHOTO_DEFAULT_SOURCE = Path("Z:/")
+elif sys.platform == "darwin":
+    PHOTO_DEFAULT_SOURCE = Path("/Volumes/24684804")
+else:
+    PHOTO_DEFAULT_SOURCE = Path("/mnt/24684804")
 _PHOTO_SCAN_LOCK = threading.Lock()
 _PHOTO_SCAN_PROC = None
 _PHOTO_SCAN_LOG_HANDLE = None
@@ -132,43 +140,78 @@ _PHOTO_ORGANIZE_LOG_HANDLE = None
 
 
 def _photo_source_path(value=None):
-    """只允许扫描 /Volumes 下已挂载的目录，避免网页借 API 枚举任意本机文件。"""
-    raw = str(value or PHOTO_DEFAULT_SOURCE).strip()
+    """只允许扫描系统已确认的网络盘/外部挂载，避免网页枚举任意目录。"""
+    readable = [item for item in photo_sources() if item["readable"]]
+    raw = str(value or (readable[0]["path"] if readable else PHOTO_DEFAULT_SOURCE)).strip()
     if not raw:
         raise ValueError("请选择已挂载的 Samba 目录")
     source = Path(raw).expanduser().resolve()
-    volumes = Path("/Volumes").resolve()
-    try:
-        source.relative_to(volumes)
-    except ValueError as exc:
-        raise ValueError("只允许扫描 /Volumes 下已挂载的外部或网络目录") from exc
-    if source == volumes or not source.is_dir() or not os.access(source, os.R_OK):
+    if sys.platform == "darwin":
+        volumes = Path("/Volumes").resolve()
+        try:
+            source.relative_to(volumes)
+        except ValueError as exc:
+            raise ValueError("只允许扫描 /Volumes 下已挂载的外部或网络目录") from exc
+        allowed = source != volumes
+    else:
+        source_key = os.path.normcase(os.path.abspath(str(source)))
+        allowed = any(os.path.normcase(os.path.abspath(item["path"])) == source_key for item in readable)
+    if not allowed or not source.is_dir() or not os.access(source, os.R_OK):
         raise ValueError(f"目录不可读或尚未挂载：{source}")
     return source
 
 
-def photo_sources():
-    """列出当前可供只读索引的挂载卷，不递归读取其中内容。"""
-    found = []
-    volumes = Path("/Volumes")
+def _indexed_photo_roots():
+    if not PHOTO_INDEX_DB.is_file():
+        return []
     try:
-        children = sorted(volumes.iterdir(), key=lambda p: p.name.casefold())
-    except OSError:
-        children = []
-    for child in children:
+        uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=2) as conn:
+            return [str(row[0]) for row in conn.execute("SELECT root FROM sources ORDER BY last_seen_at DESC")]
+    except (OSError, sqlite3.Error):
+        return []
+
+
+def photo_sources():
+    """列出当前可供只读索引的网络盘/挂载卷，不递归读取其中内容。"""
+    found = []
+    candidates = [Path(value) for value in _indexed_photo_roots()]
+    if sys.platform == "darwin":
+        volumes = Path("/Volumes")
         try:
-            resolved = child.resolve()
-            resolved.relative_to(volumes.resolve())
-            if child.name == "Macintosh HD" or not resolved.is_dir():
+            candidates.extend(sorted(volumes.iterdir(), key=lambda p: p.name.casefold()))
+        except OSError:
+            pass
+    elif os.name == "nt":
+        try:
+            import ctypes
+            candidates.extend(Path(f"{letter}:/") for letter in string.ascii_uppercase
+                              if ctypes.windll.kernel32.GetDriveTypeW(f"{letter}:\\") == 4)
+        except Exception:
+            pass
+    configured = os.environ.get("HOME_PHOTO_SOURCE")
+    if configured:
+        candidates.insert(0, Path(configured))
+    seen = set()
+    for candidate in candidates:
+        raw_key = os.path.normcase(os.path.abspath(str(candidate)))
+        if raw_key in seen:
+            continue
+        seen.add(raw_key)
+        try:
+            exists = candidate.is_dir()
+            resolved = candidate.resolve() if exists else candidate
+            if sys.platform == "darwin" and candidate.name == "Macintosh HD":
                 continue
             found.append({
-                "name": child.name,
+                "name": candidate.name or candidate.anchor or str(candidate),
                 "path": str(resolved),
-                "readable": os.access(resolved, os.R_OK),
-                "writable": os.access(resolved, os.W_OK),
+                "readable": exists and os.access(resolved, os.R_OK),
+                "writable": exists and os.access(resolved, os.W_OK),
             })
-        except (OSError, ValueError):
-            continue
+        except OSError:
+            found.append({"name": candidate.name or str(candidate), "path": str(candidate),
+                          "readable": False, "writable": False})
     return found
 
 
@@ -266,6 +309,7 @@ def photo_index_status():
         "db": str(PHOTO_INDEX_DB),
         "sources": photo_sources(),
         "defaultSource": str(PHOTO_DEFAULT_SOURCE),
+        "platform": "windows" if os.name == "nt" else "mac" if sys.platform == "darwin" else "linux",
         "readOnly": True,
     }
     if not PHOTO_INDEX_DB.is_file():

@@ -27,14 +27,15 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
   const [remote, setRemote] = useState<RemoteIndexStatus | null>(null);
   const [remoteError, setRemoteError] = useState("");
   const [remoteBusy, setRemoteBusy] = useState(false);
-  const [remoteSource, setRemoteSource] = useState("/Volumes/24684804");
+  const [remoteSource, setRemoteSource] = useState("");
 
   const refreshRemote = async () => {
     try {
       const next = await getRemoteIndexStatus();
       setRemote(next);
-      if (next.source) setRemoteSource(next.source);
-      else if (next.sources?.length && !next.sources.some((s) => s.path === remoteSource)) setRemoteSource(next.sources[0].path);
+      const readable = next.sources?.filter((source) => source.readable) || [];
+      const indexedIsReadable = !!next.source && readable.some((source) => source.path === next.source);
+      setRemoteSource(indexedIsReadable ? next.source! : readable[0]?.path || next.source || next.defaultSource || "");
       setRemoteError(next.ok ? "" : (next.error || "读取照片索引失败"));
     } catch (err) {
       setRemoteError(err instanceof Error ? err.message : "无法连接照片索引服务");
@@ -114,7 +115,7 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
             onChange={(e) => setRemoteSource(e.target.value)}
             disabled={!!remote?.processAlive || remoteBusy}
             style={{ minWidth: 270, flex: 1 }}
-            options={(remote?.sources?.length ? remote.sources : [{ name: "24684804（尚未挂载）", path: "/Volumes/24684804", readable: false, writable: false }])
+            options={(remote?.sources?.length ? remote.sources : [{ name: "S300（尚未挂载）", path: remote?.defaultSource || "", readable: false, writable: false }])
               .map((s) => ({ value: s.path, label: `${s.readable ? "✓" : "○"} ${s.name} — ${s.path}` }))}
           />
           {remote?.processAlive ? (
@@ -129,7 +130,9 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
 
         {!remote?.sources?.some((s) => s.path === remoteSource && s.readable) && !remoteError && (
           <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--orange)", lineHeight: 1.6 }}>
-            尚未检测到 S300。请先在 Finder 连接 <b>smb://192.168.31.247/24684804</b>，然后回到这里等待几秒。
+            尚未检测到 S300。{remote?.platform === "windows"
+              ? <>请先在 Windows 将 Samba 共享映射为网络驱动器，再导入接力包并重启应用。</>
+              : <>请先在 Finder 连接 <b>smb://192.168.31.247/24684804</b>，然后回到这里等待几秒。</>}
           </div>
         )}
         {remoteError && (
