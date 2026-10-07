@@ -143,6 +143,20 @@ def rebind_database(path: Path, manifest: dict, root: Path, target_name: str) ->
     integrity_check(path)
 
 
+def existing_organize_state(path: Path) -> dict | None:
+    if not path.is_file():
+        return None
+    try:
+        with sqlite3.connect(path) as conn:
+            conn.row_factory = sqlite3.Row
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='organize_runs'").fetchone():
+                return None
+            row = conn.execute("SELECT id,total,verified,source_root FROM organize_runs ORDER BY id DESC LIMIT 1").fetchone()
+            return dict(row) if row else None
+    except sqlite3.Error:
+        return None
+
+
 def import_bundle(args: argparse.Namespace) -> int:
     bundle = Path(args.bundle).expanduser()
     destination = Path(args.db).expanduser()
@@ -152,7 +166,7 @@ def import_bundle(args: argparse.Namespace) -> int:
     if not root.is_dir() or not os.access(root, os.R_OK | os.W_OK):
         raise RuntimeError(f"Surface 上的 S300 路径不可读写：{root}")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists() and not args.replace:
+    if destination.exists() and not args.replace and not args.keep_newer:
         raise RuntimeError(f"目标索引已存在：{destination}；确认替换时加 --replace")
     with exclusive_lock(destination), tempfile.TemporaryDirectory(prefix="photo-handoff-import-") as temp_dir:
         imported = Path(temp_dir) / DB_MEMBER
@@ -160,6 +174,18 @@ def import_bundle(args: argparse.Namespace) -> int:
         target_name = args.target_name or str(manifest.get("targetName") or "家庭影像库")
         if target_name in ("", ".", "..") or "/" in target_name or "\\" in target_name:
             raise RuntimeError("目标目录名必须是安全的单层名称")
+        current = existing_organize_state(destination)
+        expected_root = os.path.normcase(os.path.abspath(str(root.resolve())))
+        if args.keep_newer and current and int(current.get("id") or -1) == int(manifest.get("runId") or -2):
+            current_root = os.path.normcase(os.path.abspath(str(current.get("source_root") or "")))
+            if int(current.get("verified") or 0) >= int(manifest.get("verified") or 0) and current_root == expected_root:
+                print(json.dumps({
+                    "ok": True, "unchanged": True, "database": str(destination),
+                    "sourceRoot": str(root.resolve()), "runId": current["id"],
+                    "verified": current["verified"], "total": current["total"],
+                    "message": "本机已有相同或更新的整理进度，未用旧接力包覆盖",
+                }, ensure_ascii=False))
+                return 0
         rebind_database(imported, manifest, root.resolve(), target_name)
         backup = None
         if destination.exists():
@@ -196,6 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     restore.add_argument("--source-root", required=True)
     restore.add_argument("--target-name", default="")
     restore.add_argument("--replace", action="store_true")
+    restore.add_argument("--keep-newer", action="store_true", help="本机已有相同或更新进度时保留本机数据库")
     restore.set_defaults(func=import_bundle)
     return parser
 

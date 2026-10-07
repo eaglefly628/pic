@@ -59,6 +59,17 @@ def main() -> int:
             job = conn.execute("SELECT source_root,target_root,status,verified FROM organize_runs").fetchone()
         assert root == str(new_root.resolve())
         assert job == (str(new_root.resolve()), str(new_root.resolve() / "家庭影像库"), "paused", 25)
+        with sqlite3.connect(imported) as conn:
+            conn.execute("UPDATE organize_runs SET verified=30 WHERE id=1")
+            conn.commit()
+        repeat = subprocess.run(
+            [sys.executable, str(HERE / "photo_handoff.py"), "import", "--bundle", str(bundle),
+             "--db", str(imported), "--source-root", str(new_root), "--replace", "--keep-newer"],
+            text=True, capture_output=True, check=True,
+        )
+        assert json.loads(repeat.stdout)["unchanged"] is True
+        with sqlite3.connect(imported) as conn:
+            assert conn.execute("SELECT verified FROM organize_runs WHERE id=1").fetchone()[0] == 30
     print("照片索引接力测试通过 ✓")
     return 0
 
