@@ -298,10 +298,18 @@ def run(args: argparse.Namespace) -> int:
                     (str(target_rel), str(target_rel.parent) if str(target_rel.parent) != "." else "", target_rel.name,
                      now_ms(), int(job["source_id"]), str(source_rel)),
                 )
+                conn.execute(
+                    """UPDATE organize_runs SET moved=moved+1,verified=verified+1,
+                       bytes_moved=bytes_moved+?,errors=max(errors-?,0),last_path=?,updated_at=? WHERE id=?""",
+                    (expected_size, 1 if str(entry["status"]) == "error" else 0, str(source_rel), now_ms(), run_id),
+                )
                 conn.commit()
                 handled += 1
                 if handled % args.report_every == 0:
-                    summary = update_summary(conn, run_id, str(source_rel))
+                    current = conn.execute(
+                        "SELECT total,moved,verified,errors,bytes_moved FROM organize_runs WHERE id=?", (run_id,)
+                    ).fetchone()
+                    summary = {key: int(current[key] or 0) for key in ("total", "moved", "verified", "errors", "bytes_moved")}
                     print(json.dumps({"event": "organize_progress", "runId": run_id, "lastPath": str(source_rel), **summary}, ensure_ascii=False), flush=True)
                 if args.max_entries and handled >= args.max_entries:
                     stop.requested = True
@@ -310,8 +318,13 @@ def run(args: argparse.Namespace) -> int:
                     "UPDATE organize_entries SET status='error',error=?,updated_at=? WHERE run_id=? AND source_rel=?",
                     (str(exc), now_ms(), run_id, str(source_rel)),
                 )
+                if str(entry["status"]) != "error":
+                    conn.execute("UPDATE organize_runs SET errors=errors+1 WHERE id=?", (run_id,))
                 conn.commit()
-                summary = update_summary(conn, run_id, str(source_rel))
+                current = conn.execute(
+                    "SELECT total,moved,verified,errors,bytes_moved FROM organize_runs WHERE id=?", (run_id,)
+                ).fetchone()
+                summary = {key: int(current[key] or 0) for key in ("total", "moved", "verified", "errors", "bytes_moved")}
                 conn.execute("UPDATE organize_runs SET status='error',message=?,updated_at=? WHERE id=?",
                              (str(exc), now_ms(), run_id))
                 conn.commit()

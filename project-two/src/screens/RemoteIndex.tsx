@@ -22,8 +22,41 @@ export default function RemoteIndex() {
   const [busy, setBusy] = useState(false);
   const [backupMessage, setBackupMessage] = useState("");
   const [organize, setOrganize] = useState<PhotoOrganizeStatus | null>(null);
+  const [organizeConfirm, setOrganizeConfirm] = useState(false);
   const [metadataRate, setMetadataRate] = useState(0);
+  const [organizeRate, setOrganizeRate] = useState(0);
   const metadataSample = useRef<{ processed: number; at: number } | null>(null);
+  const organizeSample = useRef<{ processed: number; at: number } | null>(null);
+  const organizePolling = useRef(false);
+
+  const acceptOrganizeStatus = (next: PhotoOrganizeStatus) => {
+    const processed = next.verified || 0;
+    if (next.processAlive) {
+      const now = Date.now();
+      const previous = organizeSample.current;
+      if (!previous || processed < previous.processed) {
+        organizeSample.current = { processed, at: now };
+      } else if (processed > previous.processed) {
+        const seconds = (now - previous.at) / 1000;
+        if (seconds > 0) {
+          const currentRate = (processed - previous.processed) / seconds;
+          setOrganizeRate((old) => old > 0 ? old * 0.65 + currentRate * 0.35 : currentRate);
+        }
+        organizeSample.current = { processed, at: now };
+      }
+    } else {
+      organizeSample.current = null;
+    }
+    setOrganize(next);
+  };
+
+  const refreshOrganize = async () => {
+    if (organizePolling.current) return;
+    organizePolling.current = true;
+    try { acceptOrganizeStatus(await getPhotoOrganizeStatus()); }
+    catch (err) { setError(err instanceof Error ? err.message : "无法读取整理进度"); }
+    finally { organizePolling.current = false; }
+  };
 
   const loadStatus = async () => {
     try {
@@ -46,17 +79,23 @@ export default function RemoteIndex() {
         metadataSample.current = null;
       }
       setData(next);
-      setOrganize(organizeNext);
+      acceptOrganizeStatus(organizeNext);
     }
     catch (err) { setError(err instanceof Error ? err.message : "无法读取索引报告"); }
   };
 
   useEffect(() => { void loadStatus(); }, []);
   useEffect(() => {
-    if (!data?.processAlive && !data?.metadataAnalysis?.processAlive && !organize?.processAlive) return;
+    if (!data?.processAlive && !data?.metadataAnalysis?.processAlive) return;
     const timer = window.setInterval(() => void loadStatus(), 1800);
     return () => window.clearInterval(timer);
-  }, [data?.processAlive, data?.metadataAnalysis?.processAlive, organize?.processAlive]);
+  }, [data?.processAlive, data?.metadataAnalysis?.processAlive]);
+  useEffect(() => {
+    if (!organize?.processAlive) return;
+    void refreshOrganize();
+    const timer = window.setInterval(() => void refreshOrganize(), 1200);
+    return () => window.clearInterval(timer);
+  }, [organize?.processAlive]);
 
   if (!data && !error) return <div style={{ padding: 32, color: "var(--text-tertiary)" }}>正在读取本机索引…</div>;
   if (!data) return <div style={{ padding: 32, color: "var(--red)" }}>{error}</div>;
@@ -111,19 +150,19 @@ export default function RemoteIndex() {
     setBusy(true); setError("");
     try {
       const next = await planPhotoOrganize();
-      setOrganize(next);
+      acceptOrganizeStatus(next);
       if (!next.ok) setError(next.error || "生成整理预演失败");
     } catch (err) { setError(err instanceof Error ? err.message : "生成整理预演失败"); }
     finally { setBusy(false); }
   };
 
   const runOrganize = async () => {
-    const count = organize?.total || 0;
-    if (!window.confirm(`将按预演在 S300 内移动 ${count.toLocaleString()} 个文件。不会覆盖、删除或合并文件；可安全暂停并续跑。确认开始？`)) return;
+    setOrganizeConfirm(false);
     setBusy(true); setError("");
+    if (organize) setOrganize({ ...organize, status: "running", processAlive: true, message: "启动请求已收到，正在连接 S300…" });
     try {
       const next = await startPhotoOrganize();
-      setOrganize(next);
+      acceptOrganizeStatus(next);
       if (!next.ok) setError(next.error || "启动整理失败");
     } catch (err) { setError(err instanceof Error ? err.message : "启动整理失败"); }
     finally { setBusy(false); }
@@ -131,7 +170,7 @@ export default function RemoteIndex() {
 
   const pauseOrganize = async () => {
     setBusy(true); setError("");
-    try { setOrganize(await pausePhotoOrganize()); }
+    try { acceptOrganizeStatus(await pausePhotoOrganize()); }
     catch (err) { setError(err instanceof Error ? err.message : "暂停整理失败"); }
     finally { setBusy(false); }
   };
@@ -192,7 +231,7 @@ export default function RemoteIndex() {
             action={organize?.processAlive
               ? <Btn variant="ghost" onClick={pauseOrganize} disabled={busy}>安全暂停</Btn>
               : organize?.status === "planned" || organize?.status === "paused" || organize?.status === "error"
-                ? <Btn onClick={runOrganize} disabled={busy}>{organize.status === "planned" ? "确认并开始整理" : "继续整理"}</Btn>
+                ? <Btn onClick={organize.status === "planned" ? () => setOrganizeConfirm(true) : runOrganize} disabled={busy}>{organize.status === "planned" ? "确认并开始整理" : "继续整理"}</Btn>
                 : organize?.status === "completed"
                   ? <span style={{ fontSize: 11, color: "var(--green)" }}>文件和索引均已更新</span>
                   : <Btn onClick={planOrganize} disabled={busy || data.metadataAnalysis?.status !== "completed"}>生成整理预演</Btn>} />
@@ -201,6 +240,18 @@ export default function RemoteIndex() {
           <WorkflowStep index="5" title="清理审核" desc="人工确认后先隔离，不直接永久删除" state="等待重复检测"
             action={<Btn variant="ghost" disabled style={{ opacity: .5, cursor: "not-allowed" }}>完成重复检测后开放</Btn>} />
         </div>
+        {organizeConfirm && organize?.status === "planned" && (
+          <div style={{ marginTop: 13, padding: "13px 14px", borderRadius: 10, border: "1px solid var(--orange)", background: "var(--fill-quaternary)" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)" }}>确认开始按时间整理</div>
+            <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.6, color: "var(--text-secondary)" }}>
+              将在 S300 内移动 {(organize.total || 0).toLocaleString()} 个可信时间文件（{fmtSize(organize.bytesTotal || 0)}）。不会覆盖、删除或合并文件；{(organize.needsReview || 0).toLocaleString()} 个低可信项继续留在原处。任务可安全暂停并续跑。
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <Btn onClick={runOrganize} disabled={busy}>{busy ? "正在启动…" : "开始整理"}</Btn>
+              <Btn variant="ghost" onClick={() => setOrganizeConfirm(false)} disabled={busy}>取消</Btn>
+            </div>
+          </div>
+        )}
         {data.metadataAnalysis && data.metadataAnalysis.status !== "not_started" && (
           <div style={{ marginTop: 13, padding: "11px 12px", borderRadius: 9, background: "var(--fill-quaternary)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11.5, color: "var(--text-secondary)" }}>
@@ -228,6 +279,15 @@ export default function RemoteIndex() {
             <div style={{ height: 7, background: "var(--track)", borderRadius: 5, marginTop: 7, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${organize.total ? Math.min(100, (organize.verified || 0) / organize.total * 100) : 0}%`, background: "var(--green)", borderRadius: 5 }} />
             </div>
+            {organize.processAlive && (
+              <div style={{ marginTop: 7, fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.55 }}>
+                <div>{organizeRate > 0
+                  ? `当前约 ${organizeRate.toFixed(1)} 个/秒 · 预计剩余 ${formatDuration(((organize.total || 0) - (organize.verified || 0)) / organizeRate)}`
+                  : "任务已启动，正在采样处理速度…"} · 已整理 {fmtSize(organize.bytesMoved || 0)}</div>
+                {organize.lastPath && <div title={organize.lastPath} style={{ marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-tertiary)" }}>当前：{organize.lastPath}</div>}
+              </div>
+            )}
+            {!!organize.errors && <div style={{ marginTop: 6, fontSize: 11, color: "var(--red)" }}>错误 {organize.errors.toLocaleString()} · 任务会停止等待核对，不会跳过后继续覆盖。</div>}
             <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-tertiary)", overflowWrap: "anywhere" }}>
               目标：{organize.targetRoot}。低可信项只生成“_待确认时间”建议并原地保留；同名文件自动加稳定后缀，绝不覆盖。
             </div>
