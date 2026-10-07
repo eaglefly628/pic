@@ -20,6 +20,7 @@ import contextlib
 import http.server
 import io
 import json
+import math
 import mimetypes
 import os
 import re
@@ -140,6 +141,8 @@ _PHOTO_METADATA_LOG_HANDLE = None
 _PHOTO_ORGANIZE_LOCK = threading.Lock()
 _PHOTO_ORGANIZE_PROC = None
 _PHOTO_ORGANIZE_LOG_HANDLE = None
+_PHOTO_ORGANIZE_PROFILE_LOCK = threading.Lock()
+_PHOTO_ORGANIZE_PROFILE_CACHE = {"identity": None, "offset": 0, "runs": {}}
 
 
 def _photo_source_path(value=None):
@@ -272,6 +275,40 @@ def _photo_organize_process_alive():
         return alive
 
 
+def _photo_organize_profile_summary(run_id):
+    """Incrementally total completed batches; paused/offline time is not counted."""
+    with _PHOTO_ORGANIZE_PROFILE_LOCK:
+        try:
+            stat = PHOTO_ORGANIZE_PROFILE.stat()
+            identity = (str(PHOTO_ORGANIZE_PROFILE), stat.st_dev, stat.st_ino)
+            cache = _PHOTO_ORGANIZE_PROFILE_CACHE
+            if cache["identity"] != identity or stat.st_size < cache["offset"]:
+                cache.update(identity=identity, offset=0, runs={})
+            with PHOTO_ORGANIZE_PROFILE.open("rb") as handle:
+                handle.seek(cache["offset"])
+                while True:
+                    line = handle.readline()
+                    if not line or not line.endswith(b"\n"):
+                        break  # An unfinished append will be read on the next poll.
+                    cache["offset"] = handle.tell()
+                    try:
+                        entry = json.loads(line)
+                        entry_run = int(entry["runId"])
+                        succeeded = int(entry["succeeded"])
+                        wall_ms = float(entry["batchWallMs"])
+                        if succeeded < 0 or not math.isfinite(wall_ms) or wall_ms <= 0:
+                            continue
+                    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+                        continue
+                    totals = cache["runs"].setdefault(entry_run, {"files": 0, "wallMs": 0.0, "batches": 0})
+                    totals["files"] += succeeded
+                    totals["wallMs"] += wall_ms
+                    totals["batches"] += 1
+            return dict(cache["runs"].get(run_id, {"files": 0, "wallMs": 0.0, "batches": 0}))
+        except OSError:
+            return {"files": 0, "wallMs": 0.0, "batches": 0}
+
+
 def photo_organize_status():
     """返回最新整理预演/执行状态，不访问原始媒体内容。"""
     empty = {"ok": True, "status": "not_started", "processAlive": _photo_organize_process_alive()}
@@ -298,11 +335,17 @@ def photo_organize_status():
                             source_rel COLLATE NOCASE LIMIT 8""",
                 (int(row["id"]),),
             ).fetchall()
+            profile = _photo_organize_profile_summary(int(row["id"]))
+            average_rate = profile["files"] * 1000 / profile["wallMs"] if profile["wallMs"] > 0 else 0
+            remaining = max(0, int(row["total"] or 0) - int(row["verified"] or 0))
             return {
                 "ok": True, "runId": int(row["id"]), "status": status, "processAlive": alive,
                 "sourceRoot": row["source_root"], "targetRoot": row["target_root"],
                 "layout": row["layout"] if "layout" in row.keys() else "day",
                 "profileLog": str(PHOTO_ORGANIZE_PROFILE),
+                "averageRate": round(average_rate, 3),
+                "estimatedRemainingSeconds": round(remaining / average_rate) if average_rate > 0 else None,
+                "profileBatches": profile["batches"],
                 "total": int(row["total"] or 0), "moved": int(row["moved"] or 0),
                 "verified": int(row["verified"] or 0), "errors": int(row["errors"] or 0),
                 "bytesTotal": int(row["bytes_total"] or 0), "bytesMoved": int(row["bytes_moved"] or 0),

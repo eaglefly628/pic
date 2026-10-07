@@ -24,29 +24,10 @@ export default function RemoteIndex() {
   const [organize, setOrganize] = useState<PhotoOrganizeStatus | null>(null);
   const [organizeConfirm, setOrganizeConfirm] = useState(false);
   const [metadataRate, setMetadataRate] = useState(0);
-  const [organizeRate, setOrganizeRate] = useState(0);
   const metadataSample = useRef<{ processed: number; at: number } | null>(null);
-  const organizeSample = useRef<{ processed: number; at: number } | null>(null);
   const organizePolling = useRef(false);
 
   const acceptOrganizeStatus = (next: PhotoOrganizeStatus) => {
-    const processed = next.verified || 0;
-    if (next.processAlive) {
-      const now = Date.now();
-      const previous = organizeSample.current;
-      if (!previous || processed < previous.processed) {
-        organizeSample.current = { processed, at: now };
-      } else if (processed > previous.processed) {
-        const seconds = (now - previous.at) / 1000;
-        if (seconds > 0) {
-          const currentRate = (processed - previous.processed) / seconds;
-          setOrganizeRate((old) => old > 0 ? old * 0.65 + currentRate * 0.35 : currentRate);
-        }
-        organizeSample.current = { processed, at: now };
-      }
-    } else {
-      organizeSample.current = null;
-    }
     setOrganize(next);
   };
 
@@ -281,9 +262,9 @@ export default function RemoteIndex() {
             </div>
             {organize.processAlive && (
               <div style={{ marginTop: 7, fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.55 }}>
-                <div>{organizeRate > 0
-                  ? `当前约 ${organizeRate.toFixed(1)} 个/秒 · 预计剩余 ${formatDuration(((organize.total || 0) - (organize.verified || 0)) / organizeRate)}`
-                  : "任务已启动，正在采样处理速度…"} · 已整理 {fmtSize(organize.bytesMoved || 0)}</div>
+                <div>{organize.averageRate && organize.estimatedRemainingSeconds != null
+                  ? `已完成批次累计平均约 ${organize.averageRate.toFixed(1)} 个/秒 · 预计剩余 ${formatStableDuration(organize.estimatedRemainingSeconds)}`
+                  : "任务已启动，正在统计已完成批次…"} · 已整理 {fmtSize(organize.bytesMoved || 0)}</div>
                 {organize.lastPath && <div title={organize.lastPath} style={{ marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-tertiary)" }}>当前：{organize.lastPath}</div>}
               </div>
             )}
@@ -349,6 +330,13 @@ function formatDuration(seconds: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest ? `约 ${hours} 小时 ${rest} 分钟` : `约 ${hours} 小时`;
+}
+
+function formatStableDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "不到 1 分钟";
+  const minutes = Math.ceil(seconds / 60);
+  const step = minutes >= 360 ? 30 : minutes >= 60 ? 15 : 5;
+  return formatDuration(Math.ceil(minutes / step) * step * 60);
 }
 
 function WorkflowStep({ index, title, desc, state, active = false, action }: { index: string; title: string; desc: string; state: string; active?: boolean; action?: ReactNode }) {

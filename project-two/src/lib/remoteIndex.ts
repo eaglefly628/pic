@@ -91,6 +91,9 @@ export type PhotoOrganizeStatus = {
   targetRoot?: string;
   layout?: "month" | "day";
   profileLog?: string;
+  averageRate?: number;
+  estimatedRemainingSeconds?: number | null;
+  profileBatches?: number;
   total?: number;
   moved?: number;
   verified?: number;
