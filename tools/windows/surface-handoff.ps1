@@ -84,8 +84,15 @@ try {
     $localBundle = Join-Path $handoffDir "photo-handoff.zip"
     Copy-Item -LiteralPath $bundle.FullName -Destination $localBundle -Force
     $handoff = Join-Path $repo "project-two\scripts\photo_handoff.py"
-    & $python.Source $handoff import --bundle $localBundle --source-root $sourceRoot --replace --keep-newer
-    if ($LASTEXITCODE -ne 0) { throw "The photo index handoff failed." }
+    $handoffLog = Join-Path $bundle.DirectoryName "surface-handoff-last.log"
+    $handoffOutput = & $python.Source $handoff import --bundle $localBundle --source-root $sourceRoot --replace --keep-newer 2>&1
+    $handoffExit = $LASTEXITCODE
+    $handoffOutput | Out-String | Set-Content -LiteralPath $handoffLog -Encoding UTF8
+    $handoffOutput | ForEach-Object { Write-Host $_ }
+    if ($handoffExit -ne 0) {
+        Start-Process notepad.exe -ArgumentList $handoffLog
+        throw "The photo index handoff failed. The detailed log was opened in Notepad."
+    }
 
     Step "Handoff completed; starting the app"
     Write-Host "Expected: metadata 132,213 complete; organization at least 1,336 / 104,687." -ForegroundColor Green

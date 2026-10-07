@@ -163,8 +163,8 @@ def import_bundle(args: argparse.Namespace) -> int:
     root = Path(args.source_root).expanduser()
     if not bundle.is_file():
         raise RuntimeError(f"接力包不存在：{bundle}")
-    if not root.is_dir() or not os.access(root, os.R_OK | os.W_OK):
-        raise RuntimeError(f"Surface 上的 S300 路径不可读写：{root}")
+    if not root.is_dir():
+        raise RuntimeError(f"Surface 上的 S300 路径不可访问：{root}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists() and not args.replace and not args.keep_newer:
         raise RuntimeError(f"目标索引已存在：{destination}；确认替换时加 --replace")

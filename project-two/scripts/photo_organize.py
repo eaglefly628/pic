@@ -165,7 +165,7 @@ def plan(args: argparse.Namespace) -> int:
         ensure_schema(conn)
         source = latest_source(conn)
         sid, root = int(source["id"]), Path(str(source["root"]))
-        if not root.is_dir() or not os.access(root, os.R_OK | os.W_OK):
+        if not root.is_dir() or (os.name != "nt" and not os.access(root, os.R_OK | os.W_OK)):
             raise RuntimeError(f"共享目录不可读写或尚未挂载：{root}")
         target_root = root / target_name
         active = conn.execute(
@@ -363,7 +363,7 @@ def run(args: argparse.Namespace) -> int:
             target_root.relative_to(root)
         except ValueError as exc:
             raise RuntimeError("整理目标不在当前共享盘内") from exc
-        if not root.is_dir() or not os.access(root, os.R_OK | os.W_OK):
+        if not root.is_dir() or (os.name != "nt" and not os.access(root, os.R_OK | os.W_OK)):
             raise RuntimeError(f"共享目录不可读写或尚未挂载：{root}")
         target_root.mkdir(parents=True, exist_ok=True)
         if root.stat().st_dev != target_root.stat().st_dev:
