@@ -6,82 +6,96 @@ function Step([string]$Message) {
 }
 
 try {
-    Step "确认 S300 和接力包"
-    $sourceRoot = [System.IO.Path]::GetPathRoot($PSScriptRoot)
-    if (-not $sourceRoot -or -not (Test-Path -LiteralPath $sourceRoot)) {
-        throw "无法识别 S300 盘符。请从已经映射的 Z: 盘双击本文件。"
-    }
-    if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "家庭影像库"))) {
-        throw "当前盘符 $sourceRoot 下没有“家庭影像库”，可能映射了错误的共享层级。"
-    }
-    $bundle = Get-ChildItem -LiteralPath $PSScriptRoot -Filter "photo-handoff-surface-*.zip" -File |
+    Step "Locating the S300 handoff bundle"
+    $bundle = Get-ChildItem -LiteralPath $PSScriptRoot -Filter "photo-handoff-surface-*.zip" -File -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $bundle) { throw "接力目录中没有找到照片索引 ZIP。" }
-    Write-Host "已找到 S300：$sourceRoot"
-    Write-Host "已找到接力包：$($bundle.Name)"
+
+    if (-not $bundle) {
+        $roots = @("Z:\")
+        $roots += Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayRoot } | ForEach-Object { $_.Root }
+        foreach ($root in ($roots | Select-Object -Unique)) {
+            if (-not (Test-Path -LiteralPath $root)) { continue }
+            $bundle = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+                ForEach-Object {
+                    Get-ChildItem -LiteralPath $_.FullName -Filter "photo-handoff-surface-*.zip" -File -ErrorAction SilentlyContinue
+                } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($bundle) { break }
+        }
+    }
+    if (-not $bundle) {
+        throw "No photo handoff ZIP was found on Z: or another mapped network drive."
+    }
+    $sourceRoot = [System.IO.Path]::GetPathRoot($bundle.FullName)
+    if (-not $sourceRoot -or -not (Test-Path -LiteralPath $sourceRoot)) {
+        throw "The mapped S300 drive is unavailable."
+    }
+    Write-Host "S300 root: $sourceRoot"
+    Write-Host "Bundle: $($bundle.FullName)"
 
     $python = Get-Command py -ErrorAction SilentlyContinue
     if (-not $python) { $python = Get-Command python -ErrorAction SilentlyContinue }
-    if (-not $python) { throw "没有找到 Python 3。" }
+    if (-not $python) { throw "Python 3 was not found." }
     $git = Get-Command git -ErrorAction SilentlyContinue
-    if (-not $git) { throw "没有找到 Git for Windows。" }
+    if (-not $git) { throw "Git for Windows was not found." }
 
-    Step "查找或准备 PIC 工程"
+    Step "Locating or preparing the PIC repository"
     $known = @(
         (Join-Path $env:USERPROFILE "pic"),
         (Join-Path $env:USERPROFILE "Documents\pic"),
         (Join-Path $env:USERPROFILE "Desktop\pic"),
         (Join-Path $env:USERPROFILE "source\repos\pic"),
+        "C:\pic",
         (Join-Path $env:LOCALAPPDATA "PIC-Codex")
     )
     $repo = $known | Where-Object { Test-Path -LiteralPath (Join-Path $_ "run.py") } | Select-Object -First 1
     if (-not $repo) {
         $repo = Join-Path $env:LOCALAPPDATA "PIC-Codex"
-        Write-Host "未找到现有工程，正在自动下载到：$repo"
+        Write-Host "Cloning the repository to: $repo"
         & $git.Source clone --branch codex/data-continuity-latest https://github.com/eaglefly628/pic.git $repo
-        if ($LASTEXITCODE -ne 0) { throw "自动下载代码失败，请检查网络。" }
+        if ($LASTEXITCODE -ne 0) { throw "The repository could not be downloaded." }
     }
     $repo = (Resolve-Path -LiteralPath $repo).Path
-    Write-Host "使用工程：$repo"
+    Write-Host "Repository: $repo"
 
-    Step "停止旧版应用"
+    Step "Stopping an older local server"
     $listeners = Get-NetTCPConnection -LocalPort 5180 -State Listen -ErrorAction SilentlyContinue
     foreach ($listener in $listeners) {
         $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
         if ($process -and $process.CommandLine -match "run\.py") {
             Stop-Process -Id $listener.OwningProcess -Force
-            Write-Host "已停止旧服务。"
+            Write-Host "Stopped the older run.py server."
         } elseif ($listener) {
-            throw "端口 5180 被其他程序占用，请先关闭 PID $($listener.OwningProcess)。"
+            throw "Port 5180 is used by another process (PID $($listener.OwningProcess))."
         }
     }
 
-    Step "自动更新 GitHub 代码"
+    Step "Updating the code from GitHub"
     & $git.Source -C $repo fetch origin
-    if ($LASTEXITCODE -ne 0) { throw "无法连接 GitHub 更新代码。" }
+    if ($LASTEXITCODE -ne 0) { throw "GitHub could not be reached." }
     & $git.Source -C $repo switch codex/data-continuity-latest
-    if ($LASTEXITCODE -ne 0) { throw "切换开发分支失败，本地可能有未提交修改。" }
+    if ($LASTEXITCODE -ne 0) { throw "The Codex branch could not be selected." }
     & $git.Source -C $repo pull --ff-only origin codex/data-continuity-latest
-    if ($LASTEXITCODE -ne 0) { throw "拉取最新代码失败。" }
+    if ($LASTEXITCODE -ne 0) { throw "The latest code could not be pulled." }
 
-    Step "自动导入接力数据库并绑定到 $sourceRoot"
+    Step "Importing the analyzed index and rebinding it to $sourceRoot"
     $handoffDir = Join-Path $env:LOCALAPPDATA "PIC-Handoff"
     New-Item -ItemType Directory -Path $handoffDir -Force | Out-Null
     $localBundle = Join-Path $handoffDir "photo-handoff.zip"
     Copy-Item -LiteralPath $bundle.FullName -Destination $localBundle -Force
     $handoff = Join-Path $repo "project-two\scripts\photo_handoff.py"
     & $python.Source $handoff import --bundle $localBundle --source-root $sourceRoot --replace --keep-newer
-    if ($LASTEXITCODE -ne 0) { throw "数据库自动接力失败。" }
+    if ($LASTEXITCODE -ne 0) { throw "The photo index handoff failed." }
 
-    Step "接力完成，正在启动应用"
-    Write-Host "页面应显示：时间地点分析已完成，整理进度至少 1,336 / 104,687。" -ForegroundColor Green
-    Write-Host "请保持本窗口打开。" -ForegroundColor Green
+    Step "Handoff completed; starting the app"
+    Write-Host "Expected: metadata 132,213 complete; organization at least 1,336 / 104,687." -ForegroundColor Green
+    Write-Host "Keep this window open while the app is running." -ForegroundColor Green
     Set-Location -LiteralPath $repo
     & $python.Source (Join-Path $repo "run.py")
-    if ($LASTEXITCODE -ne 0) { throw "应用退出，代码 $LASTEXITCODE。" }
+    if ($LASTEXITCODE -ne 0) { throw "The app exited with code $LASTEXITCODE." }
 }
 catch {
     Write-Host ""
-    Write-Host "失败：$($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "FAILED: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
