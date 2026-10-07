@@ -1,8 +1,25 @@
 $ErrorActionPreference = "Stop"
 
+$handoffLogDir = Join-Path $env:LOCALAPPDATA "PIC-Handoff"
+New-Item -ItemType Directory -Path $handoffLogDir -Force | Out-Null
+$localHandoffLog = Join-Path $handoffLogDir "surface-handoff-last.log"
+$shareHandoffLog = $null
+@(
+    "Surface photo handoff log"
+    "Started: $([DateTime]::Now.ToString('s'))"
+    "Computer: $env:COMPUTERNAME"
+    "User: $env:USERNAME"
+) | Set-Content -LiteralPath $localHandoffLog -Encoding UTF8
+
+function Append-Log([string]$Message) {
+    $Message | Add-Content -LiteralPath $script:localHandoffLog -Encoding UTF8
+}
+
 function Step([string]$Message) {
     Write-Host ""
     Write-Host "==> $Message" -ForegroundColor Cyan
+    Append-Log ""
+    Append-Log "==> $Message"
 }
 
 try {
@@ -32,6 +49,9 @@ try {
     }
     Write-Host "S300 root: $sourceRoot"
     Write-Host "Bundle: $($bundle.FullName)"
+    $shareHandoffLog = Join-Path $bundle.DirectoryName "surface-handoff-last.log"
+    Append-Log "S300 root: $sourceRoot"
+    Append-Log "Bundle: $($bundle.FullName)"
 
     $python = Get-Command py -ErrorAction SilentlyContinue
     if (-not $python) { $python = Get-Command python -ErrorAction SilentlyContinue }
@@ -57,6 +77,7 @@ try {
     }
     $repo = (Resolve-Path -LiteralPath $repo).Path
     Write-Host "Repository: $repo"
+    Append-Log "Repository: $repo"
 
     Step "Stopping an older local server"
     $listeners = Get-NetTCPConnection -LocalPort 5180 -State Listen -ErrorAction SilentlyContinue
@@ -84,14 +105,48 @@ try {
     $localBundle = Join-Path $handoffDir "photo-handoff.zip"
     Copy-Item -LiteralPath $bundle.FullName -Destination $localBundle -Force
     $handoff = Join-Path $repo "project-two\scripts\photo_handoff.py"
-    $handoffLog = Join-Path $bundle.DirectoryName "surface-handoff-last.log"
-    $handoffOutput = & $python.Source $handoff import --bundle $localBundle --source-root $sourceRoot --replace --keep-newer 2>&1
-    $handoffExit = $LASTEXITCODE
-    $handoffOutput | Out-String | Set-Content -LiteralPath $handoffLog -Encoding UTF8
-    $handoffOutput | ForEach-Object { Write-Host $_ }
+    $stdoutLog = Join-Path $handoffDir "photo-handoff-stdout.log"
+    $stderrLog = Join-Path $handoffDir "photo-handoff-stderr.log"
+    Append-Log "Python: $($python.Source)"
+    Append-Log "Importer: $handoff"
+    Append-Log "Local bundle: $localBundle"
+    Append-Log "Source root: $sourceRoot"
+    $previousErrorPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5 can turn native stderr into a terminating error
+        # when ErrorActionPreference is Stop. Redirect both streams to local
+        # files first so the real Python error always survives.
+        $ErrorActionPreference = "Continue"
+        & $python.Source $handoff import --bundle $localBundle --source-root $sourceRoot --replace --keep-newer 1> $stdoutLog 2> $stderrLog
+        $handoffExit = $LASTEXITCODE
+    }
+    catch {
+        $handoffExit = -1
+        $_ | Out-String | Set-Content -LiteralPath $stderrLog -Encoding UTF8
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorPreference
+    }
+    Append-Log "Exit code: $handoffExit"
+    Append-Log "--- stdout ---"
+    if (Test-Path -LiteralPath $stdoutLog) {
+        Get-Content -LiteralPath $stdoutLog | ForEach-Object { Append-Log $_; Write-Host $_ }
+    } else {
+        Append-Log "(no stdout file)"
+    }
+    Append-Log "--- stderr ---"
+    if (Test-Path -LiteralPath $stderrLog) {
+        Get-Content -LiteralPath $stderrLog | ForEach-Object { Append-Log $_; Write-Host $_ -ForegroundColor Red }
+    } else {
+        Append-Log "(no stderr file)"
+    }
+    try {
+        Copy-Item -LiteralPath $localHandoffLog -Destination $shareHandoffLog -Force
+    } catch {
+        Append-Log "Could not copy the log to S300: $($_.Exception.Message)"
+    }
     if ($handoffExit -ne 0) {
-        Start-Process notepad.exe -ArgumentList $handoffLog
-        throw "The photo index handoff failed. The detailed log was opened in Notepad."
+        throw "The photo index handoff failed with exit code $handoffExit."
     }
 
     Step "Handoff completed; starting the app"
@@ -102,7 +157,19 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "The app exited with code $LASTEXITCODE." }
 }
 catch {
+    Append-Log ""
+    Append-Log "FAILED: $($_.Exception.Message)"
+    Append-Log ($_.ScriptStackTrace | Out-String)
+    if ($shareHandoffLog) {
+        try {
+            Copy-Item -LiteralPath $localHandoffLog -Destination $shareHandoffLog -Force
+        } catch {
+            Append-Log "Could not copy the final log to S300: $($_.Exception.Message)"
+        }
+    }
     Write-Host ""
     Write-Host "FAILED: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Detailed log: $localHandoffLog" -ForegroundColor Yellow
+    Start-Process notepad.exe -ArgumentList ('"{0}"' -f $localHandoffLog)
     exit 1
 }
