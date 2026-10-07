@@ -226,7 +226,7 @@ def analyze(args: argparse.Namespace) -> int:
         if not source:
             raise RuntimeError("请先完成文件索引")
         sid, root = int(source["id"]), Path(str(source["root"]))
-        if not root.is_dir() or not os.access(root, os.R_OK):
+        if not root.is_dir() or (os.name != "nt" and not os.access(root, os.R_OK)):
             raise RuntimeError(f"共享目录尚未挂载：{root}")
         run_id = begin_run(conn, sid)
         worker = ImageWorker()

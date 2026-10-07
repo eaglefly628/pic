@@ -148,7 +148,7 @@ def _photo_source_path(value=None):
     raw = str(value or (readable[0]["path"] if readable else PHOTO_DEFAULT_SOURCE)).strip()
     if not raw:
         raise ValueError("请选择已挂载的 Samba 目录")
-    source = Path(raw).expanduser().resolve()
+    source = Path(raw).expanduser().absolute() if os.name == "nt" else Path(raw).expanduser().resolve()
     if sys.platform == "darwin":
         volumes = Path("/Volumes").resolve()
         try:
@@ -159,7 +159,7 @@ def _photo_source_path(value=None):
     else:
         source_key = os.path.normcase(os.path.abspath(str(source)))
         allowed = any(os.path.normcase(os.path.abspath(item["path"])) == source_key for item in readable)
-    if not allowed or not source.is_dir() or not os.access(source, os.R_OK):
+    if not allowed or not source.is_dir() or (os.name != "nt" and not os.access(source, os.R_OK)):
         raise ValueError(f"目录不可读或尚未挂载：{source}")
     return source
 
@@ -203,13 +203,26 @@ def photo_sources():
         seen.add(raw_key)
         try:
             exists = candidate.is_dir()
-            resolved = candidate.resolve() if exists else candidate
+            if os.name == "nt":
+                resolved = candidate.absolute()
+            else:
+                resolved = candidate.resolve() if exists else candidate
             if sys.platform == "darwin" and candidate.name == "Macintosh HD":
                 continue
+            readable = exists and os.access(resolved, os.R_OK)
+            if exists and os.name == "nt":
+                # Windows SMB mappings can report false from os.access; ask the
+                # directory itself whether its entries can be enumerated.
+                try:
+                    with os.scandir(resolved) as entries:
+                        next(entries, None)
+                    readable = True
+                except OSError:
+                    readable = False
             found.append({
                 "name": candidate.name or candidate.anchor or str(candidate),
                 "path": str(resolved),
-                "readable": exists and os.access(resolved, os.R_OK),
+                "readable": readable,
                 "writable": exists and os.access(resolved, os.W_OK),
             })
         except OSError:
@@ -802,7 +815,7 @@ def photo_index_backup():
                    ORDER BY r.id DESC LIMIT 1"""
             ).fetchone()
         root = _photo_source_path(root_row[0] if root_row else None)
-        if not os.access(root, os.W_OK):
+        if os.name != "nt" and not os.access(root, os.W_OK):
             raise ValueError(f"S300 当前没有写入权限：{root}")
         remote_dir = root / "我家里的一切-索引备份"
         remote_dir.mkdir(parents=True, exist_ok=True)
@@ -1972,6 +1985,22 @@ class Server(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
+def _existing_server_matches():
+    """Only reuse the port when it serves this exact backend version and photo API."""
+    base = f"http://127.0.0.1:{PORT}"
+    try:
+        with urllib.request.urlopen(base + "/api/version", timeout=2) as response:
+            info = json.load(response)
+        if info.get("version") != APP_VERSION or info.get("channel") != APP_CHANNEL:
+            return False, f"当前服务版本 {info.get('label') or info.get('version') or '未知'}，本次代码为 {APP_LABEL}"
+        with urllib.request.urlopen(base + "/api/photos/handoff/status", timeout=2) as response:
+            if response.status != 200:
+                return False, "当前服务缺少照片接力接口"
+        return True, ""
+    except Exception:
+        return False, "占用端口的服务不是当前版本的统一入口，或照片接口不可用"
+
+
 def main() -> int:
     if not HUB.is_file():
         print("✗ 缺少 hub/index.html")
@@ -1980,11 +2009,17 @@ def main() -> int:
     no_browser = bool(os.environ.get("HOME_NO_BROWSER"))   # 被 Mac App(Electron) 拉起时=1，不再另开系统浏览器
     try:
         httpd = Server(("127.0.0.1", PORT), Handler)
-    except OSError:
-        print(f"检测到 {PORT} 已被占用，直接打开：{url}")
-        if not no_browser:
-            webbrowser.open(url)
-        return 0
+    except OSError as exc:
+        matches, reason = _existing_server_matches()
+        if matches:
+            print(f"当前版本已在 {PORT} 端口运行，打开：{url}")
+            if not no_browser:
+                webbrowser.open(url)
+            return 0
+        print(f"✗ 无法启动 v{APP_LABEL}：{PORT} 端口已被占用。{reason}")
+        print("  请先关闭旧的运行窗口或占用 5180 的程序，再重新启动本项目。")
+        print(f"  端口错误：{exc}")
+        return 1
     with httpd:
         # Electron 关闭窗口时发送 SIGTERM；转成正常退出，先让正在扫描的目录安全落盘。
         if hasattr(signal, "SIGTERM"):

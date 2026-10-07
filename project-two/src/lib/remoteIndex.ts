@@ -149,6 +149,7 @@ async function request(path: string, init?: RequestInit): Promise<RemoteIndexSta
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
+  if (response.status === 404) throw new Error("5180 端口上的服务不是当前版本；请关闭旧服务，再从最新项目启动应用");
   if (!response.ok) throw new Error(`照片索引服务不可用（HTTP ${response.status}）`);
   return response.json() as Promise<RemoteIndexStatus>;
 }
@@ -195,6 +196,7 @@ async function organizeRequest(path: string, body?: object): Promise<PhotoOrgani
   const response = await fetch(path, body ? {
     method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   } : { cache: "no-store" });
+  if (response.status === 404) throw new Error("5180 端口上的服务缺少照片整理接口；请关闭旧服务，再从最新项目启动应用");
   if (!response.ok) throw new Error(`照片整理服务不可用（HTTP ${response.status}）`);
   return response.json() as Promise<PhotoOrganizeStatus>;
 }
@@ -220,6 +222,7 @@ async function handoffRequest(path: string, method = "GET"): Promise<PhotoHandof
     method, cache: "no-store", headers: { "Content-Type": "application/json" },
     ...(method === "POST" ? { body: "{}" } : {}),
   });
+  if (response.status === 404) throw new Error("5180 端口上的服务没有照片接力接口；请关闭旧服务，再从最新项目启动应用");
   if (!response.ok) throw new Error(`照片接力服务不可用（HTTP ${response.status}）`);
   return response.json() as Promise<PhotoHandoffStatus>;
 }

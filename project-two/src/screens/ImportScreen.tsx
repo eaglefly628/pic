@@ -103,19 +103,19 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
               通过 Wi-Fi 读取文件名、大小和时间，原照片与视频始终留在联想云储存。索引保存在本机，掉线或退出后可继续；这一阶段不会移动、复制或删除任何文件。
             </div>
           </div>
-          <span style={{ padding: "4px 9px", borderRadius: 20, fontSize: 11.5, color: remote?.processAlive ? "var(--green)" : "var(--text-secondary)", background: "var(--fill-quaternary)" }}>
-            {remote?.processAlive ? "● 扫描中" : remote?.status === "completed" ? "✓ 已完成" : remote?.status === "paused" ? "Ⅱ 已暂停" : "只读模式"}
+          <span style={{ padding: "4px 9px", borderRadius: 20, fontSize: 11.5, color: remoteError ? "var(--red)" : remote?.processAlive ? "var(--green)" : "var(--text-secondary)", background: "var(--fill-quaternary)" }}>
+            {remoteError ? "服务未连接" : !remote ? "检测中" : remote.processAlive ? "● 扫描中" : remote.status === "completed" ? "✓ 已完成" : remote.status === "paused" ? "Ⅱ 已暂停" : "只读模式"}
           </span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+        {remote && <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
           <Select
             aria-label="Samba 挂载目录"
             value={remoteSource}
             onChange={(e) => setRemoteSource(e.target.value)}
             disabled={!!remote?.processAlive || remoteBusy}
             style={{ minWidth: 270, flex: 1 }}
-            options={(remote?.sources?.length ? remote.sources : [{ name: "S300（尚未挂载）", path: remote?.defaultSource || "", readable: false, writable: false }])
+            options={(remote.sources?.length ? remote.sources : [{ name: "S300（尚未挂载）", path: remote.defaultSource || "", readable: false, writable: false }])
               .map((s) => ({ value: s.path, label: `${s.readable ? "✓" : "○"} ${s.name} — ${s.path}` }))}
           />
           {remote?.processAlive ? (
@@ -126,7 +126,7 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
               {remoteBusy ? "启动中…" : remote?.status === "paused" ? "继续扫描" : remote?.status === "completed" ? "检查新增文件" : "开始扫描"}
             </Btn>
           )}
-        </div>
+        </div>}
 
         {!remote?.sources?.some((s) => s.path === remoteSource && s.readable) && !remoteError && (
           <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--orange)", lineHeight: 1.6 }}>
@@ -137,7 +137,7 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
         )}
         {remoteError && (
           <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--red)", lineHeight: 1.6 }}>
-            {remoteError}。请从项目入口 <b>http://localhost:5180</b> 打开；直接打开 file:// 页面无法调用扫描服务。
+            {remoteError}{location.protocol === "file:" ? "。请启动项目服务后，从 http://localhost:5180 打开。" : ""}
           </div>
         )}
 

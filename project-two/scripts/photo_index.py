@@ -386,7 +386,7 @@ class StopFlag:
 
 def scan(args: argparse.Namespace) -> int:
     root = Path(args.source).expanduser().resolve()
-    if not root.is_dir() or not os.access(root, os.R_OK):
+    if not root.is_dir() or (os.name != "nt" and not os.access(root, os.R_OK)):
         print(f"共享目录不可读或尚未挂载：{root}", file=sys.stderr)
         return 2
     db_path = Path(args.db).expanduser()
