@@ -398,7 +398,7 @@ def parser() -> argparse.ArgumentParser:
     p.set_defaults(func=plan)
     r = sub.add_parser("run")
     r.add_argument("--report-every", type=int, default=25)
-    r.add_argument("--workers", type=int, default=8)
+    r.add_argument("--workers", type=int, default=16)
     r.add_argument("--batch-size", type=int, default=16)
     r.add_argument("--max-entries", type=int, default=0)
     r.set_defaults(func=run)
