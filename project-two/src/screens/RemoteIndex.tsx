@@ -91,9 +91,9 @@ export default function RemoteIndex() {
     return () => window.clearInterval(timer);
   }, [data?.processAlive, data?.metadataAnalysis?.processAlive]);
   useEffect(() => {
-    if (!organize?.processAlive) return;
     void refreshOrganize();
-    const timer = window.setInterval(() => void refreshOrganize(), 1200);
+    // 即使当前显示为暂停也要继续低频探测：任务可能由后台恢复、服务重启或网络重连。
+    const timer = window.setInterval(() => void refreshOrganize(), organize?.processAlive ? 1200 : 5000);
     return () => window.clearInterval(timer);
   }, [organize?.processAlive]);
 
