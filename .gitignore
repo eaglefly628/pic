@@ -14,6 +14,9 @@ dist-ssr/
 *.vault
 *.xlsx
 *.xls
+photo-index*.sqlite3*
+photo-organize-profile*.jsonl
+*photo-handoff*.zip
 
 # Python
 __pycache__/

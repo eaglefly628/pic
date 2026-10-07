@@ -600,7 +600,7 @@ def photo_scan_pause():
     with _PHOTO_SCAN_LOCK:
         proc = _PHOTO_SCAN_PROC
         if proc is not None and proc.poll() is None:
-            proc.send_signal(signal.SIGINT)
+            proc.terminate() if os.name == "nt" else proc.send_signal(signal.SIGINT)
             return {"ok": True, "status": "pausing", "processAlive": True}
     result = photo_index_status()
     result["message"] = result.get("message") or "当前没有正在运行的扫描"
@@ -642,7 +642,7 @@ def photo_metadata_pause():
     with _PHOTO_METADATA_LOCK:
         proc = _PHOTO_METADATA_PROC
         if proc is not None and proc.poll() is None:
-            proc.send_signal(signal.SIGINT)
+            proc.terminate() if os.name == "nt" else proc.send_signal(signal.SIGINT)
             return {"ok": True, "status": "pausing"}
     return {"ok": True, "status": "paused", "message": "当前没有正在运行的时间与地点分析"}
 
@@ -720,7 +720,7 @@ def photo_organize_pause():
     with _PHOTO_ORGANIZE_LOCK:
         proc = _PHOTO_ORGANIZE_PROC
         if proc is not None and proc.poll() is None:
-            proc.send_signal(signal.SIGINT)
+            proc.terminate() if os.name == "nt" else proc.send_signal(signal.SIGINT)
             return {"ok": True, "status": "pausing", "processAlive": True}
     result = photo_organize_status()
     result["message"] = result.get("message") or "当前没有正在运行的整理任务"
@@ -812,7 +812,7 @@ def photo_scan_shutdown():
         proc = _PHOTO_SCAN_PROC
     if proc is not None and proc.poll() is None:
         try:
-            proc.send_signal(signal.SIGINT)
+            proc.terminate() if os.name == "nt" else proc.send_signal(signal.SIGINT)
             proc.wait(timeout=8)
         except Exception:
             pass
@@ -820,7 +820,7 @@ def photo_scan_shutdown():
         metadata_proc = _PHOTO_METADATA_PROC
     if metadata_proc is not None and metadata_proc.poll() is None:
         with contextlib.suppress(Exception):
-            metadata_proc.send_signal(signal.SIGINT)
+            metadata_proc.terminate() if os.name == "nt" else metadata_proc.send_signal(signal.SIGINT)
             metadata_proc.wait(timeout=8)
 
 

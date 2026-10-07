@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import fcntl
 import json
 import os
 import re
@@ -20,6 +19,11 @@ import sys
 import time
 from pathlib import Path
 from typing import Iterable
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 
 SCHEMA_VERSION = 2
@@ -46,7 +50,14 @@ def now_ms() -> int:
 
 
 def default_db() -> Path:
-    return Path.home() / "Library" / "Application Support" / "我家里的一切" / "photo-index.sqlite3"
+    home = Path.home()
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or (home / "AppData" / "Roaming"))
+    elif sys.platform == "darwin":
+        base = home / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or (home / ".local" / "share"))
+    return base / "我家里的一切" / "photo-index.sqlite3"
 
 
 def norm_rel(value: str) -> str:
@@ -234,16 +245,32 @@ def migrate(conn: sqlite3.Connection) -> None:
 def exclusive_lock(db_path: Path):
     lock_path = db_path.with_suffix(db_path.suffix + ".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+") as handle:
+    with lock_path.open("a+b") as handle:
         try:
             os.chmod(lock_path, 0o600)
         except OSError:
             pass
-        try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise RuntimeError("已有一个照片索引任务正在运行") from exc
-        yield
+        if os.name == "nt":
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError as exc:
+                raise RuntimeError("已有一个照片索引任务正在运行") from exc
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise RuntimeError("已有一个照片索引任务正在运行") from exc
+            yield
 
 
 def source_id(conn: sqlite3.Connection, root: Path) -> int:

@@ -36,3 +36,27 @@
 开发测试可运行：
 
 `python3 scripts/test-photo-organize.py`
+
+## 在 Surface 上接力
+
+索引数据库包含照片路径、拍摄时间和 GPS，不能明文提交到 GitHub。先在 Mac 上暂停整理，
+再生成只包含 SQLite 索引和校验清单的接力包：
+
+```bash
+python3 project-two/scripts/photo_handoff.py export \
+  --db "$HOME/Library/Application Support/我家里的一切/photo-index.sqlite3" \
+  --output "$HOME/Desktop/photo-handoff.zip"
+```
+
+通过 U 盘、局域网或可信云盘把 ZIP 交给 Surface。在 Windows 中先把同一个 S300 共享目录
+映射为盘符（例如 `Z:\`），停止 Mac 上的任务，然后在 PowerShell 导入并重新绑定路径：
+
+```powershell
+py project-two\scripts\photo_handoff.py import `
+  --bundle "$HOME\Desktop\photo-handoff.zip" `
+  --source-root "Z:\"
+py run.py
+```
+
+若 Surface 已经生成过本地索引，导入命令会拒绝覆盖；核对无误后显式增加 `--replace`，旧索引会先备份。
+任意时刻只允许一台电脑执行整理。接力包不含照片，导入时会做 SHA-256 和 SQLite 完整性检查。
