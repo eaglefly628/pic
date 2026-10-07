@@ -18,6 +18,7 @@ import os
 import signal
 import sqlite3
 import sys
+import time
 from pathlib import Path, PurePosixPath
 
 from photo_index import connect, exclusive_lock, now_ms
@@ -39,6 +40,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
           status TEXT NOT NULL,
           source_root TEXT NOT NULL,
           target_root TEXT NOT NULL,
+          layout TEXT NOT NULL DEFAULT 'month',
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
           started_at INTEGER,
@@ -72,6 +74,9 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
           ON organize_entries(run_id,status,source_rel COLLATE NOCASE);
         """
     )
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(organize_runs)")}
+    if "layout" not in columns:
+        conn.execute("ALTER TABLE organize_runs ADD COLUMN layout TEXT NOT NULL DEFAULT 'day'")
     conn.commit()
 
 
@@ -103,12 +108,15 @@ def parsed_capture(value: str | None) -> dt.datetime | None:
     return parsed if 1990 <= parsed.year <= current_year + 1 else None
 
 
-def bucket_for(row: sqlite3.Row) -> tuple[PurePosixPath, bool]:
+def bucket_for(row: sqlite3.Row, layout: str = "month") -> tuple[PurePosixPath, bool]:
     captured = parsed_capture(row["capture_time_text"])
     confidence = str(row["capture_time_confidence"] or "")
     original = safe_rel(str(row["rel_path"]))
     if captured and confidence in ("high", "medium"):
-        return PurePosixPath(f"{captured.year:04d}", f"{captured.year:04d}-{captured.month:02d}", captured.strftime("%Y-%m-%d")), True
+        parts = [f"{captured.year:04d}", f"{captured.year:04d}-{captured.month:02d}"]
+        if layout == "day":
+            parts.append(captured.strftime("%Y-%m-%d"))
+        return PurePosixPath(*parts), True
     if captured:
         return PurePosixPath("_待确认时间", captured.strftime("%Y-%m"), *original.parent.parts), False
     return PurePosixPath("_待确认时间", "时间异常或缺失", *original.parent.parts), False
@@ -119,14 +127,29 @@ def group_key(rel_path: str) -> tuple[str, str]:
     return str(path.parent), path.stem.casefold()
 
 
-def unique_names(rows: list[sqlite3.Row], target_dir: PurePosixPath, used: set[str]) -> list[PurePosixPath]:
-    candidates = [target_dir / str(row["name"]) for row in rows]
+def chronological_name(name_value: str, prefix: str | None) -> str:
+    name = PurePosixPath(name_value)
+    if not prefix or name.name.startswith(prefix + "__"):
+        return name.name
+    stem = name.stem
+    result = f"{prefix}__{stem}{name.suffix}"
+    # Leave room for a possible collision suffix while respecting common SMB 255-byte limits.
+    while len(result.encode("utf-8")) > 230 and stem:
+        stem = stem[:-1]
+        result = f"{prefix}__{stem}{name.suffix}"
+    return result
+
+
+def unique_names(
+    rows: list[sqlite3.Row], target_dir: PurePosixPath, used: set[str], prefix: str | None = None
+) -> list[PurePosixPath]:
+    candidates = [target_dir / chronological_name(str(row["name"]), prefix) for row in rows]
     if all(str(path).casefold() not in used for path in candidates):
         return candidates
     suffix = hashlib.sha256(str(rows[0]["rel_path"]).encode("utf-8")).hexdigest()[:10]
     result = []
     for row in rows:
-        name = PurePosixPath(str(row["name"]))
+        name = PurePosixPath(chronological_name(str(row["name"]), prefix))
         result.append(target_dir / f"{name.stem}__{suffix}{name.suffix}")
     if any(str(path).casefold() in used for path in result):
         raise RuntimeError(f"无法生成无冲突目标名：{rows[0]['rel_path']}")
@@ -149,22 +172,27 @@ def plan(args: argparse.Namespace) -> int:
             """SELECT * FROM organize_runs WHERE source_id=? AND status IN ('planned','running','paused','error')
                ORDER BY id DESC LIMIT 1""", (sid,),
         ).fetchone()
-        if active and int(active["moved"] or 0) > 0:
+        if active and int(active["moved"] or 0) > 0 and not args.replace_active:
             print(json.dumps({"event": "organize_plan", **dict(active)}, ensure_ascii=False))
             return 0
         if active:
-            conn.execute("DELETE FROM organize_runs WHERE id=?", (int(active["id"]),))
+            if args.replace_active and int(active["moved"] or 0) > 0:
+                conn.execute("UPDATE organize_runs SET status='superseded',updated_at=?,message=? WHERE id=?",
+                             (now_ms(), f"由新的 {args.layout} 布局预演替代", int(active["id"])))
+            else:
+                conn.execute("DELETE FROM organize_runs WHERE id=?", (int(active["id"]),))
 
-        media = conn.execute(
-            """SELECT * FROM media_files WHERE source_id=? AND status='active' AND kind IN ('image','video')
-               AND rel_path NOT LIKE ? ESCAPE '\\' ORDER BY parent_path COLLATE NOCASE,name COLLATE NOCASE""",
-            (sid, target_name.replace("%", "\\%").replace("_", "\\_") + "/%"),
-        ).fetchall()
-        sidecars = conn.execute(
-            """SELECT * FROM media_files WHERE source_id=? AND status='active' AND kind='sidecar'
-               AND rel_path NOT LIKE ? ESCAPE '\\' ORDER BY parent_path COLLATE NOCASE,name COLLATE NOCASE""",
-            (sid, target_name.replace("%", "\\%").replace("_", "\\_") + "/%"),
-        ).fetchall()
+        include_target = bool(args.replace_active)
+        target_pattern = target_name.replace("%", "\\%").replace("_", "\\_") + "/%"
+        media_sql = """SELECT * FROM media_files WHERE source_id=? AND status='active' AND kind IN ('image','video')"""
+        sidecar_sql = """SELECT * FROM media_files WHERE source_id=? AND status='active' AND kind='sidecar'"""
+        values: list[object] = [sid]
+        if not include_target:
+            media_sql += " AND rel_path NOT LIKE ? ESCAPE '\\'"
+            sidecar_sql += " AND rel_path NOT LIKE ? ESCAPE '\\'"
+            values.append(target_pattern)
+        media = conn.execute(media_sql + " ORDER BY parent_path COLLATE NOCASE,name COLLATE NOCASE", values).fetchall()
+        sidecars = conn.execute(sidecar_sql + " ORDER BY parent_path COLLATE NOCASE,name COLLATE NOCASE", values).fetchall()
         groups: dict[tuple[str, str], list[sqlite3.Row]] = {}
         for row in media:
             groups.setdefault(group_key(str(row["rel_path"])), []).append(row)
@@ -179,8 +207,8 @@ def plan(args: argparse.Namespace) -> int:
         )}
         stamp = now_ms()
         run_id = int(conn.execute(
-            """INSERT INTO organize_runs(source_id,status,source_root,target_root,created_at,updated_at)
-               VALUES (?,'planned',?,?,?,?)""", (sid, str(root), str(target_root), stamp, stamp),
+            """INSERT INTO organize_runs(source_id,status,source_root,target_root,layout,created_at,updated_at)
+               VALUES (?,'planned',?,?,?,?,?)""", (sid, str(root), str(target_root), args.layout, stamp, stamp),
         ).lastrowid)
         entries = []
         reliable = 0
@@ -188,10 +216,16 @@ def plan(args: argparse.Namespace) -> int:
         bytes_total = 0
         for rows in groups.values():
             primary = next((r for r in rows if r["kind"] == "image"), None) or next((r for r in rows if r["kind"] == "video"), rows[0])
-            target_dir, is_reliable = bucket_for(primary)
-            paths = unique_names(rows, PurePosixPath(target_name) / target_dir, used)
+            target_dir, is_reliable = bucket_for(primary, args.layout)
+            captured = parsed_capture(primary["capture_time_text"])
+            prefix = captured.strftime("%Y%m%d-%H%M%S") if is_reliable and captured else None
+            source_keys = {str(row["rel_path"]).casefold() for row in rows}
+            paths = unique_names(rows, PurePosixPath(target_name) / target_dir, used - source_keys, prefix)
             for row, target_rel in zip(rows, paths):
+                used.discard(str(row["rel_path"]).casefold())
                 used.add(str(target_rel).casefold())
+                if str(row["rel_path"]) == str(target_rel):
+                    continue
                 entry_status = "planned" if is_reliable else "review"
                 entries.append((run_id, str(row["rel_path"]), str(target_rel), str(row["kind"]),
                                 int(row["size"]), int(row["mtime_ns"]), entry_status, stamp))
@@ -210,7 +244,7 @@ def plan(args: argparse.Namespace) -> int:
         conn.commit()
         print(json.dumps({"event": "organize_plan", "runId": run_id, "status": "planned", "total": reliable,
                           "bytesTotal": bytes_total, "reliable": reliable, "needsReview": needs_review,
-                          "targetRoot": str(target_root)}, ensure_ascii=False))
+                          "targetRoot": str(target_root), "layout": args.layout}, ensure_ascii=False))
     return 0
 
 
@@ -235,20 +269,26 @@ def update_summary(conn: sqlite3.Connection, run_id: int, last_path: str | None 
 
 def move_one(root: Path, entry: dict) -> dict:
     """Move and verify one planned file; never opens or copies its contents."""
+    started = time.perf_counter_ns()
+    profile = {"sourceStatMs": 0.0, "targetStatMs": 0.0, "renameMs": 0.0, "verifyStatMs": 0.0}
     source_rel = safe_rel(str(entry["source_rel"]))
     target_rel = safe_rel(str(entry["target_rel"]))
     source_path = root.joinpath(*source_rel.parts)
     target_path = root.joinpath(*target_rel.parts)
     expected_size = int(entry["size"])
     try:
+        tick = time.perf_counter_ns()
         try:
             source_stat = source_path.stat(follow_symlinks=False)
         except FileNotFoundError:
             source_stat = None
+        profile["sourceStatMs"] = (time.perf_counter_ns() - tick) / 1_000_000
+        tick = time.perf_counter_ns()
         try:
             target_stat = target_path.stat(follow_symlinks=False)
         except FileNotFoundError:
             target_stat = None
+        profile["targetStatMs"] = (time.perf_counter_ns() - tick) / 1_000_000
         if source_stat is not None and target_stat is not None:
             raise RuntimeError("源和目标同时存在，已停止以避免覆盖")
         if source_stat is None and target_stat is None:
@@ -258,15 +298,49 @@ def move_one(root: Path, entry: dict) -> dict:
                 raise RuntimeError("源文件大小与预演不一致，已停止")
             # 目标存在检查和 rename 之间仍可能有外部竞争；整理任务持有独占锁，
             # 且目标名由预演唯一约束生成，因此这里只允许本任务单实例运行。
+            tick = time.perf_counter_ns()
             os.rename(source_path, target_path)
+            profile["renameMs"] = (time.perf_counter_ns() - tick) / 1_000_000
+            tick = time.perf_counter_ns()
             target_stat = target_path.stat(follow_symlinks=False)
+            profile["verifyStatMs"] = (time.perf_counter_ns() - tick) / 1_000_000
         if target_stat is None or target_stat.st_size != expected_size:
             raise RuntimeError("移动后文件大小不一致，已停止")
+        profile["totalMs"] = (time.perf_counter_ns() - started) / 1_000_000
         return {"ok": True, "entry": entry, "source_rel": source_rel, "target_rel": target_rel,
-                "size": expected_size}
+                "size": expected_size, "profile": profile, "recovered": source_stat is None}
     except Exception as exc:
+        profile["totalMs"] = (time.perf_counter_ns() - started) / 1_000_000
         return {"ok": False, "entry": entry, "source_rel": source_rel, "target_rel": target_rel,
-                "size": expected_size, "error": str(exc)}
+                "size": expected_size, "error": str(exc), "profile": profile}
+
+
+def percentile(values: list[float], fraction: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, max(0, int(round((len(ordered) - 1) * fraction))))]
+
+
+def stage_stats(results: list[dict], key: str) -> dict:
+    values = [float(item["profile"].get(key, 0.0)) for item in results]
+    return {
+        "avgMs": round(sum(values) / len(values), 2) if values else 0.0,
+        "p50Ms": round(percentile(values, 0.50), 2),
+        "p95Ms": round(percentile(values, 0.95), 2),
+        "maxMs": round(max(values), 2) if values else 0.0,
+    }
+
+
+def append_profile(path: str | None, record: dict) -> None:
+    if not path:
+        return
+    target = Path(path).expanduser()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as handle:
+        with contextlib.suppress(OSError):
+            os.chmod(target, 0o600)
+        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -299,33 +373,47 @@ def run(args: argparse.Namespace) -> int:
         conn.commit()
         handled = 0
         made_dirs: set[str] = set()
+        batch_number = 0
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
             while not stop.requested:
+                batch_started = time.perf_counter_ns()
                 batch_size = args.batch_size
                 if args.max_entries:
                     batch_size = min(batch_size, args.max_entries - handled)
                     if batch_size <= 0:
                         stop.requested = True
                         break
+                tick = time.perf_counter_ns()
                 rows = conn.execute(
                     """SELECT * FROM organize_entries WHERE run_id=? AND status IN ('planned','error')
                        ORDER BY source_rel COLLATE NOCASE LIMIT ?""", (run_id, batch_size),
                 ).fetchall()
+                query_ms = (time.perf_counter_ns() - tick) / 1_000_000
                 if not rows:
                     break
                 entries = [dict(row) for row in rows]
                 # Directory creation is serialized and cached; files within the batch are independent.
+                directory_started = time.perf_counter_ns()
+                cache_hits = 0
+                cache_misses = 0
                 for entry in entries:
                     target_rel = safe_rel(str(entry["target_rel"]))
                     parent = str(target_rel.parent)
                     if parent not in made_dirs:
                         root.joinpath(*target_rel.parent.parts).mkdir(parents=True, exist_ok=True)
                         made_dirs.add(parent)
+                        cache_misses += 1
+                    else:
+                        cache_hits += 1
+                directory_ms = (time.perf_counter_ns() - directory_started) / 1_000_000
+                worker_started = time.perf_counter_ns()
                 results = list(pool.map(lambda item: move_one(root, item), entries))
+                worker_wall_ms = (time.perf_counter_ns() - worker_started) / 1_000_000
                 stamp = now_ms()
                 successes = [item for item in results if item["ok"]]
                 failures = [item for item in results if not item["ok"]]
                 recovered_errors = 0
+                db_started = time.perf_counter_ns()
                 for result in successes:
                     entry = result["entry"]
                     source_rel, target_rel = result["source_rel"], result["target_rel"]
@@ -358,12 +446,29 @@ def run(args: argparse.Namespace) -> int:
                 if new_errors:
                     conn.execute("UPDATE organize_runs SET errors=errors+? WHERE id=?", (new_errors, run_id))
                 conn.commit()
+                db_ms = (time.perf_counter_ns() - db_started) / 1_000_000
                 handled += len(successes)
                 current = conn.execute(
                     "SELECT total,moved,verified,errors,bytes_moved FROM organize_runs WHERE id=?", (run_id,)
                 ).fetchone()
                 summary = {key: int(current[key] or 0) for key in ("total", "moved", "verified", "errors", "bytes_moved")}
                 last_path = str(successes[-1]["source_rel"]) if successes else str(failures[0]["source_rel"])
+                batch_number += 1
+                batch_wall_ms = (time.perf_counter_ns() - batch_started) / 1_000_000
+                append_profile(args.profile_log, {
+                    "timestampMs": now_ms(), "runId": run_id, "batch": batch_number,
+                    "files": len(results), "succeeded": len(successes), "failed": len(failures),
+                    "workers": args.workers, "batchWallMs": round(batch_wall_ms, 2),
+                    "throughputFilesPerSec": round(len(results) / (batch_wall_ms / 1000), 3) if batch_wall_ms else 0,
+                    "queryMs": round(query_ms, 2), "directoryMs": round(directory_ms, 2),
+                    "workerWallMs": round(worker_wall_ms, 2), "dbMs": round(db_ms, 2),
+                    "directoryCacheHits": cache_hits, "directoryCacheMisses": cache_misses,
+                    "directoryCacheHitRate": round(cache_hits / len(entries), 3) if entries else 0,
+                    "recovered": sum(int(item.get("recovered", False)) for item in successes),
+                    "stages": {key: stage_stats(results, key) for key in
+                               ("sourceStatMs", "targetStatMs", "renameMs", "verifyStatMs", "totalMs")},
+                    "firstPath": str(results[0]["source_rel"]), "lastPath": last_path,
+                })
                 print(json.dumps({"event": "organize_progress", "runId": run_id, "lastPath": last_path, **summary}, ensure_ascii=False), flush=True)
                 if failures:
                     error = str(failures[0]["error"])
@@ -395,11 +500,14 @@ def parser() -> argparse.ArgumentParser:
     sub = root.add_subparsers(dest="command", required=True)
     p = sub.add_parser("plan")
     p.add_argument("--target-name", default="家庭影像库")
+    p.add_argument("--layout", choices=("month", "day"), default="month")
+    p.add_argument("--replace-active", action="store_true")
     p.set_defaults(func=plan)
     r = sub.add_parser("run")
     r.add_argument("--report-every", type=int, default=25)
     r.add_argument("--workers", type=int, default=16)
     r.add_argument("--batch-size", type=int, default=16)
+    r.add_argument("--profile-log", default="")
     r.add_argument("--max-entries", type=int, default=0)
     r.set_defaults(func=run)
     return root

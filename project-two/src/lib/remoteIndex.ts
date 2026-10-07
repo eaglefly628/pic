@@ -88,6 +88,8 @@ export type PhotoOrganizeStatus = {
   runId?: number;
   sourceRoot?: string;
   targetRoot?: string;
+  layout?: "month" | "day";
+  profileLog?: string;
   total?: number;
   moved?: number;
   verified?: number;

@@ -289,7 +289,7 @@ export default function RemoteIndex() {
             )}
             {!!organize.errors && <div style={{ marginTop: 6, fontSize: 11, color: "var(--red)" }}>错误 {organize.errors.toLocaleString()} · 任务会停止等待核对，不会跳过后继续覆盖。</div>}
             <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-tertiary)", overflowWrap: "anywhere" }}>
-              目标：{organize.targetRoot}。低可信项只生成“_待确认时间”建议并原地保留；同名文件自动加稳定后缀，绝不覆盖。
+              目标：{organize.targetRoot}。按“年份 / 月份”存放，文件名以拍摄时间开头，按名称即可按时间排序；低可信项原地保留，同名文件绝不覆盖。
             </div>
             {organize.status === "planned" && !!organize.examples?.length && (
               <div style={{ marginTop: 9, display: "grid", gap: 4 }}>

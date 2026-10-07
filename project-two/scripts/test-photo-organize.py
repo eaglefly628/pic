@@ -43,7 +43,7 @@ def main():
                             WHERE name='unknown.jpg'""")
             conn.commit()
 
-        call("photo_organize.py", "--db", str(db), "plan")
+        call("photo_organize.py", "--db", str(db), "plan", "--layout", "day")
         with sqlite3.connect(db) as conn:
             conn.row_factory = sqlite3.Row
             job = conn.execute("SELECT * FROM organize_runs").fetchone()
@@ -51,10 +51,11 @@ def main():
         check(job["status"] == "planned" and job["total"] == 3, "预演只自动安排可信时间媒体")
         check(len(entries) == 4 and sum(r["status"] == "review" for r in entries) == 1, "低可信时间只列入审核，不自动移动")
         reliable = [r for r in entries if "2022/2022-03/2022-03-04" in r["target_rel"]]
-        check(len(reliable) == 3, "可信时间进入年月日目录")
+        check(len(reliable) == 3, "旧布局可把可信时间放入年月日目录")
         check(any("_待确认时间/2020-01/b" in r["target_rel"] for r in entries), "低可信时间进入待确认区")
-        stems = {Path(r["target_rel"]).stem.split("__")[0] for r in reliable}
-        check(stems == {"IMG_0001"}, "Live Photo 图片与视频保持同名关联")
+        live_pair_stems = {Path(r["target_rel"]).stem for r in reliable if r["source_rel"].startswith("a/")}
+        check(len(live_pair_stems) == 1, "Live Photo 图片与视频保持同名关联")
+        check(all(Path(r["target_rel"]).name.startswith("20220304-050607__") for r in reliable), "文件名带拍摄时间前缀可直接排序")
         check(len({r["target_rel"].casefold() for r in entries}) == 4, "同日同名文件不会覆盖")
 
         first = entries[0]
@@ -70,14 +71,27 @@ def main():
             ).fetchone()[0]
         check(reconciled == "verified", "移动后写库前中断可自动对账")
         check((source / "a").is_dir(), "暂停后不删除原目录")
+
+        call("photo_organize.py", "--db", str(db), "plan", "--layout", "month", "--replace-active")
+        with sqlite3.connect(db) as conn:
+            conn.row_factory = sqlite3.Row
+            jobs = conn.execute("SELECT * FROM organize_runs ORDER BY id").fetchall()
+            month_entries = conn.execute(
+                "SELECT * FROM organize_entries WHERE run_id=? ORDER BY source_rel", (jobs[-1]["id"],)
+            ).fetchall()
+        check(jobs[-2]["status"] == "superseded" and jobs[-1]["layout"] == "month", "可用月份布局替代进行中的日布局")
+        check(any("/2022-03-04/" in r["source_rel"] for r in month_entries), "已搬入日目录的文件重新纳入月份预演")
+        check(all("/2022-03-04/" not in r["target_rel"] for r in month_entries), "新目标展开到月份目录")
+
         call("photo_organize.py", "--db", str(db), "run")
         with sqlite3.connect(db) as conn:
             conn.row_factory = sqlite3.Row
-            job = conn.execute("SELECT * FROM organize_runs").fetchone()
+            job = conn.execute("SELECT * FROM organize_runs ORDER BY id DESC LIMIT 1").fetchone()
             active = conn.execute("SELECT rel_path FROM media_files WHERE status='active'").fetchall()
         check(job["status"] == "completed" and job["verified"] == 3, "断点续跑后全部可信项已核验")
         check(all((source / row["rel_path"]).is_file() for row in active), "索引路径随移动原子更新")
         check((source / "b" / "unknown.jpg").is_file(), "低可信文件保留原位等待审核")
+        check(all("/2022-03-04/" not in row["rel_path"] for row in active), "最终物理结构只到月份")
         check(not (source / "a" / "IMG_0001.JPG").exists(), "源文件已移动而非复制")
     print("全部通过 ✓")
 

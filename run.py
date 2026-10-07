@@ -118,6 +118,7 @@ PHOTO_METADATA_SCRIPT = ROOT / "project-two" / "scripts" / "photo_metadata.py"
 PHOTO_METADATA_LOG = DATA_DIR / "photo-metadata.log"
 PHOTO_ORGANIZE_SCRIPT = ROOT / "project-two" / "scripts" / "photo_organize.py"
 PHOTO_ORGANIZE_LOG = DATA_DIR / "photo-organize.log"
+PHOTO_ORGANIZE_PROFILE = DATA_DIR / "photo-organize-profile.jsonl"
 PHOTO_DEFAULT_SOURCE = Path("/Volumes/24684804")
 _PHOTO_SCAN_LOCK = threading.Lock()
 _PHOTO_SCAN_PROC = None
@@ -232,12 +233,17 @@ def photo_organize_status():
                 status = "paused"
             examples = conn.execute(
                 """SELECT source_rel AS sourceRel,target_rel AS targetRel,status,error
-                   FROM organize_entries WHERE run_id=? ORDER BY source_rel COLLATE NOCASE LIMIT 8""",
+                   FROM organize_entries WHERE run_id=?
+                   ORDER BY CASE status WHEN 'error' THEN 0 WHEN 'planned' THEN 1 WHEN 'moving' THEN 2
+                                        WHEN 'verified' THEN 3 ELSE 4 END,
+                            source_rel COLLATE NOCASE LIMIT 8""",
                 (int(row["id"]),),
             ).fetchall()
             return {
                 "ok": True, "runId": int(row["id"]), "status": status, "processAlive": alive,
                 "sourceRoot": row["source_root"], "targetRoot": row["target_root"],
+                "layout": row["layout"] if "layout" in row.keys() else "day",
+                "profileLog": str(PHOTO_ORGANIZE_PROFILE),
                 "total": int(row["total"] or 0), "moved": int(row["moved"] or 0),
                 "verified": int(row["verified"] or 0), "errors": int(row["errors"] or 0),
                 "bytesTotal": int(row["bytes_total"] or 0), "bytesMoved": int(row["bytes_moved"] or 0),
@@ -664,7 +670,7 @@ def photo_organize_plan(spec):
     return planned
 
 
-def photo_organize_start(_spec=None):
+def photo_organize_start(spec=None):
     global _PHOTO_ORGANIZE_PROC, _PHOTO_ORGANIZE_LOG_HANDLE
     if _photo_process_alive() or _photo_metadata_process_alive():
         return {"ok": False, "error": "文件索引或时间分析仍在运行，请等待完成"}
@@ -679,9 +685,23 @@ def photo_organize_start(_spec=None):
         log_handle = PHOTO_ORGANIZE_LOG.open("a", encoding="utf-8")
         with contextlib.suppress(OSError):
             os.chmod(PHOTO_ORGANIZE_LOG, 0o600)
+        command = [sys.executable, str(PHOTO_ORGANIZE_SCRIPT), "--db", str(PHOTO_INDEX_DB), "run",
+                   "--profile-log", str(PHOTO_ORGANIZE_PROFILE)]
+        try:
+            max_entries = int((spec or {}).get("maxEntries") or 0)
+        except (TypeError, ValueError):
+            max_entries = 0
+        try:
+            workers = max(1, min(int((spec or {}).get("workers") or 16), 32))
+            batch_size = max(workers, min(int((spec or {}).get("batchSize") or workers), 512))
+        except (TypeError, ValueError):
+            workers, batch_size = 16, 16
+        command.extend(["--workers", str(workers), "--batch-size", str(batch_size)])
+        if max_entries > 0:
+            command.extend(["--max-entries", str(min(max_entries, 10_000))])
         try:
             _PHOTO_ORGANIZE_PROC = subprocess.Popen(
-                [sys.executable, str(PHOTO_ORGANIZE_SCRIPT), "--db", str(PHOTO_INDEX_DB), "run"],
+                command,
                 cwd=str(ROOT), stdout=log_handle, stderr=subprocess.STDOUT,
                 env={**os.environ, "PYTHONUNBUFFERED": "1"},
             )
