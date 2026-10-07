@@ -34,6 +34,7 @@ import threading
 import time
 import urllib.request
 import webbrowser
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -120,6 +121,8 @@ PHOTO_METADATA_LOG = DATA_DIR / "photo-metadata.log"
 PHOTO_ORGANIZE_SCRIPT = ROOT / "project-two" / "scripts" / "photo_organize.py"
 PHOTO_ORGANIZE_LOG = DATA_DIR / "photo-organize.log"
 PHOTO_ORGANIZE_PROFILE = DATA_DIR / "photo-organize-profile.jsonl"
+PHOTO_HANDOFF_SCRIPT = ROOT / "project-two" / "scripts" / "photo_handoff.py"
+PHOTO_HANDOFF_DIR_NAME = "我家里的一切-接力"
 if os.environ.get("HOME_PHOTO_SOURCE"):
     PHOTO_DEFAULT_SOURCE = Path(os.environ["HOME_PHOTO_SOURCE"])
 elif os.name == "nt":
@@ -811,6 +814,176 @@ def photo_index_backup():
     except Exception as exc:
         return {"ok": False, "error": f"本机备份已保存，但尚未上传到 S300：{exc}",
                 "bytes": local_path.stat().st_size, "localPath": str(local_path)}
+
+
+def _latest_index_source_root():
+    if not PHOTO_INDEX_DB.is_file():
+        return None
+    try:
+        uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=3) as conn:
+            row = conn.execute(
+                """SELECT s.root FROM scan_runs r JOIN sources s ON s.id=r.source_id
+                   ORDER BY r.id DESC LIMIT 1"""
+            ).fetchone()
+        return Path(str(row[0])) if row and row[0] else None
+    except (OSError, sqlite3.Error):
+        return None
+
+
+def _photo_handoff_roots():
+    """Return mounted photo roots without trusting os.access on Windows SMB drives."""
+    candidates = []
+    indexed = _latest_index_source_root()
+    if indexed:
+        candidates.append(indexed)
+    candidates.append(PHOTO_DEFAULT_SOURCE)
+    for item in photo_sources():
+        candidates.append(Path(str(item.get("path") or "")))
+    seen, roots = set(), []
+    for candidate in candidates:
+        if not str(candidate):
+            continue
+        key = os.path.normcase(os.path.abspath(str(candidate)))
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            if candidate.is_dir():
+                roots.append(candidate)
+        except OSError:
+            pass
+    return roots
+
+
+def _read_photo_handoff_manifest(bundle):
+    with zipfile.ZipFile(bundle) as archive:
+        names = set(archive.namelist())
+        if names != {"photo-index.sqlite3", "handoff.json"}:
+            raise ValueError("接力包内容不完整或格式不正确")
+        manifest = json.loads(archive.read("handoff.json"))
+    if int(manifest.get("bundleVersion", -1)) != 1:
+        raise ValueError("接力包版本不受支持")
+    return manifest
+
+
+def _find_photo_handoff_bundle():
+    matches = []
+    for root in _photo_handoff_roots():
+        handoff_dir = root / PHOTO_HANDOFF_DIR_NAME
+        try:
+            for pattern in ("photo-handoff-computer-*.zip", "photo-handoff-surface-*.zip"):
+                for bundle in handoff_dir.glob(pattern):
+                    if bundle.is_file():
+                        matches.append((bundle.stat().st_mtime_ns, bundle, root))
+        except OSError:
+            continue
+    return max(matches, key=lambda item: item[0]) if matches else None
+
+
+def photo_handoff_status():
+    found = _find_photo_handoff_bundle()
+    source_root = None
+    bundle = None
+    manifest = None
+    error = None
+    if found:
+        _, bundle, source_root = found
+        try:
+            manifest = _read_photo_handoff_manifest(bundle)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+            error = f"接力包校验失败：{exc}"
+    if source_root is None:
+        source_root = _latest_index_source_root()
+    return {
+        "ok": error is None,
+        "error": error,
+        "platform": "windows" if os.name == "nt" else "mac" if sys.platform == "darwin" else "linux",
+        "python": sys.executable,
+        "pythonVersion": sys.version.split()[0],
+        "sourceRoot": str(source_root) if source_root else None,
+        "bundle": str(bundle) if bundle else None,
+        "bundleBytes": bundle.stat().st_size if bundle and bundle.is_file() else 0,
+        "manifest": manifest,
+        "canExport": PHOTO_INDEX_DB.is_file() and bool(source_root and source_root.is_dir()),
+        "canImport": bool(bundle and manifest and source_root and source_root.is_dir()),
+        "indexDatabase": str(PHOTO_INDEX_DB),
+    }
+
+
+def _write_windows_launcher(source, destination):
+    text = source.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    destination.write_bytes(text.replace("\n", "\r\n").encode("ascii"))
+
+
+def photo_handoff_export():
+    if _photo_process_alive() or _photo_metadata_process_alive() or _photo_organize_process_alive():
+        return {"ok": False, "error": "请先暂停当前照片任务，再生成一致的接力包"}
+    if not PHOTO_HANDOFF_SCRIPT.is_file():
+        return {"ok": False, "error": "照片接力程序缺失，请更新代码"}
+    if not PHOTO_INDEX_DB.is_file():
+        return {"ok": False, "error": "尚未建立照片索引，无法生成接力包"}
+    root = _latest_index_source_root()
+    if not root or not root.is_dir():
+        return {"ok": False, "error": "照片共享盘尚未挂载，无法保存接力包"}
+    handoff_dir = root / PHOTO_HANDOFF_DIR_NAME
+    handoff_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    bundle = handoff_dir / f"photo-handoff-computer-{stamp}.zip"
+    result = subprocess.run(
+        [sys.executable, str(PHOTO_HANDOFF_SCRIPT), "export", "--db", str(PHOTO_INDEX_DB),
+         "--output", str(bundle)],
+        cwd=str(ROOT), text=True, capture_output=True, timeout=1200,
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+    )
+    if result.returncode != 0:
+        return {"ok": False, "error": (result.stderr or result.stdout or "生成接力包失败").strip()}
+    launcher_sources = (
+        (ROOT / "tools" / "windows" / "其他电脑一键继续照片整理.cmd", handoff_dir / "其他电脑一键继续照片整理.cmd"),
+        (ROOT / "tools" / "windows" / "Surface一键继续照片整理.cmd", handoff_dir / "Surface一键继续照片整理.cmd"),
+        (ROOT / "tools" / "windows" / "surface-handoff.ps1", handoff_dir / "surface-handoff.ps1"),
+    )
+    for source, destination in launcher_sources:
+        if source.is_file():
+            _write_windows_launcher(source, destination)
+    status = photo_handoff_status()
+    status.update({"ok": True, "action": "exported", "message": "其他电脑接力包已安全生成"})
+    return status
+
+
+def photo_handoff_import():
+    if _photo_process_alive() or _photo_metadata_process_alive() or _photo_organize_process_alive():
+        return {"ok": False, "error": "请先暂停当前照片任务，再导入接力索引"}
+    if not PHOTO_HANDOFF_SCRIPT.is_file():
+        return {"ok": False, "error": "照片接力程序缺失，请更新代码"}
+    found = _find_photo_handoff_bundle()
+    if not found:
+        return {"ok": False, "error": "没有在已挂载的 S300 上找到其他电脑接力包"}
+    _, bundle, root = found
+    try:
+        _read_photo_handoff_manifest(bundle)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+        return {"ok": False, "error": f"接力包校验失败：{exc}"}
+    result = subprocess.run(
+        [sys.executable, str(PHOTO_HANDOFF_SCRIPT), "import", "--bundle", str(bundle),
+         "--db", str(PHOTO_INDEX_DB), "--source-root", str(root), "--replace", "--keep-newer"],
+        cwd=str(ROOT), text=True, capture_output=True, timeout=1200,
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+    )
+    output = (result.stdout or "").strip()
+    payload = None
+    if output:
+        with contextlib.suppress(json.JSONDecodeError):
+            payload = json.loads(output.splitlines()[-1])
+    if result.returncode != 0:
+        detail = payload.get("error") if isinstance(payload, dict) else (result.stderr or output)
+        return {"ok": False, "error": str(detail or "导入接力索引失败").strip()}
+    status = photo_handoff_status()
+    status.update({
+        "ok": True, "action": "imported", "message": "索引已导入并重绑定到当前 S300",
+        "importResult": payload, "index": photo_index_status(), "organize": photo_organize_status(),
+    })
+    return status
 
 
 def _backup_after_photo_job(proc, phase):
@@ -1696,6 +1869,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send_json(photo_timeline(parse_qs(urlparse(self.path).query)))
         if bare == "/api/photos/organize/status":
             return self._send_json(photo_organize_status())
+        if bare == "/api/photos/handoff/status":
+            return self._send_json(photo_handoff_status())
         target = resolve(self.path)
         if not target:
             self.send_error(404)
@@ -1722,7 +1897,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         bare = self.path.split("?")[0]
         if bare in ("/api/photos/index/start", "/api/photos/index/pause", "/api/photos/index/reveal",
                     "/api/photos/index/backup", "/api/photos/metadata/start", "/api/photos/metadata/pause",
-                    "/api/photos/organize/plan", "/api/photos/organize/start", "/api/photos/organize/pause"):
+                    "/api/photos/organize/plan", "/api/photos/organize/start", "/api/photos/organize/pause",
+                    "/api/photos/handoff/export", "/api/photos/handoff/import"):
             origin = self.headers.get("Origin", "")
             # localhost/127.0.0.1 的开发端口也允许；服务本身只监听环回地址。
             if origin and not re.match(r"^http://(?:localhost|127\.0\.0\.1):\d+$", origin):
@@ -1746,6 +1922,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     res = photo_organize_pause()
                 elif bare == "/api/photos/index/backup":
                     res = photo_index_backup()
+                elif bare == "/api/photos/handoff/export":
+                    res = photo_handoff_export()
+                elif bare == "/api/photos/handoff/import":
+                    res = photo_handoff_import()
                 else:
                     res = photo_index_reveal()
             except Exception as e:

@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import type { MediaItem } from "./types";
 import { useTheme } from "./lib/theme";
 import { useLibrary } from "./lib/library";
-import { IconSummary, IconPhoto, IconPin, IconAlbum, IconUpload, IconGear, IconSearch, IconImage, IconWand, IconCalendar, IconUser, IconMap, IconClock, IconDatabase } from "./icons";
+import { IconSummary, IconPhoto, IconPin, IconAlbum, IconUpload, IconGear, IconSearch, IconImage, IconWand, IconCalendar, IconUser, IconMap, IconClock, IconDatabase, IconTransfer } from "./icons";
 import Summary from "./screens/Summary";
 import Gallery from "./screens/Gallery";
 import Timeline from "./screens/Timeline";
@@ -15,9 +15,10 @@ import ImportScreen from "./screens/ImportScreen";
 import Settings from "./screens/Settings";
 import Cleanup from "./screens/Cleanup";
 import RemoteIndex from "./screens/RemoteIndex";
+import Handoff from "./screens/Handoff";
 import { Lightbox } from "./components/Lightbox";
 
-type Screen = "summary" | "gallery" | "timeline" | "places" | "map" | "events" | "people" | "albums" | "remote" | "cleanup" | "import" | "settings";
+type Screen = "summary" | "gallery" | "timeline" | "places" | "map" | "events" | "people" | "albums" | "remote" | "handoff" | "cleanup" | "import" | "settings";
 const glass: React.CSSProperties = { backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)" };
 const groupLabel: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", padding: "14px 10px 4px", letterSpacing: "0.02em" };
 
@@ -25,7 +26,7 @@ function navStyle(active: boolean): React.CSSProperties {
   return { position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 500, padding: "7px 10px", borderRadius: 8, marginBottom: 1, background: "transparent", color: active ? "#fff" : "var(--text-secondary)" };
 }
 
-const TITLES: Record<Screen, string> = { summary: "总览", gallery: "图库", timeline: "时间", places: "地点", map: "地图", events: "事件", people: "人物", albums: "相册", remote: "索引报告", cleanup: "整理", import: "导入", settings: "设置" };
+const TITLES: Record<Screen, string> = { summary: "总览", gallery: "图库", timeline: "时间", places: "地点", map: "地图", events: "事件", people: "人物", albums: "相册", remote: "索引报告", handoff: "其他电脑一键接力", cleanup: "整理", import: "导入", settings: "设置" };
 
 export default function App() {
   const { theme, toggle } = useTheme();
@@ -68,6 +69,7 @@ export default function App() {
             <Nav active={screen === "albums"} onClick={() => setScreen("albums")} icon={<IconAlbum />} label="相册" badge={String(albums.length)} />
             <div style={groupLabel}>工具</div>
             <Nav active={screen === "remote"} onClick={() => setScreen("remote")} icon={<IconDatabase />} label="索引报告" />
+            <Nav active={screen === "handoff"} onClick={() => setScreen("handoff")} icon={<IconTransfer />} label="其他电脑一键接力" />
             <Nav active={screen === "cleanup"} onClick={() => setScreen("cleanup")} icon={<IconWand />} label="整理（去重/清理）" />
             <div style={groupLabel}>其他</div>
             <Nav active={screen === "import"} onClick={() => setScreen("import")} icon={<IconUpload />} label="导入" />
@@ -97,6 +99,7 @@ export default function App() {
             {screen === "people" && <People onOpen={open} />}
             {screen === "albums" && <Albums onOpen={open} />}
             {screen === "remote" && <RemoteIndex />}
+            {screen === "handoff" && <Handoff goIndex={() => setScreen("remote")} />}
             {screen === "cleanup" && <Cleanup />}
             {screen === "import" && <ImportScreen goGallery={() => setScreen("gallery")} goIndex={() => setScreen("remote")} />}
             {screen === "settings" && <Settings />}

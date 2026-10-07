@@ -104,6 +104,45 @@ export type PhotoOrganizeStatus = {
   examples?: { sourceRel: string; targetRel: string; status: string; error?: string | null }[];
 };
 
+export type PhotoHandoffStatus = {
+  ok: boolean;
+  error?: string | null;
+  message?: string;
+  action?: "exported" | "imported";
+  platform: "windows" | "mac" | "linux";
+  python: string;
+  pythonVersion: string;
+  sourceRoot?: string | null;
+  bundle?: string | null;
+  bundleBytes?: number;
+  canExport: boolean;
+  canImport: boolean;
+  indexDatabase: string;
+  manifest?: {
+    exportedAt?: string;
+    sourceRoot?: string;
+    targetName?: string;
+    runId?: number | null;
+    status?: string;
+    total?: number;
+    verified?: number;
+    errors?: number;
+    databaseBytes?: number;
+  } | null;
+  importResult?: {
+    unchanged?: boolean;
+    sourceRoot?: string;
+    targetRoot?: string;
+    runId?: number;
+    verified?: number;
+    total?: number;
+    backup?: string | null;
+    message?: string;
+  } | null;
+  index?: RemoteIndexStatus;
+  organize?: PhotoOrganizeStatus;
+};
+
 async function request(path: string, init?: RequestInit): Promise<RemoteIndexStatus> {
   const response = await fetch(path, {
     cache: "no-store",
@@ -174,4 +213,25 @@ export function startPhotoOrganize() {
 
 export function pausePhotoOrganize() {
   return organizeRequest("/api/photos/organize/pause", {});
+}
+
+async function handoffRequest(path: string, method = "GET"): Promise<PhotoHandoffStatus> {
+  const response = await fetch(path, {
+    method, cache: "no-store", headers: { "Content-Type": "application/json" },
+    ...(method === "POST" ? { body: "{}" } : {}),
+  });
+  if (!response.ok) throw new Error(`照片接力服务不可用（HTTP ${response.status}）`);
+  return response.json() as Promise<PhotoHandoffStatus>;
+}
+
+export function getPhotoHandoffStatus() {
+  return handoffRequest("/api/photos/handoff/status");
+}
+
+export function exportPhotoHandoff() {
+  return handoffRequest("/api/photos/handoff/export", "POST");
+}
+
+export function importPhotoHandoff() {
+  return handoffRequest("/api/photos/handoff/import", "POST");
 }

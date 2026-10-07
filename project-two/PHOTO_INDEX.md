@@ -37,26 +37,19 @@
 
 `python3 scripts/test-photo-organize.py`
 
-## 在 Surface 上接力
+## 在其他电脑上一键接力
 
-索引数据库包含照片路径、拍摄时间和 GPS，不能明文提交到 GitHub。先在 Mac 上暂停整理，
-再生成只包含 SQLite 索引和校验清单的接力包：
+索引数据库包含照片路径、拍摄时间和 GPS，不能明文提交到 GitHub。正常使用不需要运行
+PowerShell 或 Python 命令：在家庭影像侧栏打开“其他电脑一键接力”。
 
-```bash
-python3 project-two/scripts/photo_handoff.py export \
-  --db "$HOME/Library/Application Support/我家里的一切/photo-index.sqlite3" \
-  --output "$HOME/Desktop/photo-handoff.zip"
-```
+1. 在当前电脑安全暂停扫描、分析或整理任务，点击“一键准备接力”。应用使用
+   自己正在运行的 Python 环境制作 SQLite 一致性快照，并把接力包保存到 S300 的
+   `我家里的一切-接力` 目录。
+2. 在另一台电脑把同一个 S300 映射或挂载好，拉取最新代码并启动应用，进入同一菜单，点击
+   “一键接力并继续”。应用先校验 SHA-256 和 SQLite 完整性，再备份本机现有索引、
+   导入扫描/时间地点/整理进度，并把旧电脑路径重绑定为当前挂载路径。
+3. 导入完成后直接打开“索引报告”继续工作。若本机已有相同任务且进度更新，旧接力包不会
+   覆盖新进度。
 
-通过 U 盘、局域网或可信云盘把 ZIP 交给 Surface。在 Windows 中先把同一个 S300 共享目录
-映射为盘符（例如 `Z:\`），停止 Mac 上的任务，然后在 PowerShell 导入并重新绑定路径：
-
-```powershell
-py project-two\scripts\photo_handoff.py import `
-  --bundle "$HOME\Desktop\photo-handoff.zip" `
-  --source-root "Z:\"
-py run.py
-```
-
-若 Surface 已经生成过本地索引，导入命令会拒绝覆盖；核对无误后显式增加 `--replace`，旧索引会先备份。
-任意时刻只允许一台电脑执行整理。接力包不含照片，导入时会做 SHA-256 和 SQLite 完整性检查。
+任意时刻只允许一台电脑执行整理。接力包不含照片、视频或家庭密码。S300 目录中的 Windows
+批处理仍作为应用无法启动时的备用入口，不再是正常工作流。
