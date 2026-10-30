@@ -387,3 +387,46 @@ body { background: #f5efe4; }
   /* 手机上可点区域不低于 44px */
   .fv-root button { min-height: 32px; }
 }
+/* 养老金方案与压力测试表。较窄窗口允许水平滚动，不压缩金额。 */
+.fv-pension-nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 0 14px;
+  margin-bottom: 4px;
+}
+.fv-pension-nav a {
+  flex: none;
+  padding: 8px 12px;
+  border-radius: 9px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.fv-pension-nav a:hover { filter: brightness(.96); }
+[id^="pension-"] { scroll-margin-top: 18px; }
+.fv-pension-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 920px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.fv-pension-table th,
+.fv-pension-table td {
+  padding: 10px 11px;
+  border-bottom: 0.5px solid var(--separator);
+  text-align: right;
+  white-space: nowrap;
+}
+.fv-pension-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--fill-quaternary);
+}
+.fv-pension-table th:first-child,
+.fv-pension-table td:first-child { text-align: left; }
+.fv-pension-stress { min-width: 500px; }

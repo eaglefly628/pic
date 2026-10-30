@@ -41,6 +41,7 @@ SCREENSHOT_RE = re.compile(r"(?:screen[ _-]?(?:shot|capture)|截图|截屏|屏�
 SCREEN_RECORD_RE = re.compile(r"(?:screen[ _-]?(?:record|recording)|录屏|屏幕录制)", re.I)
 DEFAULT_EXCLUDES = (
     ".Spotlight-V100", ".Trashes", ".fseventsd", ".TemporaryItems",
+    ".family-gallery-cache", ".family-gallery-trash", "@eaDir", "#recycle", ".@__thumb", "$RECYCLE.BIN",
     "TimeMachine", "我的文档", "我的音频", "work",
 )
 
@@ -68,6 +69,8 @@ def norm_rel(value: str) -> str:
 
 def file_kind(name: str) -> tuple[str, str]:
     ext = Path(name).suffix.lower().lstrip(".")
+    if name.startswith("._"):
+        return "other", ext  # macOS AppleDouble sidecar, never a playable photo/video.
     if ext in IMAGE_EXTS:
         return "image", ext
     if ext in VIDEO_EXTS:
@@ -298,6 +301,10 @@ def begin_or_resume_run(
         ).fetchone()
         if row:
             run_id = int(row["id"])
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='selected_scan_scopes'").fetchone():
+                selected = conn.execute("SELECT 1 FROM selected_scan_scopes WHERE run_id=?", (run_id,)).fetchone()
+                if selected:
+                    raise RuntimeError("上次是指定备份目录扫描；请在新增备份目录中选择相同目录继续")
             saved = tuple(json.loads(row["excludes_json"]))
             if saved != excludes:
                 raise RuntimeError("未完成扫描的排除规则不同；请使用相同 --exclude，或加 --new-run")

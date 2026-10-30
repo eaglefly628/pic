@@ -4,6 +4,7 @@ import { Btn, Select, card } from "../ui";
 import { IconUpload, IconImage } from "../icons";
 import { fmtSize } from "../lib/format";
 import { getRemoteIndexStatus, pauseRemoteIndex, startRemoteIndex, type RemoteIndexStatus } from "../lib/remoteIndex";
+import BackupDirectoryScanner from "../components/BackupDirectoryScanner";
 
 export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => void; goIndex: () => void }) {
   const { addFile, albums, baseDir, pickBaseDir, syncBaseDir, disconnectBaseDir } = useLibrary();
@@ -98,7 +99,7 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
       <div style={{ ...card, padding: "20px 26px", marginBottom: 18 }}>
         <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 250 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>S300 / Samba 全局索引（只读）</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>S300 / Samba 全盘索引（只读）</div>
             <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7 }}>
               通过 Wi-Fi 读取文件名、大小和时间，原照片与视频始终留在联想云储存。索引保存在本机，掉线或退出后可继续；这一阶段不会移动、复制或删除任何文件。
             </div>
@@ -121,9 +122,9 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
           {remote?.processAlive ? (
             <Btn variant="ghost" onClick={pauseRemote} disabled={remoteBusy}>{remoteBusy ? "处理中…" : "安全暂停"}</Btn>
           ) : (
-            <Btn onClick={startRemote} disabled={remoteBusy || !remote?.sources?.some((s) => s.path === remoteSource && s.readable)}
+            <Btn onClick={startRemote} disabled={remoteBusy || (remote?.scanMode === "selected" && remote.status === "paused") || !remote?.sources?.some((s) => s.path === remoteSource && s.readable)}
               style={!remote?.sources?.some((s) => s.path === remoteSource && s.readable) ? { opacity: 0.45, cursor: "not-allowed" } : undefined}>
-              {remoteBusy ? "启动中…" : remote?.status === "paused" ? "继续扫描" : remote?.status === "completed" ? "检查新增文件" : "开始扫描"}
+              {remoteBusy ? "启动中…" : remote?.scanMode === "selected" && remote.status === "paused" ? "请在下方继续定向扫描" : remote?.status === "paused" ? "继续全盘扫描" : remote?.status === "completed" ? "全盘复查" : "开始全盘扫描"}
             </Btn>
           )}
         </div>}
@@ -132,7 +133,7 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
           <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--orange)", lineHeight: 1.6 }}>
             尚未检测到 S300。{remote?.platform === "windows"
               ? <>请先在 Windows 将 Samba 共享映射为网络驱动器，再导入接力包并重启应用。</>
-              : <>请先在 Finder 连接 <b>smb://192.168.31.247/24684804</b>，然后回到这里等待几秒。</>}
+              : <>请先在 Finder 连接你的照片共享盘，然后回到这里等待几秒。</>}
           </div>
         )}
         {remoteError && (
@@ -144,7 +145,7 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
         {remote && remote.status !== "not_started" && (
           <div style={{ marginTop: 16, paddingTop: 14, borderTop: "0.5px solid var(--separator)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10 }}>
-              <Metric label="本轮已见" value={(remote.indexedThisRun || 0).toLocaleString()} />
+              <Metric label="本轮已检查" value={(remote.indexedThisRun || 0).toLocaleString()} />
               <Metric label="照片" value={(remote.totals?.image?.files || 0).toLocaleString()} />
               <Metric label="视频" value={(remote.totals?.video?.files || 0).toLocaleString()} />
               <Metric label="媒体容量" value={fmtSize((remote.totals?.image?.bytes || 0) + (remote.totals?.video?.bytes || 0))} />
@@ -166,6 +167,8 @@ export default function ImportScreen({ goGallery, goIndex }: { goGallery: () => 
           </div>
         )}
       </div>
+
+      <BackupDirectoryScanner source={remoteSource} status={remote} disabled={remoteBusy || !!remote?.metadataAnalysis?.processAlive} onStarted={setRemote} />
 
       {/* 浏览器文件夹模式适合较小的本地媒体库。 */}
       <div style={{ ...card, padding: "20px 26px", marginBottom: 18 }}>

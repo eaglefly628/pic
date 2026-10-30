@@ -3,6 +3,7 @@ import { fmtSize } from "../lib/format";
 import { getRemoteTimeline, type RemoteTimelineData, type RemoteTimelinePlace } from "../lib/remoteIndex";
 import { card } from "../ui";
 import { IconPin } from "../icons";
+import { MediaList } from "./IndexedBrowser";
 
 export default function IndexedTimeline({ summary }: { summary: RemoteTimelineData }) {
   const [selected, setSelected] = useState(() => summary.periods[summary.periods.length - 1]?.period || "");
@@ -54,7 +55,7 @@ export default function IndexedTimeline({ summary }: { summary: RemoteTimelineDa
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)" }}>家庭影像时间轴</div>
             <div style={{ marginTop: 5, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.55 }}>
-              横向选择月份，纵向展开当月地点。全部来自本机索引，不读取整张照片，也不联网查询地名。
+              横向选择月份，纵向查看当月地点。地名来自已保存的本地地点索引；“附近”表示邻近城镇，并非精确街道地址。
             </div>
           </div>
           <div style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
@@ -122,6 +123,9 @@ export default function IndexedTimeline({ summary }: { summary: RemoteTimelineDa
           </div>
         )}
       </div>
+      {selected && <div style={{ marginTop: 16 }}>
+        <MediaList scope="month" scopeKey={selected} title={`${selected} · 照片与视频`} />
+      </div>}
     </div>
   );
 }

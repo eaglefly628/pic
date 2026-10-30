@@ -16,7 +16,10 @@
 业务数据保存在本机；影像索引可按用户操作备份到已挂载的家庭存储，不上传互联网。按 Ctrl+C 退出。
 """
 import csv
+import base64
 import contextlib
+import datetime
+import hashlib
 import http.server
 import io
 import json
@@ -28,12 +31,15 @@ import signal
 import shutil
 import socketserver
 import sqlite3
+import stat
 import string
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
+import uuid
 import webbrowser
 import zipfile
 from pathlib import Path
@@ -106,7 +112,7 @@ APP_LABEL = APP_VERSION + ("-dev" if APP_CHANNEL == "dev" else "")   # 开发版
 #   ② 新版写的数据，老版能「只读打开」查看（不认识的新字段忽略、不删）；
 #   ③ 老版保存时，服务端拒绝用较低版本覆盖磁盘上更高版本的数据（护栏，见 backup_save）。
 # 这样开发版 / 安装版即使一时新旧不一，也只会「后者只读、不互相写坏」。
-DATA_VERSION = 4
+DATA_VERSION = 5
 # 写盘协议和数据结构版本分开：前者保证客户端带有并发基线，后者保护数据形状。
 # 老安装版不会发送 syncProtocol；它的写入会被保留成冲突副本，但不能覆盖 current.home。
 SYNC_PROTOCOL = 2
@@ -117,11 +123,14 @@ DATA_DIR = data_dir()
 PHOTO_INDEX_DB = DATA_DIR / "photo-index.sqlite3"
 PHOTO_INDEX_LOG = DATA_DIR / "photo-index.log"
 PHOTO_INDEX_SCRIPT = ROOT / "project-two" / "scripts" / "photo_index.py"
+PHOTO_SELECTED_INDEX_SCRIPT = ROOT / "project-two" / "scripts" / "scan_selected_backup_dirs.py"
 PHOTO_METADATA_SCRIPT = ROOT / "project-two" / "scripts" / "photo_metadata.py"
 PHOTO_METADATA_LOG = DATA_DIR / "photo-metadata.log"
 PHOTO_ORGANIZE_SCRIPT = ROOT / "project-two" / "scripts" / "photo_organize.py"
+PHOTO_REVIEW_ORGANIZE_SCRIPT = ROOT / "project-two" / "scripts" / "photo_review_organize.py"
 PHOTO_ORGANIZE_LOG = DATA_DIR / "photo-organize.log"
 PHOTO_ORGANIZE_PROFILE = DATA_DIR / "photo-organize-profile.jsonl"
+PHOTO_DUPLICATE_REPORTS = DATA_DIR / "reports"
 PHOTO_HANDOFF_SCRIPT = ROOT / "project-two" / "scripts" / "photo_handoff.py"
 PHOTO_HANDOFF_DIR_NAME = "我家里的一切-接力"
 if os.environ.get("HOME_PHOTO_SOURCE"):
@@ -129,9 +138,9 @@ if os.environ.get("HOME_PHOTO_SOURCE"):
 elif os.name == "nt":
     PHOTO_DEFAULT_SOURCE = Path("Z:/")
 elif sys.platform == "darwin":
-    PHOTO_DEFAULT_SOURCE = Path("/Volumes/24684804")
+    PHOTO_DEFAULT_SOURCE = Path("/Volumes/PHOTO_LIBRARY")
 else:
-    PHOTO_DEFAULT_SOURCE = Path("/mnt/24684804")
+    PHOTO_DEFAULT_SOURCE = Path("/mnt/PHOTO_LIBRARY")
 _PHOTO_SCAN_LOCK = threading.Lock()
 _PHOTO_SCAN_PROC = None
 _PHOTO_SCAN_LOG_HANDLE = None
@@ -232,6 +241,44 @@ def photo_sources():
             found.append({"name": candidate.name or str(candidate), "path": str(candidate),
                           "readable": False, "writable": False})
     return found
+
+
+def photo_backup_directories(spec=None):
+    """发现 S300 顶层备份目录；不递归读取原片，也不猜测嵌套目录是否有新文件。"""
+    source = _photo_source_path((spec or {}).get("source"))
+    counts = {}
+    if PHOTO_INDEX_DB.is_file():
+        uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=3) as conn:
+            row = conn.execute("SELECT id FROM sources WHERE root=?", (str(source),)).fetchone()
+            if row:
+                counts = {str(name): (int(images or 0), int(videos or 0)) for name, images, videos in conn.execute(
+                    """SELECT substr(rel_path,1,instr(rel_path,'/')-1) top_dir,
+                              sum(CASE WHEN kind='image' THEN 1 ELSE 0 END),
+                              sum(CASE WHEN kind='video' THEN 1 ELSE 0 END)
+                       FROM media_files WHERE source_id=? AND status='active'
+                         AND kind IN ('image','video') AND instr(rel_path,'/')>0
+                       GROUP BY top_dir""", (int(row[0]),)
+                )}
+    directories = []
+    with os.scandir(source) as entries:
+        for entry in entries:
+            if ("备份" not in entry.name or entry.name.startswith(".") or entry.is_symlink()
+                    or entry.name in {"我家里的一切-索引备份", "我家里的一切-接力"}):
+                continue
+            try:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                with os.scandir(entry.path):
+                    pass
+                readable = True
+            except OSError:
+                readable = False
+            images, videos = counts.get(entry.name, (0, 0))
+            directories.append({"name": entry.name, "relPath": entry.name,
+                                "readable": readable, "indexedImages": images, "indexedVideos": videos})
+    directories.sort(key=lambda item: item["name"].casefold())
+    return {"ok": True, "source": str(source), "directories": directories}
 
 
 def _photo_process_alive():
@@ -335,6 +382,23 @@ def photo_organize_status():
                             source_rel COLLATE NOCASE LIMIT 8""",
                 (int(row["id"]),),
             ).fetchall()
+            review_phase = None
+            if row["layout"] == "review_month_year":
+                review_phase = {name: {"total": 0, "verified": 0}
+                                for name in ("month", "yearOnly", "unclassified")}
+                buckets = conn.execute(
+                    """SELECT CASE WHEN instr(target_rel,'/未能归档，未归类/')>0 THEN 'unclassified'
+                                 WHEN instr(target_rel,'/_仅确定年份/')>0 THEN 'yearOnly'
+                                 ELSE 'month' END AS bucket,
+                              count(*) AS total,
+                              sum(CASE WHEN status='verified' THEN 1 ELSE 0 END) AS verified
+                       FROM organize_entries WHERE run_id=? GROUP BY bucket""",
+                    (int(row["id"]),),
+                ).fetchall()
+                for bucket in buckets:
+                    review_phase[str(bucket["bucket"])] = {
+                        "total": int(bucket["total"]), "verified": int(bucket["verified"] or 0)
+                    }
             profile = _photo_organize_profile_summary(int(row["id"]))
             average_rate = profile["files"] * 1000 / profile["wallMs"] if profile["wallMs"] > 0 else 0
             remaining = max(0, int(row["total"] or 0) - int(row["verified"] or 0))
@@ -351,10 +415,108 @@ def photo_organize_status():
                 "bytesTotal": int(row["bytes_total"] or 0), "bytesMoved": int(row["bytes_moved"] or 0),
                 "reliable": int(row["reliable"] or 0), "needsReview": int(row["needs_review"] or 0),
                 "lastPath": row["last_path"], "message": row["message"],
+                "reviewPhase": review_phase,
                 "examples": [dict(item) for item in examples],
             }
     except (OSError, sqlite3.Error) as exc:
         return {**empty, "ok": False, "status": "error", "error": f"无法读取整理任务：{exc}"}
+
+
+def photo_duplicate_status():
+    """只读查询按月重复检测的进度，不返回媒体路径。"""
+    work_files = sorted(PHOTO_DUPLICATE_REPORTS.glob("photo-duplicates-monthly-*.sqlite3"))
+    if not work_files:
+        return {"ok": True, "status": "not_started"}
+    work_db = work_files[-1]
+    report = work_db.with_suffix(".json")
+    pid_file = work_db.with_suffix(".pid")
+    alive = False
+    try:
+        pid = int(pid_file.read_text(encoding="ascii").strip())
+        os.kill(pid, 0)
+        alive = True
+    except (OSError, ValueError):
+        pass
+    try:
+        uri = work_db.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=2) as conn:
+            rows = conn.execute(
+                """SELECT bucket,count(*),sum(probe_status='done'),
+                   sum(full_status IN ('done','skipped')),
+                   sum(probe_status='error' OR full_status='error')
+                   FROM items GROUP BY bucket ORDER BY bucket"""
+            ).fetchall()
+            confirmed = conn.execute(
+                """SELECT count(*),coalesce(sum(n-1),0),coalesce(sum((n-1)*size),0)
+                   FROM (SELECT bucket,size,full_hash,count(*) AS n FROM items
+                         WHERE full_status='done'
+                         GROUP BY bucket,size,full_hash HAVING n>1)"""
+            ).fetchone()
+        months = len(rows)
+        completed = sum(probed == total and finished == total for _, total, probed, finished, _ in rows)
+        current = next(((bucket, total, probed, finished) for bucket, total, probed, finished, _ in rows
+                        if probed != total or finished != total), None)
+        current_month = None
+        if current:
+            bucket, total, probed, finished = current
+            current_month = {"month": bucket.rsplit("/", 1)[-1], "total": total,
+                             "percent": round(100 * (probed + finished) / (2 * total), 1)}
+        errors = sum(row[4] for row in rows)
+        overall_month_percent = round(
+            100 * sum((probed + finished) / (2 * total)
+                      for _, total, probed, finished, _ in rows) / months, 1
+        ) if months else 100
+        result = {"ok": True, "status": "completed" if report.is_file() else
+                  "running" if alive else "error" if errors else "paused",
+                  "processAlive": alive, "months": months, "completedMonths": completed,
+                  "monthPercent": overall_month_percent,
+                  "currentMonth": current_month, "errors": errors,
+                  "candidates": sum(row[1] for row in rows),
+                  "confirmedGroups": int(confirmed[0]),
+                  "confirmedDuplicateFiles": int(confirmed[1]),
+                  "potentialReclaimBytes": int(confirmed[2])}
+        return result
+    except (OSError, sqlite3.Error) as exc:
+        return {"ok": False, "status": "error", "error": f"无法读取重复检测进度：{exc}"}
+
+
+def photo_duplicate_cleanup_status():
+    """只读查询完全重复副本清理的持久化进度，不返回媒体路径。"""
+    plan_files = sorted(PHOTO_DUPLICATE_REPORTS.glob("photo-duplicate-cleanup-*.sqlite3"))
+    if not plan_files:
+        return {"ok": True, "status": "not_started"}
+    plan_db = plan_files[-1]
+    pid_file = plan_db.with_suffix(".pid")
+    alive = False
+    try:
+        pid = int(pid_file.read_text(encoding="ascii").strip())
+        os.kill(pid, 0)
+        alive = True
+    except (OSError, ValueError):
+        pass
+    try:
+        uri = plan_db.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=2) as conn:
+            rows = conn.execute(
+                "SELECT status,count(*),coalesce(sum(size),0) FROM actions GROUP BY status"
+            ).fetchall()
+        counts = {name: (int(number), int(size)) for name, number, size in rows}
+        total = sum(number for number, _ in counts.values())
+        total_bytes = sum(size for _, size in counts.values())
+        deleted, deleted_bytes = counts.get("deleted", (0, 0))
+        skipped, _ = counts.get("skipped_hardlink", (0, 0))
+        planned, _ = counts.get("planned", (0, 0))
+        errors, _ = counts.get("error", (0, 0))
+        finished = deleted + skipped
+        status = ("completed" if total and not planned and not errors else
+                  "running" if alive else "error" if errors else "paused")
+        return {"ok": True, "status": status, "processAlive": alive,
+                "total": total, "deleted": deleted, "skippedHardlink": skipped,
+                "remaining": planned, "errors": errors,
+                "percent": round(100 * finished / total, 1) if total else 0,
+                "deletedBytes": deleted_bytes, "totalBytes": total_bytes}
+    except (OSError, sqlite3.Error) as exc:
+        return {"ok": False, "status": "error", "error": f"无法读取清理进度：{exc}"}
 
 
 def photo_index_status():
@@ -402,6 +564,26 @@ def photo_index_status():
                 "SELECT count(*) files FROM media_files WHERE source_id=? AND last_seen_run=?",
                 (sid, run_id),
             ).fetchone()["files"]
+            new_in_run = {str(r["kind"]): int(r["files"]) for r in conn.execute(
+                """SELECT kind,count(*) files FROM media_files
+                   WHERE source_id=? AND first_seen_run=? AND status='active'
+                     AND kind IN ('image','video') GROUP BY kind""", (sid, run_id)
+            )}
+            pending_work = conn.execute(
+                """SELECT sum(CASE WHEN kind IN ('image','video') AND metadata_status IS NOT 'done' THEN 1 ELSE 0 END) metadata_pending,
+                          sum(CASE WHEN kind IN ('image','video') AND rel_path NOT LIKE '家庭影像库/%' THEN 1 ELSE 0 END) unarchived_media
+                   FROM media_files WHERE source_id=? AND status='active'""", (sid,),
+            ).fetchone()
+            selected_scope = []
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='selected_scan_scopes'").fetchone():
+                scope_row = conn.execute("SELECT roots_json FROM selected_scan_scopes WHERE run_id=?", (run_id,)).fetchone()
+                if scope_row:
+                    selected_scope = json.loads(scope_row["roots_json"])
+            if not selected_scope and str(run["message"] or "").startswith(("仅扫描：", "指定备份目录扫描完成")):
+                selected_scope = [str(r[0]) for r in conn.execute(
+                    "SELECT rel_path FROM directories WHERE run_id=? AND instr(rel_path,'/')=0 ORDER BY rel_path",
+                    (run_id,),
+                )]
             top = conn.execute(
                 """SELECT CASE instr(rel_path,'/') WHEN 0 THEN '(根目录)'
                           ELSE substr(rel_path,1,instr(rel_path,'/')-1) END topDir,
@@ -472,6 +654,11 @@ def photo_index_status():
             "finishedAt": run["finished_at"],
             "updatedAt": run["updated_at"],
             "indexedThisRun": indexed_this_run,
+            "newInRun": new_in_run,
+            "metadataPending": int(pending_work["metadata_pending"] or 0),
+            "unarchivedMedia": int(pending_work["unarchived_media"] or 0),
+            "scanMode": "selected" if selected_scope else "full",
+            "selectedDirectories": selected_scope,
             "errors": int(run["errors"]),
             "lastPath": run["last_path"],
             "message": ("上次扫描意外中断，可以安全续跑" if interrupted else run["message"]),
@@ -533,6 +720,1117 @@ def photo_index_files(params):
         return {"ok": False, "error": f"无法读取索引记录：{exc}", "total": 0, "items": []}
 
 
+def _photo_browse_source(conn):
+    row = conn.execute("SELECT source_id FROM scan_runs ORDER BY id DESC LIMIT 1").fetchone()
+    return int(row[0]) if row else None
+
+
+def _photo_offline_place_names(conn):
+    exists = conn.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
+                          AND name='photo_place_labels'""").fetchone()
+    if not exists:
+        return {}
+    return {key: (label, source) for key, label, source in conn.execute(
+        "SELECT key,label,source FROM photo_place_labels WHERE key LIKE 'approx:%'")}
+
+
+def _photo_place_display(names, lat, lng):
+    found = names.get(f"approx:{lat:.1f},{lng:.1f}")
+    if not found:
+        return "地点待命名"
+    label, source = found
+    return f"附近：{label}" if source == "geonames-city" else label
+
+
+def photo_address_labels():
+    """Read locally saved place names; this endpoint never contacts a map provider."""
+    if not PHOTO_INDEX_DB.is_file():
+        return {"ok": True, "labels": {}}
+    uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=5) as conn:
+        exists = conn.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
+                              AND name='photo_place_labels'""").fetchone()
+        if not exists:
+            return {"ok": True, "labels": {}}
+        labels = {key: {"label": label, "source": source, "distanceKm": distance}
+                  for key, label, source, distance in conn.execute(
+                      "SELECT key,label,source,distance_km FROM photo_place_labels")}
+    return {"ok": True, "labels": labels}
+
+
+def photo_address_save(spec):
+    """Keep a user-requested reverse-geocoding result in the photo index."""
+    lat = float(spec.get("latitude"))
+    lng = float(spec.get("longitude"))
+    approximate = spec.get("approximate") is True
+    label = str(spec.get("label") or "").strip()
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180 and
+            math.isfinite(lat) and math.isfinite(lng)):
+        raise ValueError("坐标无效")
+    if not label or len(label) > 240:
+        raise ValueError("地址名称无效")
+    key = (f"approx:{lat:.1f},{lng:.1f}" if approximate
+           else f"exact:{lat:.5f},{lng:.5f}")
+    with sqlite3.connect(PHOTO_INDEX_DB, timeout=10) as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS photo_place_labels (
+            key TEXT PRIMARY KEY, latitude REAL NOT NULL, longitude REAL NOT NULL,
+            label TEXT NOT NULL, source TEXT NOT NULL, distance_km REAL,
+            updated_at TEXT NOT NULL)""")
+        conn.execute("""INSERT INTO photo_place_labels
+            (key,latitude,longitude,label,source,distance_km,updated_at)
+            VALUES (?,?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET
+              label=excluded.label, source=excluded.source,
+              distance_km=NULL, updated_at=excluded.updated_at""",
+            (key, lat, lng, label, "nominatim-manual", None,
+             datetime.datetime.now(datetime.timezone.utc).isoformat()))
+    return {"ok": True, "key": key}
+
+
+def photo_browse_summary():
+    """只读聚合家庭影像库的实际目录、GPS 和可确认日期。"""
+    empty = {"ok": True, "total": 0, "months": [], "yearOnly": [], "unclassified": 0,
+             "places": [], "gpsTotal": 0, "events": [], "datedTotal": 0, "peopleIndexed": 0,
+             "screenshotNameHints": 0, "screenRecordingNameHints": 0}
+    if not PHOTO_INDEX_DB.is_file():
+        return empty
+    try:
+        uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=5) as conn:
+            sid = _photo_browse_source(conn)
+            if sid is None:
+                return empty
+            rows = conn.execute(
+                """SELECT rel_path,kind,size,capture_time_text,capture_time_source,
+                          metadata_review_needed,latitude,longitude
+                   FROM media_files WHERE source_id=? AND status='active'
+                     AND kind IN ('image','video')""", (sid,)
+            )
+            months, years, events = {}, {}, {}
+            total = unclassified = gps_total = dated_total = 0
+            for path, kind, size, captured, source, review, lat, lng in rows:
+                total += 1
+                parts = path.split("/")
+                if len(parts) >= 4 and re.fullmatch(r"\d{4}", parts[1]) and parts[2] == "_仅确定年份":
+                    years[parts[1]] = years.get(parts[1], 0) + 1
+                elif len(parts) >= 4 and re.fullmatch(r"\d{4}", parts[1]) and re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", parts[2]) and parts[2][:4] == parts[1]:
+                    month = parts[2]
+                    current = months.setdefault(month, {"period": month, "files": 0, "images": 0, "videos": 0, "bytes": 0})
+                    current["files"] += 1
+                    current["images" if kind == "image" else "videos"] += 1
+                    current["bytes"] += size or 0
+                    if (captured and captured[:7] == month and not review
+                            and source in ("embedded_metadata", "video_container", "filename_or_path", "manual_review")
+                            and re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])", captured[:10])):
+                        day = captured[:10]
+                        try:
+                            datetime.date.fromisoformat(day)
+                        except ValueError:
+                            pass
+                        else:
+                            events[day] = events.get(day, 0) + 1
+                            dated_total += 1
+                elif path.startswith("家庭影像库/未能归档，未归类/"):
+                    unclassified += 1
+                if (lat is not None and lng is not None and -90 <= lat <= 90
+                        and -180 <= lng <= 180 and (lat != 0 or lng != 0)):
+                    gps_total += 1
+            places = []
+            hints = dict(conn.execute("""SELECT classification_hint,count(*) FROM media_files
+                WHERE source_id=? AND status='active' AND kind IN ('image','video')
+                  AND classification_hint IN ('screenshot','screen_recording')
+                GROUP BY classification_hint""", (sid,)).fetchall())
+            place_names = _photo_offline_place_names(conn)
+            for lat, lng, count in conn.execute(
+                """SELECT round(latitude,1),round(longitude,1),count(*)
+                   FROM media_files WHERE source_id=? AND status='active'
+                     AND kind IN ('image','video') AND latitude BETWEEN -90 AND 90
+                     AND longitude BETWEEN -180 AND 180
+                     AND NOT (latitude=0 AND longitude=0)
+                   GROUP BY round(latitude,1),round(longitude,1)
+                   ORDER BY count(*) DESC""", (sid,)
+            ):
+                places.append({"key": f"{lat:.1f},{lng:.1f}", "latitude": lat,
+                               "longitude": lng, "files": count,
+                               "label": _photo_place_display(place_names, lat, lng)})
+            return {**empty, "total": total,
+                    "months": sorted(months.values(), key=lambda item: item["period"], reverse=True),
+                    "yearOnly": [{"year": year, "files": count} for year, count in sorted(years.items(), reverse=True)],
+                    "unclassified": unclassified, "places": places, "gpsTotal": gps_total,
+                    "events": [{"day": day, "files": count} for day, count in sorted(events.items(), reverse=True)],
+                    "datedTotal": dated_total, "screenshotNameHints": hints.get("screenshot", 0),
+                    "screenRecordingNameHints": hints.get("screen_recording", 0)}
+    except (OSError, sqlite3.Error) as exc:
+        return {**empty, "ok": False, "error": f"无法读取影像分类：{exc}"}
+
+
+def photo_browse_items(params):
+    """分页读取索引媒体。筛选条件受控，不接受任意文件路径。"""
+    empty = {"ok": True, "total": 0, "items": [], "offset": 0, "limit": 48}
+    if not PHOTO_INDEX_DB.is_file():
+        return empty
+    scope = str((params.get("scope") or ["all"])[0])
+    key = str((params.get("key") or [""])[0])
+    kind = str((params.get("kind") or ["all"])[0])
+    hint = str((params.get("hint") or ["all"])[0])
+    sort = str((params.get("sort") or ["newest"])[0])
+    query = str((params.get("q") or [""])[0]).strip()[:80]
+    try:
+        limit = min(80, max(1, int((params.get("limit") or ["48"])[0])))
+        offset = min(200000, max(0, int((params.get("offset") or ["0"])[0])))
+    except ValueError:
+        return {**empty, "ok": False, "error": "分页参数无效"}
+    if kind not in ("all", "image", "video"):
+        return {**empty, "ok": False, "error": "媒体类型无效"}
+    if hint not in ("all", "screenshot", "screen_recording"):
+        return {**empty, "ok": False, "error": "线索筛选无效"}
+    trusted_time = ("CASE WHEN capture_time_text IS NOT NULL "
+                    "AND coalesce(metadata_review_needed,0)=0 "
+                    "AND capture_time_source IN ('embedded_metadata','video_container','filename_or_path','manual_review') "
+                    "THEN capture_time_text END")
+    order_by = {
+        "newest": f"({trusted_time}) IS NULL ASC, {trusted_time} DESC, rel_path COLLATE NOCASE DESC",
+        "oldest": f"({trusted_time}) IS NULL ASC, {trusted_time} ASC, rel_path COLLATE NOCASE ASC",
+        "name_asc": "name COLLATE NOCASE ASC, rel_path ASC",
+        "name_desc": "name COLLATE NOCASE DESC, rel_path DESC",
+        "size_desc": "size DESC, rel_path ASC",
+        "size_asc": "size ASC, rel_path ASC",
+    }.get(sort)
+    if order_by is None:
+        return {**empty, "ok": False, "error": "排序方式无效"}
+    where = ["source_id=?", "status='active'", "kind IN ('image','video')"]
+    values = []
+    if scope == "month" and re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", key):
+        where.append("rel_path GLOB ?")
+        values.append(f"家庭影像库/{key[:4]}/{key}/*")
+    elif scope == "year_only" and re.fullmatch(r"\d{4}", key):
+        where.append("rel_path GLOB ?")
+        values.append(f"家庭影像库/{key}/_仅确定年份/*")
+    elif scope == "unclassified" and not key:
+        where.append("rel_path GLOB ?")
+        values.append("家庭影像库/未能归档，未归类/*")
+    elif scope == "place" and re.fullmatch(r"-?\d{1,2}\.\d,-?\d{1,3}\.\d", key):
+        lat, lng = map(float, key.split(","))
+        if abs(lat) > 90 or abs(lng) > 180:
+            return {**empty, "ok": False, "error": "地点坐标无效"}
+        where.extend(["round(latitude,1)=?", "round(longitude,1)=?"])
+        values.extend([lat, lng])
+    elif scope == "day" and re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])", key):
+        try:
+            datetime.date.fromisoformat(key)
+        except ValueError:
+            return {**empty, "ok": False, "error": "日期无效"}
+        where.extend(["rel_path GLOB ?", "capture_time_text LIKE ?", "coalesce(metadata_review_needed,0)=0",
+                      "capture_time_source IN ('embedded_metadata','video_container','filename_or_path','manual_review')"])
+        values.extend([f"家庭影像库/{key[:4]}/{key[:7]}/*", key + "%"])
+    elif scope == "person" and re.fullmatch(r"[0-9a-f]{32}", key):
+        where.append("EXISTS (SELECT 1 FROM photo_person_assignments a WHERE a.source_id=media_files.source_id AND a.rel_path=media_files.rel_path AND a.person_id=?)")
+        values.append(key)
+    elif scope != "all" or key:
+        return {**empty, "ok": False, "error": "浏览范围无效"}
+    if kind != "all":
+        where.append("kind=?")
+        values.append(kind)
+    if hint != "all":
+        where.append("classification_hint=?")
+        values.append(hint)
+    if query:
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        where.append("name LIKE ? ESCAPE '\\'")
+        values.append(f"%{escaped}%")
+    clause = " AND ".join(where)
+    try:
+        uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=5) as conn:
+            conn.row_factory = sqlite3.Row
+            sid = _photo_browse_source(conn)
+            if sid is None:
+                return empty
+            if scope == "person" and not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='photo_person_assignments'").fetchone():
+                return empty
+            args = [sid, *values]
+            total = conn.execute(f"SELECT count(*) FROM media_files WHERE {clause}", args).fetchone()[0]
+            rows = conn.execute(
+                f"""SELECT rel_path AS relPath,name,kind,extension,size,
+                           capture_time_text AS captureTime,capture_time_source AS timeSource,
+                           metadata_review_needed AS needsReview,latitude,longitude
+                    FROM media_files WHERE {clause}
+                    ORDER BY {order_by} LIMIT ? OFFSET ?""",
+                [*args, limit, offset]
+            ).fetchall()
+            items = []
+            for row in rows:
+                item = dict(row)
+                path = item["relPath"]
+                path_parts = path.split("/")
+                if "/_仅确定年份/" in path:
+                    item["timePrecision"] = "year"
+                elif path.startswith("家庭影像库/未能归档，未归类/"):
+                    item["timePrecision"] = "unknown"
+                elif (item["timeSource"] in ("embedded_metadata", "video_container", "filename_or_path", "manual_review")
+                      and not item["needsReview"] and item["captureTime"]
+                      and len(path_parts) >= 3 and item["captureTime"][:7] == path_parts[2]
+                      and re.fullmatch(r"\d{4}-\d{2}-\d{2}", item["captureTime"][:10])):
+                    item["timePrecision"] = "day"
+                else:
+                    item["timePrecision"] = "month"
+                items.append(item)
+            return {"ok": True, "total": total, "items": items, "offset": offset, "limit": limit}
+    except (OSError, sqlite3.Error) as exc:
+        return {**empty, "ok": False, "error": f"无法读取影像列表：{exc}"}
+
+
+PHOTO_PEOPLE_DB = DATA_DIR / "photo-people.sqlite3"
+
+
+def _photo_people_schema(conn):
+    conn.execute("""CREATE TABLE IF NOT EXISTS photo_people (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS photo_person_samples (
+        id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES photo_people(id),
+        jpeg BLOB NOT NULL, source_name TEXT NOT NULL, created_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active')""")
+    if "status" not in {row[1] for row in conn.execute("PRAGMA table_info(photo_person_samples)")}:
+        conn.execute("ALTER TABLE photo_person_samples ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    conn.execute("CREATE INDEX IF NOT EXISTS photo_person_samples_person ON photo_person_samples(person_id)")
+
+
+def _photo_person_assignment_schema(conn):
+    conn.execute("""CREATE TABLE IF NOT EXISTS photo_person_assignments (
+        person_id TEXT NOT NULL, source_id INTEGER NOT NULL,
+        rel_path TEXT NOT NULL, created_at TEXT NOT NULL,
+        PRIMARY KEY (person_id, source_id, rel_path))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS photo_person_media_idx ON photo_person_assignments(source_id,rel_path)")
+
+
+def photo_people_list():
+    """Reference portraits are kept locally and are not a claim that the library was scanned."""
+    with sqlite3.connect(PHOTO_PEOPLE_DB, timeout=10) as conn:
+        _photo_people_schema(conn)
+        people = [{"id": row[0], "name": row[1], "assignedCount": 0, "samples": []}
+                  for row in conn.execute("SELECT id,name FROM photo_people ORDER BY created_at,id")]
+        by_id = {person["id"]: person for person in people}
+        for sid, person_id, source_name, status in conn.execute(
+                "SELECT id,person_id,source_name,status FROM photo_person_samples ORDER BY created_at,id"):
+            if person_id in by_id:
+                by_id[person_id]["samples"].append({"id": sid, "sourceName": source_name,
+                                                     "status": status})
+    if PHOTO_INDEX_DB.is_file():
+        with sqlite3.connect(PHOTO_INDEX_DB, timeout=5) as index:
+            _photo_person_assignment_schema(index)
+            for pid, count in index.execute("""SELECT a.person_id,count(*) FROM photo_person_assignments a
+                JOIN media_files m ON m.source_id=a.source_id AND m.rel_path=a.rel_path
+                WHERE m.status='active' GROUP BY a.person_id"""):
+                if pid in by_id:
+                    by_id[pid]["assignedCount"] = count
+    return {"ok": True, "people": people, "scannedImages": 0}
+
+
+def photo_people_create(spec):
+    name = spec.get("name") if isinstance(spec, dict) else None
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 60:
+        raise ValueError("请填写 1 到 60 字的人物名称")
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    person_id = uuid.uuid4().hex
+    with sqlite3.connect(PHOTO_PEOPLE_DB, timeout=10) as conn:
+        _photo_people_schema(conn)
+        conn.execute("INSERT INTO photo_people VALUES (?,?,?,?)", (person_id, name.strip(), now, now))
+    return {"ok": True, "id": person_id}
+
+
+def photo_people_rename(spec):
+    person_id, name = spec.get("personId"), spec.get("name")
+    if not isinstance(person_id, str) or not re.fullmatch(r"[0-9a-f]{32}", person_id):
+        raise ValueError("人物记录无效")
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 60:
+        raise ValueError("请填写 1 到 60 字的人物名称")
+    with sqlite3.connect(PHOTO_PEOPLE_DB, timeout=10) as conn:
+        _photo_people_schema(conn)
+        updated = conn.execute("UPDATE photo_people SET name=?,updated_at=? WHERE id=?",
+                               (name.strip(), datetime.datetime.now(datetime.timezone.utc).isoformat(), person_id))
+        if updated.rowcount != 1:
+            raise FileNotFoundError("人物记录不存在")
+    return {"ok": True}
+
+
+def photo_people_add_sample(spec):
+    person_id, source_name, encoded = spec.get("personId"), spec.get("sourceName"), spec.get("jpegBase64")
+    if not isinstance(person_id, str) or not re.fullmatch(r"[0-9a-f]{32}", person_id):
+        raise ValueError("人物记录无效")
+    if not isinstance(source_name, str) or len(source_name) > 160:
+        raise ValueError("样本名称无效")
+    if not isinstance(encoded, str) or len(encoded) > 500000:
+        raise ValueError("样本图片太大")
+    try:
+        jpeg = base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error):
+        raise ValueError("样本图片格式无效") from None
+    if not 100 <= len(jpeg) <= 375000 or not jpeg.startswith(b"\xff\xd8\xff") or not jpeg.endswith(b"\xff\xd9"):
+        raise ValueError("请上传 JPEG 脸部裁剪图")
+    sample_id = uuid.uuid4().hex
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with sqlite3.connect(PHOTO_PEOPLE_DB, timeout=10) as conn:
+        _photo_people_schema(conn)
+        if not conn.execute("SELECT 1 FROM photo_people WHERE id=?", (person_id,)).fetchone():
+            raise FileNotFoundError("人物记录不存在")
+        active_count = conn.execute("SELECT count(*) FROM photo_person_samples WHERE person_id=? AND status='active'", (person_id,)).fetchone()[0]
+        if active_count >= 3:
+            raise ValueError("每个人最多保留 3 张有效特征图；可先移除旧样本")
+        conn.execute("""INSERT INTO photo_person_samples
+            (id,person_id,jpeg,source_name,created_at,status) VALUES (?,?,?,?,?,'active')""",
+            (sample_id, person_id, jpeg, Path(source_name).name, now))
+    return {"ok": True, "id": sample_id}
+
+
+def photo_people_sample_image(sample_id):
+    if not isinstance(sample_id, str) or not re.fullmatch(r"[0-9a-f]{32}", sample_id):
+        raise ValueError("样本记录无效")
+    with sqlite3.connect(PHOTO_PEOPLE_DB, timeout=10) as conn:
+        _photo_people_schema(conn)
+        row = conn.execute("SELECT jpeg FROM photo_person_samples WHERE id=?", (sample_id,)).fetchone()
+    if not row:
+        raise FileNotFoundError("样本记录不存在")
+    return row[0]
+
+
+def photo_people_remove_sample(spec):
+    sample_id = spec.get("sampleId") if isinstance(spec, dict) else None
+    if not isinstance(sample_id, str) or not re.fullmatch(r"[0-9a-f]{32}", sample_id):
+        raise ValueError("样本记录无效")
+    with sqlite3.connect(PHOTO_PEOPLE_DB, timeout=10) as conn:
+        _photo_people_schema(conn)
+        updated = conn.execute("UPDATE photo_person_samples SET status='removed' WHERE id=? AND status='active'", (sample_id,))
+        if updated.rowcount != 1:
+            raise FileNotFoundError("样本记录不存在")
+    return {"ok": True}
+
+
+def photo_people_restore_sample(spec):
+    sample_id = spec.get("sampleId") if isinstance(spec, dict) else None
+    if not isinstance(sample_id, str) or not re.fullmatch(r"[0-9a-f]{32}", sample_id):
+        raise ValueError("样本记录无效")
+    with sqlite3.connect(PHOTO_PEOPLE_DB, timeout=10) as conn:
+        _photo_people_schema(conn)
+        row = conn.execute("SELECT person_id FROM photo_person_samples WHERE id=? AND status='removed'", (sample_id,)).fetchone()
+        if not row:
+            raise FileNotFoundError("样本记录不存在")
+        if conn.execute("SELECT count(*) FROM photo_person_samples WHERE person_id=? AND status='active'", (row[0],)).fetchone()[0] >= 3:
+            raise ValueError("每个人最多保留 3 张有效特征图；可先移除其他样本")
+        updated = conn.execute("UPDATE photo_person_samples SET status='active' WHERE id=? AND status='removed'", (sample_id,))
+        if updated.rowcount != 1:
+            raise FileNotFoundError("样本记录不存在")
+    return {"ok": True}
+
+
+def photo_people_for_media(rel_path):
+    if not isinstance(rel_path, str) or not rel_path.startswith("家庭影像库/") or len(rel_path) > 1600:
+        raise ValueError("影像路径无效")
+    with sqlite3.connect(PHOTO_INDEX_DB, timeout=5) as index:
+        sid = _photo_browse_source(index)
+        _photo_person_assignment_schema(index)
+        ids = [row[0] for row in index.execute("""SELECT person_id FROM photo_person_assignments
+            WHERE source_id=? AND rel_path=?""", (sid, rel_path))]
+    with sqlite3.connect(PHOTO_PEOPLE_DB, timeout=5) as people:
+        _photo_people_schema(people)
+        names = dict(people.execute("SELECT id,name FROM photo_people"))
+    return {"ok": True, "people": [{"id": pid, "name": names[pid]} for pid in ids if pid in names]}
+
+
+def photo_people_assign(spec):
+    person_id, rel_path = spec.get("personId"), spec.get("path")
+    if not isinstance(person_id, str) or not re.fullmatch(r"[0-9a-f]{32}", person_id):
+        raise ValueError("人物记录无效")
+    if not isinstance(rel_path, str) or not rel_path.startswith("家庭影像库/") or len(rel_path) > 1600:
+        raise ValueError("影像路径无效")
+    uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=5) as index:
+        sid = _photo_browse_source(index)
+        active = index.execute("""SELECT 1 FROM media_files WHERE source_id=? AND rel_path=?
+            AND status='active' AND kind='image'""", (sid, rel_path)).fetchone()
+    if not active:
+        raise FileNotFoundError("当前索引中没有这张照片")
+    with sqlite3.connect(PHOTO_PEOPLE_DB, timeout=10) as people:
+        _photo_people_schema(people)
+        if not people.execute("SELECT 1 FROM photo_people WHERE id=?", (person_id,)).fetchone():
+            raise FileNotFoundError("人物记录不存在")
+    with sqlite3.connect(PHOTO_INDEX_DB, timeout=10) as index:
+        _photo_person_assignment_schema(index)
+        if not index.execute("""SELECT 1 FROM media_files WHERE source_id=? AND rel_path=?
+            AND status='active' AND kind='image'""", (sid, rel_path)).fetchone():
+            raise FileNotFoundError("照片已移动或删除，请刷新后重试")
+        index.execute("""INSERT OR IGNORE INTO photo_person_assignments
+            (person_id,source_id,rel_path,created_at) VALUES (?,?,?,?)""",
+            (person_id, sid, rel_path, datetime.datetime.now(datetime.timezone.utc).isoformat()))
+    return {"ok": True}
+
+
+def photo_people_unassign(spec):
+    person_id, rel_path = spec.get("personId"), spec.get("path")
+    if not isinstance(person_id, str) or not re.fullmatch(r"[0-9a-f]{32}", person_id) or not isinstance(rel_path, str):
+        raise ValueError("人物或影像记录无效")
+    with sqlite3.connect(PHOTO_INDEX_DB, timeout=10) as index:
+        sid = _photo_browse_source(index)
+        _photo_person_assignment_schema(index)
+        index.execute("DELETE FROM photo_person_assignments WHERE person_id=? AND source_id=? AND rel_path=?",
+                      (person_id, sid, rel_path))
+    return {"ok": True}
+
+
+_PHOTO_PREVIEW_LIMIT = threading.BoundedSemaphore(2)
+
+
+def _photo_thumb_cache(root, sid, kind, size, mtime_ns, inode, rel_path):
+    """缩略图随原文件版本变化失效；缓存位于 S300 扫描排除目录。"""
+    identity = f"{sid}:{inode or rel_path}:{kind}:{size}:{mtime_ns}:384:v1"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    return root / ".family-gallery-cache" / "thumbs-v1" / digest[:2] / f"{digest}.jpg"
+
+
+_PHOTO_CACHE_SIZE_LOCK = threading.Lock()
+_PHOTO_CACHE_SIZE_FILE = DATA_DIR / "photo-cache-usage.json"
+
+
+def _load_photo_cache_size():
+    state = {"path": None, "bytes": None, "checked_at": 0.0, "scanning": False, "error": None}
+    try:
+        saved = json.loads(_PHOTO_CACHE_SIZE_FILE.read_text(encoding="utf-8"))
+        if isinstance(saved.get("path"), str) and isinstance(saved.get("bytes"), int) and saved["bytes"] >= 0:
+            state.update({"path": saved["path"], "bytes": saved["bytes"],
+                          "checked_at": float(saved.get("checkedAt") or 0)})
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return state
+
+
+_PHOTO_CACHE_SIZE = _load_photo_cache_size()
+
+
+def _photo_cache_size_scan(path):
+    """单次后台统计 S300 缩略图占用；页面请求不等待 SMB 全目录遍历。"""
+    size, error = None, None
+    try:
+        if not path.exists():
+            size = 0
+        elif os.name != "nt":
+            result = subprocess.run(["du", "-sk", str(path)], capture_output=True,
+                                    text=True, timeout=900)
+            if result.returncode != 0:
+                raise OSError(result.stderr.strip() or "无法统计缩略图缓存")
+            size = int(result.stdout.split()[0]) * 1024
+        else:
+            size = sum((Path(folder) / name).stat().st_size
+                       for folder, _, names in os.walk(path) for name in names)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        error = str(exc)
+    with _PHOTO_CACHE_SIZE_LOCK:
+        if _PHOTO_CACHE_SIZE["path"] == str(path):
+            _PHOTO_CACHE_SIZE.update({"bytes": size, "checked_at": time.time(),
+                                      "scanning": False, "error": error})
+            if error is None:
+                try:
+                    temporary = _PHOTO_CACHE_SIZE_FILE.with_suffix(".tmp")
+                    temporary.write_text(json.dumps({"path": str(path), "bytes": size,
+                                                     "checkedAt": _PHOTO_CACHE_SIZE["checked_at"]}), encoding="utf-8")
+                    os.replace(temporary, _PHOTO_CACHE_SIZE_FILE)
+                except OSError:
+                    pass
+
+
+def photo_storage_status(force=False):
+    """返回本机索引数据库与 S300 缩略图缓存的容量。"""
+    def file_bytes(path):
+        try:
+            return path.stat().st_size
+        except OSError:
+            return 0
+
+    index_bytes = sum(file_bytes(Path(str(PHOTO_INDEX_DB) + suffix))
+                      for suffix in ("", "-wal", "-shm"))
+    people_db = DATA_DIR / "photo-people.sqlite3"
+    people_bytes = sum(file_bytes(Path(str(people_db) + suffix))
+                       for suffix in ("", "-wal", "-shm"))
+    root = _latest_index_source_root() or PHOTO_DEFAULT_SOURCE
+    cache_path = root / ".family-gallery-cache"
+    available = root.is_dir()
+    with _PHOTO_CACHE_SIZE_LOCK:
+        state = _PHOTO_CACHE_SIZE
+        now = time.time()
+        if available and not state["scanning"] and (force or state["path"] != str(cache_path)
+                or now - state["checked_at"] > 900):
+            state.update({"path": str(cache_path), "scanning": True, "error": None})
+            threading.Thread(target=_photo_cache_size_scan, args=(cache_path,), daemon=True).start()
+        cache = {"bytes": state["bytes"] if state["path"] == str(cache_path) else None,
+                 "status": "unavailable" if not available else "scanning" if state["scanning"] else
+                           "error" if state["error"] else "ready",
+                 "checkedAt": int(state["checked_at"] * 1000) if state["checked_at"] else None,
+                 "error": state["error"] if state["path"] == str(cache_path) else None}
+    return {"ok": True, "cache": cache,
+            "database": {"indexBytes": index_bytes, "peopleBytes": people_bytes,
+                         "totalBytes": index_bytes + people_bytes}}
+
+
+def _write_photo_thumb(cache_path, data):
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=cache_path.parent, suffix=".tmp", delete=False) as output:
+            temp_path = Path(output.name)
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temp_path, cache_path)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+
+def _sips_jpeg(source, output, dimension):
+    result = subprocess.run(
+        ["sips", "-s", "format", "jpeg", "-s", "formatOptions", "68",
+         "-Z", str(dimension), str(source), "--out", str(output)],
+        capture_output=True, text=True, timeout=60,
+    )
+    if result.returncode != 0 or not output.is_file():
+        raise ValueError("无法生成这张影像的预览")
+
+
+def photo_browse_preview(params):
+    """生成照片预览或 S300 上的压缩缩略图；只接受索引中的活跃影像。"""
+    rel_path = str((params.get("path") or [""])[0])
+    thumb = str((params.get("size") or [""])[0]) == "384"
+    if (params.get("size") or [""])[0] not in ("", "384"):
+        raise ValueError("预览尺寸无效")
+    if not rel_path.startswith("家庭影像库/") or len(rel_path) > 1600:
+        raise ValueError("影像路径无效")
+    uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=5) as conn:
+        sid = _photo_browse_source(conn)
+        if sid is None:
+            raise FileNotFoundError("索引为空")
+        row = conn.execute(
+            """SELECT sources.root,media_files.extension,media_files.kind,
+                      media_files.size,media_files.mtime_ns,media_files.inode
+               FROM media_files
+               JOIN sources ON sources.id=media_files.source_id
+               WHERE media_files.source_id=? AND rel_path=? AND status='active'
+                 AND kind IN ('image','video')""",
+            (sid, rel_path),
+        ).fetchone()
+    if not row:
+        raise FileNotFoundError("索引中没有这张影像")
+    root = Path(row[0]).resolve()
+    if sys.platform == "darwin" and str(root).startswith("/Volumes/") and not os.path.ismount(root):
+        raise FileNotFoundError("S300 当前未挂载")
+    path = (root / rel_path).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise FileNotFoundError("原片当前不可读取")
+    if not thumb and row[2] != "image":
+        raise ValueError("视频目前只支持封面预览")
+    current = path.stat()
+    if current.st_size != row[3] or current.st_mtime_ns != row[4] or (row[5] and current.st_ino != row[5]):
+        raise ValueError("原片与索引中的文件版本不一致")
+    cache_path = _photo_thumb_cache(root, sid, row[2], row[3], row[4], row[5], rel_path)
+    if thumb and cache_path.is_file():
+        return cache_path.read_bytes(), "image/jpeg"
+    if not _PHOTO_PREVIEW_LIMIT.acquire(timeout=90):
+        raise RuntimeError("正在生成其他预览，请稍后重试")
+    try:
+        if thumb and cache_path.is_file():
+            return cache_path.read_bytes(), "image/jpeg"
+        if sys.platform == "darwin" and shutil.which("sips"):
+            with tempfile.TemporaryDirectory(prefix="family-photo-preview-") as folder:
+                temp_dir = Path(folder)
+                out = temp_dir / "preview.jpg"
+                if row[2] == "video":
+                    if not thumb or not shutil.which("qlmanage"):
+                        raise ValueError("当前电脑尚不支持此视频封面")
+                    result = subprocess.run(
+                        ["qlmanage", "-t", "-s", "384", "-o", str(temp_dir), str(path)],
+                        capture_output=True, text=True, timeout=60,
+                    )
+                    covers = list(temp_dir.glob("*.png"))
+                    if result.returncode != 0 or not covers:
+                        raise ValueError("无法生成此视频封面")
+                    _sips_jpeg(covers[0], out, 384)
+                else:
+                    _sips_jpeg(path, out, 384 if thumb else 1600)
+                if thumb:
+                    after = path.stat()
+                    if (after.st_size, after.st_mtime_ns, after.st_ino) != (current.st_size, current.st_mtime_ns, current.st_ino):
+                        raise ValueError("原片在生成缩略图时发生变化")
+                    _write_photo_thumb(cache_path, out.read_bytes())
+                elif not cache_path.is_file() and os.path.ismount(root):
+                    small = temp_dir / "thumbnail.jpg"
+                    _sips_jpeg(out, small, 384)
+                    _write_photo_thumb(cache_path, small.read_bytes())
+                return out.read_bytes(), "image/jpeg"
+        if not thumb and path.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp", ".gif") and current.st_size <= 25_000_000:
+            return path.read_bytes(), mimetypes.guess_type(path.name)[0] or "image/jpeg"
+        raise ValueError("当前电脑尚不支持此格式的预览")
+    finally:
+        _PHOTO_PREVIEW_LIMIT.release()
+
+
+def photo_browse_video(params):
+    """仅允许读取当前索引里的活跃视频，供浏览器按字节范围播放。"""
+    rel_path = str((params.get("path") or [""])[0])
+    if not rel_path.startswith("家庭影像库/") or len(rel_path) > 1600:
+        raise ValueError("视频路径无效")
+    uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=5) as conn:
+        sid = _photo_browse_source(conn)
+        row = conn.execute(
+            """SELECT sources.root,media_files.size,media_files.mtime_ns,media_files.inode
+               FROM media_files JOIN sources ON sources.id=media_files.source_id
+               WHERE media_files.source_id=? AND rel_path=? AND status='active' AND kind='video'""",
+            (sid, rel_path),
+        ).fetchone() if sid is not None else None
+    if not row:
+        raise FileNotFoundError("索引中没有这段视频")
+    root = Path(row[0]).resolve()
+    if sys.platform == "darwin" and str(root).startswith("/Volumes/") and not os.path.ismount(root):
+        raise FileNotFoundError("S300 当前未挂载")
+    path = (root / rel_path).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise FileNotFoundError("视频当前不可读取")
+    current = path.stat()
+    if current.st_size != row[1] or current.st_mtime_ns != row[2] or (row[3] and current.st_ino != row[3]):
+        raise ValueError("视频与索引中的文件版本不一致")
+    return path, current.st_size, mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+
+
+def _photo_trash_schema(conn):
+    conn.execute("""CREATE TABLE IF NOT EXISTS photo_trash (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id TEXT NOT NULL,
+        source_id INTEGER NOT NULL, original_rel_path TEXT NOT NULL,
+        trash_rel_path TEXT NOT NULL UNIQUE, kind TEXT NOT NULL,
+        size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL,
+        status TEXT NOT NULL, deleted_at TEXT NOT NULL,
+        restored_at TEXT, cache_cleared_at TEXT)""")
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(photo_trash)")}
+    if "cache_cleared_at" not in columns:
+        conn.execute("ALTER TABLE photo_trash ADD COLUMN cache_cleared_at TEXT")
+
+
+def _photo_trash_clear_cache(conn, batch_id=None):
+    """Remove S300 previews for trashed media; unfinished removals can be retried."""
+    query = """SELECT t.id,t.source_id,t.original_rel_path,m.kind,m.size,m.mtime_ns,m.inode
+        FROM photo_trash t JOIN media_files m
+          ON m.source_id=t.source_id AND m.rel_path=t.original_rel_path
+        WHERE t.status='trashed' AND t.cache_cleared_at IS NULL"""
+    args = ()
+    if batch_id is not None:
+        query += " AND t.batch_id=?"
+        args = (batch_id,)
+    cleared = 0
+    pending = 0
+    for row in conn.execute(query, args).fetchall():
+        try:
+            root = _photo_trash_root(conn, row[1])
+            cache_path = _photo_thumb_cache(root, row[1], row[3], row[4], row[5], row[6], row[2])
+            cache_path.unlink(missing_ok=True)
+            conn.execute("UPDATE photo_trash SET cache_cleared_at=? WHERE id=?",
+                         (datetime.datetime.now(datetime.timezone.utc).isoformat(), row[0]))
+            cleared += 1
+        except OSError:
+            pending += 1
+    conn.commit()
+    if cleared:
+        with _PHOTO_CACHE_SIZE_LOCK:
+            _PHOTO_CACHE_SIZE["checked_at"] = 0.0
+    return {"cleared": cleared, "pending": pending}
+
+
+def _photo_trash_root(conn, sid):
+    row = conn.execute("SELECT root FROM sources WHERE id=?", (sid,)).fetchone()
+    if not row:
+        raise ValueError("找不到影像源")
+    root = Path(row[0]).resolve()
+    if sys.platform == "darwin" and str(root).startswith("/Volumes/") and not os.path.ismount(root):
+        raise FileNotFoundError("S300 当前未挂载")
+    return root
+
+
+def _photo_trash_reconcile(conn):
+    """Repair a rename interrupted between the file move and its index update."""
+    pending = conn.execute("""SELECT id,source_id,original_rel_path,trash_rel_path,size,mtime_ns
+        FROM photo_trash WHERE status='planned'""").fetchall()
+    for row in pending:
+        try:
+            root = _photo_trash_root(conn, row[1])
+            original, trashed = root / row[2], root / row[3]
+            has_original, has_trashed = os.path.lexists(original), os.path.lexists(trashed)
+            if has_original and not has_trashed:
+                conn.execute("DELETE FROM photo_trash WHERE id=?", (row[0],))
+            elif has_trashed and not has_original:
+                current = trashed.lstat()
+                if stat.S_ISREG(current.st_mode) and (current.st_size, current.st_mtime_ns) == (row[4], row[5]):
+                    conn.execute("UPDATE media_files SET status='trashed',updated_at=? WHERE source_id=? AND rel_path=?",
+                                 (int(time.time() * 1000), row[1], row[2]))
+                    conn.execute("UPDATE photo_trash SET status='trashed' WHERE id=?", (row[0],))
+        except (OSError, ValueError):
+            continue
+    conn.commit()
+
+
+def photo_trash_preview(rel_path):
+    """Show the selected media and any matching Live Photo companion before moving."""
+    if not isinstance(rel_path, str) or not rel_path.startswith("家庭影像库/") or len(rel_path) > 1600:
+        raise ValueError("影像路径无效")
+    uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=5) as conn:
+        conn.row_factory = sqlite3.Row
+        sid = _photo_browse_source(conn)
+        if sid is None:
+            raise FileNotFoundError("索引为空")
+        selected = conn.execute("""SELECT rel_path,name,parent_path,kind,size
+            FROM media_files WHERE source_id=? AND rel_path=? AND status='active'
+              AND kind IN ('image','video')""", (sid, rel_path)).fetchone()
+        if not selected:
+            raise FileNotFoundError("索引中没有这项影像")
+        files = [dict(selected)]
+        stem = Path(selected["name"]).stem.casefold()
+        companion_kind = "video" if selected["kind"] == "image" else "image"
+        for row in conn.execute("""SELECT rel_path,name,parent_path,kind,size
+            FROM media_files WHERE source_id=? AND parent_path=? AND status='active'
+              AND kind=?""", (sid, selected["parent_path"], companion_kind)):
+            if Path(row["name"]).stem.casefold() == stem:
+                files.append(dict(row))
+        return {"ok": True, "items": [{"relPath": row["rel_path"], "name": row["name"],
+                                        "kind": row["kind"], "size": row["size"]}
+                                       for row in files]}
+
+
+def photo_trash_preview_many(spec):
+    paths = spec.get("paths")
+    if not isinstance(paths, list) or not 1 <= len(paths) <= 200 or \
+            any(not isinstance(path, str) for path in paths) or len(set(paths)) != len(paths):
+        raise ValueError("每批请选择 1 至 200 项不重复的影像")
+    files = {}
+    for path in paths:
+        for item in photo_trash_preview(path)["items"]:
+            files[item["relPath"]] = item
+    return {"ok": True, "items": list(files.values()), "selectedCount": len(paths)}
+
+
+def photo_trash_move(spec):
+    """Move an indexed photo and its acknowledged companion into S300's app trash."""
+    if "paths" in spec:
+        preview = photo_trash_preview_many(spec)
+    else:
+        preview = photo_trash_preview(spec.get("path"))
+    expected = spec.get("expectedPaths")
+    paths = [item["relPath"] for item in preview["items"]]
+    if not isinstance(expected, list) or len(set(expected)) != len(expected) or sorted(expected) != sorted(paths):
+        raise ValueError("关联的照片或视频发生变化，请重新确认")
+    batch_id = uuid.uuid4().hex
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with sqlite3.connect(PHOTO_INDEX_DB, timeout=15) as conn:
+        conn.row_factory = sqlite3.Row
+        sid = _photo_browse_source(conn)
+        root = _photo_trash_root(conn, sid)
+        checked = []
+        for rel in paths:
+            row = conn.execute("""SELECT kind,size,mtime_ns,inode
+                FROM media_files WHERE source_id=? AND rel_path=? AND status='active'""",
+                (sid, rel)).fetchone()
+            if not row:
+                raise ValueError("影像索引已改变，请刷新")
+            path = root / rel
+            if not path.resolve().is_relative_to(root) or not path.is_file():
+                raise FileNotFoundError("原片当前不可读取")
+            current = path.lstat()
+            if not stat.S_ISREG(current.st_mode) or current.st_size != row["size"] or \
+                    current.st_mtime_ns != row["mtime_ns"] or \
+                    (row["inode"] and current.st_ino != row["inode"]):
+                raise ValueError("原片与索引不符，未移动")
+            token = uuid.uuid4().hex
+            trash_rel = f"家庭影像库/.family-gallery-trash/{token[:2]}/{token}{path.suffix.lower()}"
+            target = root / trash_rel
+            if target.exists():
+                raise ValueError("回收站目标冲突")
+            checked.append((rel, trash_rel, row["kind"], current.st_size, current.st_mtime_ns))
+        _photo_trash_schema(conn)
+        _photo_trash_reconcile(conn)
+        for rel, trash_rel, kind, size, mtime in checked:
+            conn.execute("""INSERT INTO photo_trash
+                (batch_id,source_id,original_rel_path,trash_rel_path,kind,size,mtime_ns,status,deleted_at)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
+                (batch_id, sid, rel, trash_rel, kind, size, mtime, "planned", now))
+        conn.commit()
+        moved = []
+        for rel, trash_rel, _kind, _size, _mtime in checked:
+            source, target = root / rel, root / trash_rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(source, target)
+            with conn:
+                conn.execute("UPDATE media_files SET status='trashed',updated_at=? WHERE source_id=? AND rel_path=?",
+                             (int(time.time() * 1000), sid, rel))
+                conn.execute("UPDATE photo_trash SET status='trashed' WHERE batch_id=? AND original_rel_path=?",
+                             (batch_id, rel))
+            moved.append(rel)
+        cache = _photo_trash_clear_cache(conn, batch_id)
+    return {"ok": True, "batchId": batch_id, "moved": moved, "cache": cache}
+
+
+def photo_trash_status():
+    if not PHOTO_INDEX_DB.is_file():
+        return {"ok": True, "batches": []}
+    with sqlite3.connect(PHOTO_INDEX_DB, timeout=10) as conn:
+        _photo_trash_schema(conn)
+        _photo_trash_reconcile(conn)
+        cache = _photo_trash_clear_cache(conn)
+        rows = conn.execute("""SELECT batch_id,max(deleted_at),count(*),sum(size),
+                             group_concat(original_rel_path,'|')
+            FROM photo_trash WHERE status='trashed' GROUP BY batch_id
+            ORDER BY max(deleted_at) DESC LIMIT 100""").fetchall()
+        pending_count = conn.execute("SELECT count(*) FROM photo_trash WHERE status='planned'").fetchone()[0]
+    return {"ok": True, "pendingCount": pending_count, "cachePendingCount": cache["pending"],
+            "batches": [{"batchId": r[0], "deletedAt": r[1],
+                                      "count": r[2], "bytes": r[3],
+                                      "paths": r[4].split("|")} for r in rows]}
+
+
+def photo_trash_restore(batch_id):
+    if not isinstance(batch_id, str) or not re.fullmatch(r"[0-9a-f]{32}", batch_id):
+        raise ValueError("回收站记录无效")
+    with sqlite3.connect(PHOTO_INDEX_DB, timeout=15) as conn:
+        conn.row_factory = sqlite3.Row
+        _photo_trash_schema(conn)
+        rows = conn.execute("""SELECT * FROM photo_trash
+            WHERE batch_id=? AND status='trashed' ORDER BY id""", (batch_id,)).fetchall()
+        if not rows:
+            raise FileNotFoundError("回收站里没有这项影像")
+        root = _photo_trash_root(conn, rows[0]["source_id"])
+        for row in rows:
+            source, target = root / row["trash_rel_path"], root / row["original_rel_path"]
+            if os.path.lexists(target) or not source.is_file():
+                raise ValueError("原位置已有文件，或回收站文件缺失；未恢复")
+            current = source.lstat()
+            if not stat.S_ISREG(current.st_mode) or current.st_size != row["size"] or current.st_mtime_ns != row["mtime_ns"]:
+                raise ValueError("回收站文件发生变化；未恢复")
+        restored = []
+        for row in rows:
+            source, target = root / row["trash_rel_path"], root / row["original_rel_path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(source, target)
+            with conn:
+                conn.execute("UPDATE media_files SET status='active',updated_at=? WHERE source_id=? AND rel_path=?",
+                             (int(time.time() * 1000), row["source_id"], row["original_rel_path"]))
+                conn.execute("UPDATE photo_trash SET status='restored',restored_at=? WHERE id=?",
+                             (datetime.datetime.now(datetime.timezone.utc).isoformat(), row["id"]))
+            restored.append(row["original_rel_path"])
+    return {"ok": True, "restored": restored}
+
+
+_PHOTO_MANUAL_ARCHIVE_LOCK = threading.Lock()
+
+
+def _photo_manual_archive_schema(conn):
+    conn.execute("""CREATE TABLE IF NOT EXISTS photo_manual_archive (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id TEXT NOT NULL,
+        source_id INTEGER NOT NULL, source_rel TEXT NOT NULL,
+        target_rel TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL,
+        inode INTEGER, precision TEXT NOT NULL, chosen_date TEXT NOT NULL,
+        old_capture_time TEXT, old_capture_source TEXT, old_capture_confidence TEXT,
+        status TEXT NOT NULL, created_at TEXT NOT NULL, verified_at TEXT,
+        UNIQUE(batch_id, source_rel), UNIQUE(batch_id, target_rel))""")
+
+
+def _photo_manual_archive_finish(conn, row):
+    target = Path(row["target_rel"])
+    stamp = int(time.time() * 1000)
+    if row["precision"] == "day":
+        conn.execute("""UPDATE media_files SET rel_path=?,parent_path=?,name=?,
+            capture_time_text=?,capture_time_source='manual_review',
+            capture_time_confidence='high',metadata_review_needed=0,updated_at=?
+            WHERE source_id=? AND rel_path=? AND status='active'""",
+            (row["target_rel"], str(target.parent), target.name, row["chosen_date"],
+             stamp, row["source_id"], row["source_rel"]))
+    else:
+        conn.execute("""UPDATE media_files SET rel_path=?,parent_path=?,name=?,updated_at=?
+            WHERE source_id=? AND rel_path=? AND status='active'""",
+            (row["target_rel"], str(target.parent), target.name, stamp,
+             row["source_id"], row["source_rel"]))
+    if conn.execute("SELECT changes()").fetchone()[0] != 1:
+        raise ValueError("索引中的原路径已变化，请人工核对")
+    if row["source_rel"] != row["target_rel"]:
+        _photo_person_assignment_schema(conn)
+        conn.execute("""UPDATE photo_person_assignments SET rel_path=?
+            WHERE source_id=? AND rel_path=?""",
+            (row["target_rel"], row["source_id"], row["source_rel"]))
+    conn.execute("UPDATE photo_manual_archive SET status='verified',verified_at=? WHERE id=?",
+                 (datetime.datetime.now(datetime.timezone.utc).isoformat(), row["id"]))
+
+
+def _photo_manual_archive_reconcile(conn):
+    """Finish only moves whose target exists and source is gone after an interrupted rename."""
+    _photo_manual_archive_schema(conn)
+    pending = conn.execute("SELECT * FROM photo_manual_archive WHERE status='planned' ORDER BY id").fetchall()
+    for row in pending:
+        root = _photo_trash_root(conn, row["source_id"])
+        source, target = root / row["source_rel"], root / row["target_rel"]
+        if row["source_rel"] == row["target_rel"]:
+            info = source.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_size != row["size"] or info.st_mtime_ns != row["mtime_ns"]:
+                raise ValueError("上次日期标注的原片发生变化，请人工核对")
+            _photo_manual_archive_finish(conn, row)
+            continue
+        old, new = os.path.lexists(source), os.path.lexists(target)
+        if old and not new:
+            conn.execute("DELETE FROM photo_manual_archive WHERE id=?", (row["id"],))
+        elif new and not old:
+            info = target.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_size != row["size"] or info.st_mtime_ns != row["mtime_ns"] or (row["inode"] and info.st_ino != row["inode"]):
+                raise ValueError("上次归档的目标文件与索引不符，请人工核对")
+            _photo_manual_archive_finish(conn, row)
+        else:
+            raise ValueError("上次归档的源和目标状态冲突，请人工核对")
+    conn.commit()
+
+
+def _photo_manual_archive_plan(spec):
+    paths = spec.get("paths")
+    precision = spec.get("precision")
+    chosen = spec.get("date")
+    if not isinstance(paths, list) or not 1 <= len(paths) <= 200 or any(
+            not isinstance(p, str) or not p.startswith("家庭影像库/") or len(p) > 1600 for p in paths):
+        raise ValueError("请选择 1 到 200 项家庭影像")
+    if len(set(paths)) != len(paths) or precision not in ("year", "month", "day") or not isinstance(chosen, str):
+        raise ValueError("归档选择无效")
+    if precision == "year" and re.fullmatch(r"\d{4}", chosen):
+        year, month = int(chosen), None
+    elif precision == "month" and re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", chosen):
+        year, month = int(chosen[:4]), int(chosen[5:7])
+    elif precision == "day" and re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])", chosen):
+        parsed = datetime.date.fromisoformat(chosen)
+        year, month = parsed.year, parsed.month
+    else:
+        raise ValueError("请选择有效的年份、月份或日期")
+    if not 1900 <= year <= datetime.date.today().year + 1:
+        raise ValueError("归档年份超出合理范围")
+    target_dir = f"家庭影像库/{year:04d}/{year:04d}-{month:02d}" if month else f"家庭影像库/{year:04d}/_仅确定年份"
+    if (_photo_process_alive() or _photo_metadata_process_alive() or _photo_organize_process_alive()
+            or photo_duplicate_status().get("processAlive") or photo_duplicate_cleanup_status().get("processAlive")):
+        raise ValueError("照片扫描或整理正在运行，请完成后再手动归档")
+    uri = PHOTO_INDEX_DB.resolve().as_uri() + "?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        sid = _photo_browse_source(conn)
+        if sid is None:
+            raise ValueError("影像索引为空")
+        root = _photo_trash_root(conn, sid)
+        expanded = {}
+        for path in paths:
+            for item in photo_trash_preview(path)["items"]:
+                expanded[item["relPath"]] = None
+        if len(expanded) > 400:
+            raise ValueError("关联视频过多，请减少本次选择")
+        rows = []
+        for path in expanded:
+            row = conn.execute("""SELECT rel_path,name,kind,size,mtime_ns,inode,
+                capture_time_text,capture_time_source,capture_time_confidence
+                FROM media_files WHERE source_id=? AND rel_path=? AND status='active'""",
+                (sid, path)).fetchone()
+            if row is None:
+                raise ValueError("有影像不在当前索引，请刷新")
+            rows.append(row)
+        used = set()
+        items = []
+        for row in rows:
+            source_rel = row["rel_path"]
+            source = root / source_rel
+            if source.is_symlink() or not source.is_file() or not source.resolve().is_relative_to(root):
+                raise ValueError("原片当前不可安全读取")
+            info = source.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_size != row["size"] or info.st_mtime_ns != row["mtime_ns"] or (row["inode"] and info.st_ino != row["inode"]):
+                raise ValueError("原片与索引不符，请重新扫描后归档")
+            stem, suffix = Path(row["name"]).stem, Path(row["name"]).suffix
+            candidate = f"{target_dir}/{row['name']}"
+            number = 2
+            while (candidate != source_rel and (candidate.casefold() in used or os.path.lexists(root / candidate) or
+                   conn.execute("SELECT 1 FROM media_files WHERE source_id=? AND rel_path=? AND status='active'", (sid, candidate)).fetchone())):
+                candidate = f"{target_dir}/{stem}__归档{number}{suffix}"
+                number += 1
+            if candidate == source_rel and precision != "day":
+                continue
+            if not (root / candidate).resolve().is_relative_to(root):
+                raise ValueError("目标路径不安全")
+            used.add(candidate.casefold())
+            items.append({"sourceRel": source_rel, "targetRel": candidate, "name": row["name"],
+                          "kind": row["kind"], "size": row["size"], "mtimeNs": row["mtime_ns"],
+                          "inode": row["inode"], "oldCaptureTime": row["capture_time_text"],
+                          "oldCaptureSource": row["capture_time_source"],
+                          "oldCaptureConfidence": row["capture_time_confidence"]})
+    return {"ok": True, "items": items, "count": len(items), "targetDirectory": target_dir,
+            "precision": precision, "date": chosen, "selectedCount": len(paths)}
+
+
+def photo_manual_archive_preview(spec):
+    return _photo_manual_archive_plan(spec)
+
+
+def photo_manual_archive_move(spec):
+    with _PHOTO_MANUAL_ARCHIVE_LOCK:
+        backup = photo_index_backup()
+        if not backup.get("ok"):
+            raise ValueError(backup.get("error") or "无法备份影像索引")
+        with sqlite3.connect(PHOTO_INDEX_DB, timeout=30) as previous:
+            previous.row_factory = sqlite3.Row
+            _photo_manual_archive_reconcile(previous)
+        plan = _photo_manual_archive_plan(spec)
+        expected = spec.get("expected")
+        if not isinstance(expected, list) or expected != [
+                {"sourceRel": item["sourceRel"], "targetRel": item["targetRel"]} for item in plan["items"]]:
+            raise ValueError("归档清单发生变化，请重新预览")
+        if not plan["items"]:
+            raise ValueError("选中的影像已在目标目录")
+        batch_id = uuid.uuid4().hex
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with sqlite3.connect(PHOTO_INDEX_DB, timeout=30) as conn:
+            conn.row_factory = sqlite3.Row
+            sid = _photo_browse_source(conn)
+            root = _photo_trash_root(conn, sid)
+            with conn:
+                for item in plan["items"]:
+                    conn.execute("""INSERT INTO photo_manual_archive
+                        (batch_id,source_id,source_rel,target_rel,size,mtime_ns,inode,precision,chosen_date,
+                         old_capture_time,old_capture_source,old_capture_confidence,status,created_at)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                         (batch_id, sid, item["sourceRel"], item["targetRel"], item["size"], item["mtimeNs"],
+                          item["inode"], plan["precision"], plan["date"], item["oldCaptureTime"],
+                          item["oldCaptureSource"], item["oldCaptureConfidence"], "planned", now))
+            moved = 0
+            for row in conn.execute("SELECT * FROM photo_manual_archive WHERE batch_id=? ORDER BY id", (batch_id,)).fetchall():
+                source, target = root / row["source_rel"], root / row["target_rel"]
+                if row["source_rel"] == row["target_rel"]:
+                    info = source.lstat()
+                    if not stat.S_ISREG(info.st_mode) or info.st_size != row["size"] or info.st_mtime_ns != row["mtime_ns"]:
+                        raise ValueError("原片发生变化，已停止")
+                    with conn:
+                        _photo_manual_archive_finish(conn, row)
+                    moved += 1
+                    continue
+                if not source.is_file() or source.is_symlink() or os.path.lexists(target):
+                    raise ValueError(f"第 {moved + 1} 项的源或目标发生变化，已停止，可重新打开页面核对")
+                info = source.lstat()
+                if info.st_size != row["size"] or info.st_mtime_ns != row["mtime_ns"] or (row["inode"] and info.st_ino != row["inode"]):
+                    raise ValueError("原片发生变化，已停止")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if not target.parent.resolve().is_relative_to(root):
+                    raise ValueError("目标目录不在家庭影像卷内，已停止")
+                if source.stat().st_dev != target.parent.stat().st_dev:
+                    raise ValueError("源和目标不在同一卷，已停止")
+                os.rename(source, target)
+                after = target.lstat()
+                if after.st_size != row["size"] or after.st_mtime_ns != row["mtime_ns"]:
+                    raise ValueError("移动后文件校验失败，已停止")
+                with conn:
+                    _photo_manual_archive_finish(conn, row)
+                moved += 1
+        return {"ok": True, "batchId": batch_id, "moved": moved, "targetDirectory": plan["targetDirectory"]}
+
+
 def photo_timeline(params):
     """按月聚合本机影像索引，并在选中月份后展开离线 GPS 地点簇。"""
     empty = {"ok": True, "periods": [], "places": [], "total": 0, "processed": 0,
@@ -557,7 +1855,8 @@ def photo_timeline(params):
                 """SELECT count(*) total,
                           sum(CASE WHEN metadata_status='done' THEN 1 ELSE 0 END) processed,
                           sum(CASE WHEN capture_time_text IS NOT NULL THEN 1 ELSE 0 END) with_time,
-                          sum(CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 ELSE 0 END) with_gps
+                          sum(CASE WHEN latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180
+                                         AND NOT (latitude=0 AND longitude=0) THEN 1 ELSE 0 END) with_gps
                    FROM media_files WHERE source_id=? AND status='active' AND kind IN ('image','video')""",
                 (sid,),
             ).fetchone()
@@ -568,16 +1867,17 @@ def photo_timeline(params):
                        ORDER BY id DESC LIMIT 1""", (sid,),
                 ).fetchone()
             periods_raw = conn.execute(
-                """SELECT substr(capture_time_text,1,7) period,count(*) files,
+                """SELECT substr(rel_path,12,7) period,count(*) files,
                           sum(CASE WHEN kind='image' THEN 1 ELSE 0 END) images,
                           sum(CASE WHEN kind='video' THEN 1 ELSE 0 END) videos,
-                          sum(CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 ELSE 0 END) gps,
+                          sum(CASE WHEN latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180
+                                         AND NOT (latitude=0 AND longitude=0) THEN 1 ELSE 0 END) gps,
                           sum(CASE WHEN metadata_review_needed=1 THEN 1 ELSE 0 END) needs_review,
                           coalesce(sum(size),0) bytes
                    FROM media_files
-                   WHERE source_id=? AND status='active' AND metadata_status='done'
-                     AND capture_time_text IS NOT NULL
-                   GROUP BY substr(capture_time_text,1,7) ORDER BY period""",
+                   WHERE source_id=? AND status='active' AND kind IN ('image','video')
+                     AND rel_path GLOB '家庭影像库/[0-9][0-9][0-9][0-9]/[0-9][0-9][0-9][0-9]-[0-9][0-9]/*'
+                   GROUP BY substr(rel_path,12,7) ORDER BY period""",
                 (sid,),
             ).fetchall()
             periods = []
@@ -607,7 +1907,7 @@ def photo_timeline(params):
             }
             if not period:
                 return result
-            like = period + "%"
+            month_path = f"家庭影像库/{period[:4]}/{period}/*"
             place_rows = conn.execute(
                 """SELECT round(latitude,1) latitude,round(longitude,1) longitude,count(*) files,
                           sum(CASE WHEN kind='image' THEN 1 ELSE 0 END) images,
@@ -615,25 +1915,25 @@ def photo_timeline(params):
                           sum(CASE WHEN metadata_review_needed=1 THEN 1 ELSE 0 END) needs_review,
                           coalesce(sum(size),0) bytes,min(rel_path) sample_path
                    FROM media_files
-                   WHERE source_id=? AND status='active' AND metadata_status='done'
-                     AND capture_time_text LIKE ? AND latitude IS NOT NULL AND longitude IS NOT NULL
+                   WHERE source_id=? AND status='active' AND kind IN ('image','video')
+                     AND rel_path GLOB ? AND latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180
+                     AND NOT (latitude=0 AND longitude=0)
                    GROUP BY round(latitude,1),round(longitude,1)
                    ORDER BY files DESC LIMIT 24""",
-                (sid, like),
+                (sid, month_path),
             ).fetchall()
             selected = next((item for item in periods if item["period"] == period), None)
             places = []
             represented = 0
+            place_names = _photo_offline_place_names(conn)
             for row in place_rows:
                 lat, lng = float(row["latitude"]), float(row["longitude"])
                 files = int(row["files"] or 0)
                 represented += files
                 sample = str(row["sample_path"] or "")
                 top_dir = sample.split("/", 1)[0] if sample else ""
-                lat_label = f"{abs(lat):.1f}°{'N' if lat >= 0 else 'S'}"
-                lng_label = f"{abs(lng):.1f}°{'E' if lng >= 0 else 'W'}"
                 places.append({
-                    "key": f"{lat:.1f},{lng:.1f}", "label": f"{lat_label} · {lng_label}",
+                    "key": f"{lat:.1f},{lng:.1f}", "label": _photo_place_display(place_names, lat, lng),
                     "latitude": lat, "longitude": lng, "files": files,
                     "images": int(row["images"] or 0), "videos": int(row["videos"] or 0),
                     "needsReview": int(row["needs_review"] or 0), "bytes": int(row["bytes"] or 0),
@@ -648,9 +1948,11 @@ def photo_timeline(params):
                           sum(CASE WHEN kind='video' THEN 1 ELSE 0 END) videos,
                           sum(CASE WHEN metadata_review_needed=1 THEN 1 ELSE 0 END) needs_review,
                           coalesce(sum(size),0) bytes
-                   FROM media_files WHERE source_id=? AND status='active' AND metadata_status='done'
-                     AND capture_time_text LIKE ? AND (latitude IS NULL OR longitude IS NULL)""",
-                (sid, like),
+                   FROM media_files WHERE source_id=? AND status='active' AND kind IN ('image','video')
+                     AND rel_path GLOB ? AND (latitude IS NULL OR longitude IS NULL
+                         OR latitude NOT BETWEEN -90 AND 90 OR longitude NOT BETWEEN -180 AND 180
+                         OR (latitude=0 AND longitude=0))""",
+                (sid, month_path),
             ).fetchone()
             if unknown and int(unknown["files"] or 0):
                 places.append({
@@ -667,8 +1969,20 @@ def photo_timeline(params):
 
 def photo_scan_start(spec):
     global _PHOTO_SCAN_PROC, _PHOTO_SCAN_LOG_HANDLE
-    source = _photo_source_path((spec or {}).get("source"))
-    if not PHOTO_INDEX_SCRIPT.is_file():
+    spec = spec or {}
+    source = _photo_source_path(spec.get("source"))
+    includes = spec.get("includes") or []
+    if not isinstance(includes, list) or len(includes) > 20 or any(not isinstance(item, str) for item in includes):
+        return {"ok": False, "error": "备份目录选择无效"}
+    if includes:
+        available = {item["relPath"] for item in photo_backup_directories({"source": str(source)})["directories"]
+                     if item["readable"]}
+        if len(set(includes)) != len(includes) or any(item not in available for item in includes):
+            return {"ok": False, "error": "只能扫描当前 S300 中可读取的备份目录"}
+    if _photo_metadata_process_alive() or _photo_organize_process_alive():
+        return {"ok": False, "error": "时间分析或归档正在运行，请等待完成后再扫描"}
+    script = PHOTO_SELECTED_INDEX_SCRIPT if includes else PHOTO_INDEX_SCRIPT
+    if not script.is_file():
         return {"ok": False, "error": "照片索引程序缺失，请重新构建项目"}
     with _PHOTO_SCAN_LOCK:
         if _PHOTO_SCAN_PROC is not None and _PHOTO_SCAN_PROC.poll() is None:
@@ -679,9 +1993,14 @@ def photo_scan_start(spec):
             os.chmod(PHOTO_INDEX_LOG, 0o600)
         except OSError:
             pass
-        cmd = [sys.executable, str(PHOTO_INDEX_SCRIPT), "--db", str(PHOTO_INDEX_DB), "scan", str(source)]
-        if bool((spec or {}).get("newRun")):
-            cmd.append("--new-run")
+        if includes:
+            cmd = [sys.executable, str(script), str(source), "--db", str(PHOTO_INDEX_DB)]
+            for item in includes:
+                cmd.extend(("--include", item))
+        else:
+            cmd = [sys.executable, str(script), "--db", str(PHOTO_INDEX_DB), "scan", str(source)]
+            if bool(spec.get("newRun")):
+                cmd.append("--new-run")
         try:
             _PHOTO_SCAN_PROC = subprocess.Popen(
                 cmd, cwd=str(ROOT), stdout=log_handle, stderr=subprocess.STDOUT,
@@ -769,6 +2088,30 @@ def photo_organize_plan(spec):
         return {"ok": False, "error": (result.stderr or result.stdout or "生成整理预演失败").strip()}
     planned = photo_organize_status()
     planned["message"] = "预演已生成；尚未移动任何文件"
+    photo_index_backup()
+    return planned
+
+
+def photo_organize_review_plan():
+    """Plan the month/year/unclassified second pass for the completed first pass."""
+    if _photo_process_alive() or _photo_metadata_process_alive() or _photo_organize_process_alive():
+        return {"ok": False, "error": "请等待当前照片任务完成后再生成待确认项预演"}
+    first_pass = photo_organize_status()
+    if (first_pass.get("status") != "completed" or first_pass.get("layout") not in ("day", "month")
+            or not first_pass.get("needsReview") or not first_pass.get("runId")):
+        return {"ok": False, "error": "请先完成本轮可信时间文件整理"}
+    if not PHOTO_REVIEW_ORGANIZE_SCRIPT.is_file():
+        return {"ok": False, "error": "待确认项整理程序缺失，请重新构建项目"}
+    result = subprocess.run(
+        [sys.executable, str(PHOTO_REVIEW_ORGANIZE_SCRIPT), "--db", str(PHOTO_INDEX_DB),
+         "--source-run-id", str(first_pass["runId"]), "plan"],
+        cwd=str(ROOT), text=True, capture_output=True, timeout=120,
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+    )
+    if result.returncode != 0:
+        return {"ok": False, "error": (result.stderr or result.stdout or "生成待确认项预演失败").strip()}
+    planned = photo_organize_status()
+    planned["message"] = "待确认项预演已生成；尚未移动任何文件"
     photo_index_backup()
     return planned
 
@@ -1829,7 +3172,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
+    def _trusted_local_host(self):
+        host = self.headers.get("Host", "")
+        return bool(re.fullmatch(r"(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?", host, re.I))
+
     def do_GET(self):
+        if not self._trusted_local_host():
+            self.send_error(403)
+            return
         # 子应用根路径未带斜杠时重定向，确保相对资源解析正确
         bare = self.path.split("?")[0]
         if bare in ("/finance", "/gallery", "/vault", "/dev"):
@@ -1917,14 +3267,134 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send_json(disk_ls((q.get("path") or [""])[0]))
         if bare == "/api/photos/index/status":
             return self._send_json(photo_index_status())
+        if bare == "/api/photos/index/backup-directories":
+            from urllib.parse import urlparse, parse_qs
+            try:
+                source = (parse_qs(urlparse(self.path).query).get("source") or [None])[0]
+                result = photo_backup_directories({"source": source})
+            except (ValueError, OSError, sqlite3.Error) as exc:
+                result = {"ok": False, "error": str(exc), "directories": []}
+            return self._send_json(result)
         if bare == "/api/photos/index/files":
             from urllib.parse import urlparse, parse_qs
             return self._send_json(photo_index_files(parse_qs(urlparse(self.path).query)))
+        if bare == "/api/photos/browse/summary":
+            return self._send_json(photo_browse_summary())
+        if bare == "/api/photos/storage":
+            from urllib.parse import urlparse, parse_qs
+            refresh = (parse_qs(urlparse(self.path).query).get("refresh") or ["0"])[0] == "1"
+            return self._send_json(photo_storage_status(force=refresh))
+        if bare == "/api/photos/people":
+            return self._send_json(photo_people_list())
+        if bare == "/api/photos/people/for-media":
+            from urllib.parse import urlparse, parse_qs
+            try:
+                path = (parse_qs(urlparse(self.path).query).get("path") or [""])[0]
+                return self._send_json(photo_people_for_media(path))
+            except (ValueError, FileNotFoundError, sqlite3.Error) as exc:
+                return self._send_json({"ok": False, "error": str(exc)})
+        if bare == "/api/photos/people/sample":
+            from urllib.parse import urlparse, parse_qs
+            try:
+                sample_id = (parse_qs(urlparse(self.path).query).get("id") or [""])[0]
+                data = photo_people_sample_image(sample_id)
+            except (ValueError, FileNotFoundError):
+                self.send_error(404); return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "private, no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if bare == "/api/photos/addresses":
+            return self._send_json(photo_address_labels())
+        if bare == "/api/photos/browse/items":
+            from urllib.parse import urlparse, parse_qs
+            return self._send_json(photo_browse_items(parse_qs(urlparse(self.path).query)))
+        if bare == "/api/photos/browse/trash/preview":
+            from urllib.parse import urlparse, parse_qs
+            try:
+                path = (parse_qs(urlparse(self.path).query).get("path") or [""])[0]
+                return self._send_json(photo_trash_preview(path))
+            except (ValueError, FileNotFoundError, OSError, sqlite3.Error) as exc:
+                return self._send_json({"ok": False, "error": str(exc)})
+        if bare == "/api/photos/browse/trash/status":
+            return self._send_json(photo_trash_status())
+        if bare == "/api/photos/browse/preview":
+            from urllib.parse import urlparse, parse_qs
+            try:
+                data, content_type = photo_browse_preview(parse_qs(urlparse(self.path).query))
+            except FileNotFoundError:
+                self.send_error(404); return
+            except (ValueError, RuntimeError, subprocess.TimeoutExpired, OSError, sqlite3.Error):
+                self.send_error(422); return
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if bare == "/api/photos/browse/video":
+            from urllib.parse import urlparse, parse_qs
+            try:
+                path, size, content_type = photo_browse_video(parse_qs(urlparse(self.path).query))
+            except FileNotFoundError:
+                self.send_error(404); return
+            except (ValueError, OSError, sqlite3.Error):
+                self.send_error(422); return
+            if size < 1:
+                self.send_error(416); return
+            start, end = 0, size - 1
+            requested = self.headers.get("Range")
+            if requested:
+                match = re.fullmatch(r"bytes=(\d*)-(\d*)", requested.strip())
+                if not match or (not match[1] and not match[2]):
+                    self.send_error(416); return
+                if match[1]:
+                    start = int(match[1])
+                    end = min(size - 1, int(match[2])) if match[2] else size - 1
+                else:
+                    start = max(0, size - int(match[2]))
+                if start >= size or end < start:
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{size}")
+                    self.end_headers()
+                    return
+            self.send_response(206 if requested else 200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(end - start + 1))
+            if requested:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Cache-Control", "private, no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            try:
+                with path.open("rb") as media:
+                    media.seek(start)
+                    remaining = end - start + 1
+                    while remaining:
+                        block = media.read(min(1024 * 1024, remaining))
+                        if not block:
+                            break
+                        self.wfile.write(block)
+                        remaining -= len(block)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         if bare == "/api/photos/timeline":
             from urllib.parse import urlparse, parse_qs
             return self._send_json(photo_timeline(parse_qs(urlparse(self.path).query)))
         if bare == "/api/photos/organize/status":
             return self._send_json(photo_organize_status())
+        if bare == "/api/photos/duplicates/status":
+            return self._send_json(photo_duplicate_status())
+        if bare == "/api/photos/duplicates/cleanup/status":
+            return self._send_json(photo_duplicate_cleanup_status())
         if bare == "/api/photos/handoff/status":
             return self._send_json(photo_handoff_status())
         target = resolve(self.path)
@@ -1950,10 +3420,58 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if not self._trusted_local_host():
+            self.send_error(403)
+            return
         bare = self.path.split("?")[0]
+        if bare in ("/api/photos/addresses/save", "/api/photos/browse/archive/preview",
+                    "/api/photos/browse/archive/move", "/api/photos/browse/trash/move",
+                    "/api/photos/browse/trash/preview-many",
+                    "/api/photos/browse/trash/restore", "/api/photos/people/create",
+                    "/api/photos/people/rename", "/api/photos/people/add-sample",
+                    "/api/photos/people/assign", "/api/photos/people/unassign",
+                    "/api/photos/people/remove-sample", "/api/photos/people/restore-sample"):
+            origin = self.headers.get("Origin", "")
+            if origin and not re.fullmatch(r"http://(?:localhost|127\.0\.0\.1):\d+", origin):
+                self.send_error(403); return
+            try:
+                ln = int(self.headers.get("Content-Length", "0") or "0")
+                if not 0 < ln <= (500000 if bare == "/api/photos/people/add-sample" else 100000):
+                    raise ValueError("请求长度无效")
+                spec = json.loads(self.rfile.read(ln))
+                if bare == "/api/photos/addresses/save":
+                    res = photo_address_save(spec)
+                elif bare == "/api/photos/browse/archive/preview":
+                    res = photo_manual_archive_preview(spec)
+                elif bare == "/api/photos/browse/archive/move":
+                    res = photo_manual_archive_move(spec)
+                elif bare == "/api/photos/browse/trash/move":
+                    res = photo_trash_move(spec)
+                elif bare == "/api/photos/browse/trash/preview-many":
+                    res = photo_trash_preview_many(spec)
+                elif bare == "/api/photos/browse/trash/restore":
+                    res = photo_trash_restore(spec.get("batchId"))
+                elif bare == "/api/photos/people/create":
+                    res = photo_people_create(spec)
+                elif bare == "/api/photos/people/rename":
+                    res = photo_people_rename(spec)
+                elif bare == "/api/photos/people/add-sample":
+                    res = photo_people_add_sample(spec)
+                elif bare == "/api/photos/people/assign":
+                    res = photo_people_assign(spec)
+                elif bare == "/api/photos/people/unassign":
+                    res = photo_people_unassign(spec)
+                elif bare == "/api/photos/people/restore-sample":
+                    res = photo_people_restore_sample(spec)
+                else:
+                    res = photo_people_remove_sample(spec)
+            except (ValueError, TypeError, FileNotFoundError, OSError, sqlite3.Error) as exc:
+                res = {"ok": False, "error": str(exc)}
+            return self._send_json(res)
         if bare in ("/api/photos/index/start", "/api/photos/index/pause", "/api/photos/index/reveal",
                     "/api/photos/index/backup", "/api/photos/metadata/start", "/api/photos/metadata/pause",
-                    "/api/photos/organize/plan", "/api/photos/organize/start", "/api/photos/organize/pause",
+                    "/api/photos/organize/plan", "/api/photos/organize/review-plan",
+                    "/api/photos/organize/start", "/api/photos/organize/pause",
                     "/api/photos/handoff/export", "/api/photos/handoff/import"):
             origin = self.headers.get("Origin", "")
             # localhost/127.0.0.1 的开发端口也允许；服务本身只监听环回地址。
@@ -1972,6 +3490,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     res = photo_metadata_pause()
                 elif bare == "/api/photos/organize/plan":
                     res = photo_organize_plan(spec)
+                elif bare == "/api/photos/organize/review-plan":
+                    res = photo_organize_review_plan()
                 elif bare == "/api/photos/organize/start":
                     res = photo_organize_start(spec)
                 elif bare == "/api/photos/organize/pause":

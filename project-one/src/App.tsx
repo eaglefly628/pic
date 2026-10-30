@@ -22,13 +22,14 @@ import Interest from "./screens/Interest";
 import Income from "./screens/Income";
 import Budget from "./screens/Budget";
 import Markets from "./screens/Markets";
+import Pension from "./screens/Pension";
 import Secret from "./screens/Secret";
 import { AccountEditor, SnapshotEditor } from "./screens/editors";
 import Search, { type SearchTarget } from "./screens/Search";
 
 type Screen =
   | "dashboard" | "accounts" | "detail" | "passwords" | "info" | "import"
-  | "settings" | "interest" | "income" | "budget" | "markets"
+  | "settings" | "interest" | "income" | "budget" | "markets" | "pension"
   | "more";   // 仅手机：装下 Tab Bar 放不下的入口
 
 const glass: React.CSSProperties = {
@@ -145,7 +146,7 @@ function Shell({ data }: { data: VaultData }) {
   const TITLES: Record<Screen, string> = {
     dashboard: "仪表盘", accounts: "资金账户", detail: view.detail.name, passwords: "密码保险箱",
     info: "个人信息", import: "导入 / 导出", settings: "设置", interest: "利息预测",
-    income: "收入情况", budget: "预算与预测", markets: "财经行情", more: "更多",
+    income: "收入情况", budget: "预算与预测", markets: "财经行情", pension: "养老金测算", more: "更多",
   };
   const pageTitle = TITLES[screen];
 
@@ -182,6 +183,7 @@ function Shell({ data }: { data: VaultData }) {
       {screen === "income" && <Income />}
       {screen === "budget" && <Budget />}
       {screen === "markets" && <Markets />}
+      {screen === "pension" && <Pension />}
       {screen === "more" && <More onGo={push} onLock={lock} embedded={embedded} accounts={view.meta.accountCount} pwCount={data.passwords.length} />}
     </>
   );
@@ -241,6 +243,7 @@ function Shell({ data }: { data: VaultData }) {
               {!collapsed && <div style={groupLabel}>资金</div>}
               <NavBtn c={collapsed} active={screen === "accounts" || screen === "detail"} onClick={() => setScreen("accounts")} icon={<IconCard />} label="资金账户" badge={String(view.meta.accountCount)} />
               <NavBtn c={collapsed} active={screen === "interest"} onClick={() => setScreen("interest")} icon={<IconPercent />} label="利息预测" />
+              <NavBtn c={collapsed} active={screen === "pension"} onClick={() => setScreen("pension")} icon={<IconChartUp />} label="养老金测算" />
               <NavBtn c={collapsed} active={screen === "import"} onClick={() => setScreen("import")} icon={<IconImport />} label="导入 / 导出" />
               {!collapsed && <div style={groupLabel}>收支</div>}
               <NavBtn c={collapsed} active={screen === "income"} onClick={() => setScreen("income")} icon={<IconWallet />} label="收入情况" />
@@ -376,7 +379,7 @@ const TABS: { key: Screen; label: string; icon: React.ReactNode; owns: Screen[] 
   { key: "accounts", label: "账户", icon: <IconCard size={21} />, owns: ["accounts", "detail"] },
   { key: "income", label: "收支", icon: <IconWallet size={21} />, owns: ["income", "budget"] },
   { key: "passwords", label: "保险箱", icon: <IconKey size={21} />, owns: ["passwords"] },
-  { key: "more", label: "更多", icon: <IconGear size={21} />, owns: ["more", "interest", "markets", "import", "info", "settings"] },
+  { key: "more", label: "更多", icon: <IconGear size={21} />, owns: ["more", "interest", "pension", "markets", "import", "info", "settings"] },
 ];
 
 function TabBar({ screen, onGo }: { screen: Screen; onGo: (s: Screen) => void }) {
@@ -412,6 +415,7 @@ function More({ onGo, onLock, accounts, pwCount, embedded }: {
 }) {
   const rows: { key: Screen; label: string; icon: React.ReactNode; note?: string }[] = [
     { key: "interest", label: "利息预测", icon: <IconPercent /> },
+    { key: "pension", label: "养老金测算", icon: <IconChartUp /> },
     { key: "budget", label: "预算与预测", icon: <IconChartUp /> },
     { key: "markets", label: "财经行情", icon: <IconMarkets /> },
     { key: "import", label: "导入 / 导出", icon: <IconImport /> },

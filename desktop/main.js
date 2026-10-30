@@ -1,13 +1,14 @@
 // 「我家里的一切」Mac 桌面壳（Electron）。
-// 做的事很简单：把仓库里的 run.py 当后端拉起来，再用一个原生窗口打开 http://localhost:5180。
+// 把随 App 打包的 run.py 当后端拉起来，再用原生窗口打开它的本机地址。
 // 数据仍由 run.py 存到本机磁盘（~/Library/Application Support/我家里的一切），换新版本 App 也读得到。
 const { app, BrowserWindow, shell, dialog } = require("electron");
 const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 const http = require("http");
+const net = require("net");
 
-const PORT = 5180;
-const URL = `http://localhost:${PORT}/`;
+let port = 5180;
+let url = `http://localhost:${port}/`;
 let py = null;
 let win = null;
 
@@ -30,9 +31,20 @@ function findPython() {
 
 function ping() {
   return new Promise((res) => {
-    const req = http.get(URL, (r) => { r.resume(); res(true); });
+    const req = http.get(url, (r) => { r.resume(); res(true); });
     req.on("error", () => res(false));
     req.setTimeout(800, () => { req.destroy(); res(false); });
+  });
+}
+
+function freeLocalPort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const chosen = server.address().port;
+      server.close((error) => error ? reject(error) : resolve(chosen));
+    });
   });
 }
 
@@ -44,9 +56,13 @@ async function waitForServer(tries = 60) {
   return false;
 }
 
-// 确保后端在跑：已有就直接用；没有就用 Python 拉起 run.py。
+// 开发模式可复用已有服务；安装版总是运行包内的后端。
 async function ensureServer() {
-  if (await ping()) return true;                 // 已有 run.py 在跑（比如你手动开着）
+  // 安装版总是运行包内的后端，避免误连正在开发的旧版本。
+  if (app.isPackaged) {
+    try { port = await freeLocalPort(); } catch { return "timeout"; }
+    url = `http://localhost:${port}/`;
+  } else if (await ping()) return true;
   const python = findPython();
   if (!python) return "no-python";
   py = spawn(python, ["run.py"], {
@@ -54,6 +70,7 @@ async function ensureServer() {
     env: {
       ...process.env,
       HOME_NO_BROWSER: "1", PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8",
+      HOME_PORT: String(port),
       HOME_NODE_BINARY: process.execPath, HOME_NODE_ELECTRON: "1",
       // 打包安装的 = 发布版；npm start 跑的 = 开发版
       HOME_CHANNEL: app.isPackaged ? "release" : "dev",
@@ -77,11 +94,11 @@ function createWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   // 站内链接留在窗口里；真正的外链（http/https 到别处）交给系统浏览器。
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url) && !url.startsWith(URL)) { shell.openExternal(url); return { action: "deny" }; }
+  win.webContents.setWindowOpenHandler(({ url: target }) => {
+    if (/^https?:\/\//.test(target) && !target.startsWith(url)) { shell.openExternal(target); return { action: "deny" }; }
     return { action: "allow" };
   });
-  win.loadURL(URL);
+  win.loadURL(url);
 }
 
 app.whenReady().then(async () => {
@@ -97,7 +114,7 @@ app.whenReady().then(async () => {
   if (ok === "timeout") {
     showError(`<div style="font:15px -apple-system,sans-serif;padding:40px;line-height:1.8;color:#1d1d1f">
       <h2>后端没能起来</h2>
-      <p>端口 ${PORT} 可能被占用，或 run.py 启动失败。可先手动在仓库里跑 <code>python3 run.py</code> 再打开本 App。</p></div>`);
+      <p>本地端口 ${port} 无法启动，或 run.py 启动失败。请关闭 App 后重试。</p></div>`);
     return;
   }
   createWindow();

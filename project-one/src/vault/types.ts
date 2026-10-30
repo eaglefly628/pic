@@ -1,4 +1,5 @@
 import type { Dataset } from "../data/types";
+import type { PensionInputs } from "../lib/pension";
 
 export interface PasswordItem {
   id: string;
@@ -104,6 +105,8 @@ export interface VaultData {
   markets?: MarketConfig;
   /** 资产预测的历史快照（按月冻结），用于预测 vs 现实的对比虚线 */
   forecastHistory?: ForecastPoint[];
+  /** 上海职工养老金测算假设，随金库加密保存。 */
+  pension?: PensionInputs;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

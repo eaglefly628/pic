@@ -21,3 +21,6 @@ photo-organize-profile*.jsonl
 # Python
 __pycache__/
 *.pyc
+
+# Local personal photo review report
+project-two/dist/burst-review.html
