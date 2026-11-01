@@ -1,14 +1,12 @@
 import type { AccountMeta, Dataset, LiquidityPlan } from "../data/types";
-import { latestBalances } from "./compute";
 
 export interface LiquidityRow {
   account: AccountMeta;
   entry: LiquidityPlan;
   entryIndex: number;
-  balance: number;
   available: number;
-  capped: boolean;
   arrivalDays?: number;
+  arrivalDerived: boolean;
   remainingDays?: number;
   termDays?: number;
   remindDays: number;
@@ -40,25 +38,20 @@ export function validateLiquidityPlan(plan: LiquidityPlan): string | null {
 }
 
 export function liquidityRows(ds: Dataset, now = new Date()): LiquidityRow[] {
-  const balances = latestBalances(ds);
   return ds.accounts.flatMap((account) => {
     const plans = account.liquidity ?? [];
     if (!Array.isArray(plans)) return [];
-    const balance = balances[account.id] ?? 0;
-    const cap = account.cat === "debt" ? 0 : Math.max(0, balance);
-    // 多笔资金共用账户余额：依填写顺序分配上限，避免汇总时重复计算同一余额。
-    let remaining = cap;
     return plans.flatMap((plan, entryIndex) => {
       if (validateLiquidityPlan(plan)) return [];
-      const requested = plan.amount ?? 0;
-      const available = Math.min(requested, remaining);
-      remaining -= available;
+      const available = plan.amount ?? 0;
       const end = validDate(plan.maturesOn);
       const start = validDate(plan.depositedOn);
+      const remainingDays = end === undefined ? undefined : Math.round((end - todayUTC(now)) / 86_400_000);
       return [{
-        account, entry: plan, entryIndex, balance, available, capped: requested > available,
-        arrivalDays: plan.arrivalDays,
-        remainingDays: end === undefined ? undefined : Math.round((end - todayUTC(now)) / 86_400_000),
+        account, entry: plan, entryIndex, available,
+        arrivalDays: plan.arrivalDays ?? (remainingDays === undefined ? undefined : Math.max(0, remainingDays)),
+        arrivalDerived: plan.arrivalDays === undefined && remainingDays !== undefined,
+        remainingDays,
         termDays: start === undefined || end === undefined ? undefined : Math.round((end - start) / 86_400_000),
         remindDays: plan.remindDays ?? 30,
       }];

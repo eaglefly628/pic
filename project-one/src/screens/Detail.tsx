@@ -57,7 +57,7 @@ export default function Detail({ view, account, onSaveLiquidity, onAddSnapshot, 
         </div>
       )}
 
-      {account && <AccountLiquidityCard key={account.id} account={account} balance={d.balanceRaw} onSave={onSaveLiquidity} />}
+      {account && <AccountLiquidityCard key={account.id} account={account} onSave={onSaveLiquidity} />}
 
       <div className="fv-rise" style={{ ...rise(70), ...card, padding: phone ? "16px 16px 10px" : "20px 24px 14px", marginBottom: phone ? 14 : 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>

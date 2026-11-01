@@ -29,10 +29,10 @@ export default function Liquidity({ dataset, onOpen }: { dataset: Dataset; onOpe
 
   return <div style={{ padding: phone ? "18px 14px 34px" : "24px 32px 40px" }}>
     <h1 style={{ fontSize: phone ? 21 : 25, color: "var(--text-primary)", margin: "0 0 5px" }}>资金安排</h1>
-    <p style={{ ...muted, margin: "0 0 18px" }}>每个账户的可调金额和到账天数由你设定。这里是筹资模拟，不会改变账户余额，也不会发起转账。</p>
+    <p style={{ ...muted, margin: "0 0 18px" }}>每笔预计可调金额由你设定，可包含到期利息，因此不受当前余额限制。到账天数留空时按到期日计算；到期日也未填则记为未知。这里不会改变余额或发起转账。</p>
 
     <div style={{ display: "grid", gridTemplateColumns: phone ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))", gap: 10, marginBottom: 20 }}>
-      {([ ["可调总额", totals.total], ["当天可到", totals.today], ["7 天内可到", totals.week], ["30 天内可到", totals.month] ] as const).map(([label, amount]) =>
+      {([ ["预计可调总额", totals.total], ["当天可到", totals.today], ["7 天内可到", totals.week], ["30 天内可到", totals.month] ] as const).map(([label, amount]) =>
         <div key={label} style={{ ...card, padding: "15px 16px", minWidth: 0 }}>
           <div style={muted}>{label}</div>
           <div style={{ fontSize: phone ? 17 : 21, fontWeight: 650, color: "var(--text-primary)", marginTop: 5, overflowWrap: "anywhere" }}>{fmt(amount)}</div>
@@ -42,13 +42,13 @@ export default function Liquidity({ dataset, onOpen }: { dataset: Dataset; onOpe
 
     <section style={{ ...card, padding: phone ? 16 : 22, marginBottom: 18 }}>
       <h2 style={{ fontSize: 16, margin: "0 0 5px", color: "var(--text-primary)" }}>从哪里调出</h2>
-      <p style={{ ...muted, margin: "0 0 12px" }}>金额最多按该账户最新余额计算；余额下降时会自动收紧模拟额度。</p>
+      <p style={{ ...muted, margin: "0 0 12px" }}>按你逐笔填写的预计金额汇总，可包含利息；实际可取金额以账户为准。</p>
       {accessible.length ? accessible.map((row) => <button key={`${row.account.id}-${row.entryIndex}`} className="fv-row" onClick={() => onOpen(row.account.id)}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "13px 2px", border: "none", borderTop: "1px solid var(--separator)", background: "transparent", textAlign: "left", cursor: "pointer", color: "var(--text-primary)" }}>
         <span style={{ flex: 1, minWidth: 0 }}><strong style={{ fontSize: 13.5 }}>{row.account.name}{row.entry.label ? ` · ${row.entry.label}` : ` · 第 ${row.entryIndex + 1} 笔`}</strong><br />
-          <span style={muted}>{row.account.institution || row.account.type}{row.capped ? " · 设置额超过当前余额，已按余额计算" : ""}</span></span>
+          <span style={muted}>{row.account.institution || row.account.type}</span></span>
         <span style={{ fontWeight: 650, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmt(row.available)}</span>
-        <span style={{ ...muted, minWidth: 84, textAlign: "right" }}>{row.arrivalDays === undefined ? "到账未填写" : row.arrivalDays === 0 ? "当天到账" : `${row.arrivalDays} 天到账`}</span>
+        <span style={{ ...muted, minWidth: 84, textAlign: "right" }}>{row.arrivalDays === undefined ? "到账未知" : row.arrivalDerived ? row.arrivalDays === 0 ? "按到期日 · 已可到" : `按到期日 · ${row.arrivalDays} 天` : row.arrivalDays === 0 ? "当天到账" : `${row.arrivalDays} 天到账`}</span>
       </button>) : <p style={muted}>还没有设置可调资金。进入任一账户详情，在“资金安排”里填写。</p>}
     </section>
 
@@ -70,9 +70,8 @@ export default function Liquidity({ dataset, onOpen }: { dataset: Dataset; onOpe
 }
 
 /** 一个账户可以有多笔资金，各自填写到账时间和到期日。 */
-export function AccountLiquidityCard({ account, balance, onSave }: {
+export function AccountLiquidityCard({ account, onSave }: {
   account: AccountMeta;
-  balance: number;
   onSave: (plans: LiquidityPlan[] | undefined) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -107,9 +106,6 @@ export function AccountLiquidityCard({ account, balance, onSave }: {
       const problem = validateLiquidityPlan(plan);
       if (problem) { setMessage(`第 ${index + 1} 笔：${problem}`); return; }
     }
-    const total = plans.reduce((sum, plan) => sum + (plan.amount ?? 0), 0);
-    if (total > 0 && (account.cat === "debt" || balance <= 0)) { setMessage("负债或余额非正的账户不能设置可调金额"); return; }
-    if (total > balance) { setMessage("各笔可调金额之和不能超过当前余额"); return; }
     setSaving(true); setMessage("");
     try { await onSave(plans.length ? plans : undefined); setEditing(false); setMessage("已保存到加密金库"); }
     catch { setMessage("保存失败，请重试"); }
@@ -124,8 +120,8 @@ export function AccountLiquidityCard({ account, balance, onSave }: {
       <Btn variant="soft" onClick={() => { setEditing((v) => !v); setMessage(""); }}>{editing ? "收起" : plans.length ? "修改安排" : "设置安排"}</Btn>
     </div>
     {!editing && <div style={{ ...muted, marginTop: 12 }}>
-      {plans.length ? <>已安排 {plans.length} 笔 · 可调 {fmt(Math.min(total, Math.max(0, balance)))}
-        {plans.map((plan, i) => <div key={i}>{plan.label || `第 ${i + 1} 笔`}：{plan.amount === undefined ? "金额未填" : fmt(plan.amount)} · {plan.arrivalDays === undefined ? "到账未填" : plan.arrivalDays === 0 ? "当天到账" : `${plan.arrivalDays} 天到账`}{plan.maturesOn ? ` · ${plan.maturesOn} 到期` : ""}</div>)}</> : "尚未设置；此账户不会计入可调资金汇总。"}
+      {plans.length ? <>已安排 {plans.length} 笔 · 预计可调 {fmt(total)}
+        {plans.map((plan, i) => <div key={i}>{plan.label || `第 ${i + 1} 笔`}：{plan.amount === undefined ? "金额未填" : fmt(plan.amount)} · {plan.arrivalDays === undefined ? plan.maturesOn ? "按到期日计算到账" : "到账未知" : plan.arrivalDays === 0 ? "当天到账" : `${plan.arrivalDays} 天到账`}{plan.maturesOn ? ` · ${plan.maturesOn} 到期` : ""}</div>)}</> : "尚未设置；此账户不会计入可调资金汇总。"}
     </div>}
     {editing && <div style={{ marginTop: 16 }}>
       {drafts.map((draft, index) => <div key={index} style={{ borderTop: "1px solid var(--separator)", padding: "14px 0" }}>
@@ -136,7 +132,7 @@ export function AccountLiquidityCard({ account, balance, onSave }: {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: "0 12px" }}>
           <Field label="资金名称（可留空）"><TextField value={draft.label} onChange={(e) => change(index, "label", e.target.value)} placeholder="例如三年定存" /></Field>
           <Field label="可调金额（元，可留空）"><TextField type="number" min="0" step="0.01" value={draft.amount} onChange={(e) => change(index, "amount", e.target.value)} placeholder="由你评估" /></Field>
-          <Field label="申请后几天到账（可留空）"><TextField type="number" min="0" step="1" value={draft.arrivalDays} onChange={(e) => change(index, "arrivalDays", e.target.value)} placeholder="0 = 当天" /></Field>
+          <Field label="申请后几天到账（留空按到期日）"><TextField type="number" min="0" step="1" value={draft.arrivalDays} onChange={(e) => change(index, "arrivalDays", e.target.value)} placeholder="留空按到期日；0 = 当天" /></Field>
           <Field label="存入日期（可留空）"><TextField type="date" value={draft.depositedOn} onChange={(e) => change(index, "depositedOn", e.target.value)} /></Field>
           <Field label="到期日期（可留空）"><TextField type="date" value={draft.maturesOn} onChange={(e) => change(index, "maturesOn", e.target.value)} /></Field>
           <Field label="提前提醒天数（默认 30 天）"><TextField type="number" min="0" step="1" value={draft.remindDays} onChange={(e) => change(index, "remindDays", e.target.value)} placeholder="30" /></Field>
