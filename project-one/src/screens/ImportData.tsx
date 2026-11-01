@@ -36,12 +36,19 @@ export default function ImportData() {
       `现在：${cur.accounts.length} 个账户、${cur.snapshots.length} 期快照\n` +
       `替换后：${result.accountCount} 个账户、${result.snapshotCount} 期快照` +
       (result.from ? `（${result.from} ～ ${result.to}）` : "") + `\n\n` +
-      `现有的账户、快照、手工补录都会被覆盖，不可撤销。建议先到「设置 · 程序内备份」建一个还原点。`;
+      `现有的账户、快照、手工补录都会被覆盖；账户名称完全相同且唯一的资金安排会保留。建议先到「设置 · 程序内备份」建一个还原点。`;
     if (!confirm(msg)) return;
     // 导入时就完成一次月度归属整理并写入版本标记；以后启动只检查标记，不会重复扫描历史记录。
     migrateStatisticalMonths(result.dataset);
     update((d) => {
-      d.dataset.accounts = result.dataset.accounts;
+      const byName = new Map<string, typeof d.dataset.accounts[number] | null>();
+      for (const account of d.dataset.accounts) {
+        byName.set(account.name, byName.has(account.name) ? null : account);
+      }
+      d.dataset.accounts = result.dataset.accounts.map((account) => {
+        const previous = byName.get(account.name);
+        return previous?.liquidity ? { ...account, liquidity: previous.liquidity } : account;
+      });
       d.dataset.snapshots = result.dataset.snapshots;
       d.dataset.migrations = result.dataset.migrations;
       d.dataset.real = true;

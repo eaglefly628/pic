@@ -1,4 +1,5 @@
 import React from "react";
+import type { AccountMeta, LiquidityPlan } from "../data/types";
 import type { View } from "../lib/compute";
 import { card } from "../ui";
 import { fmt } from "../lib/format";
@@ -6,9 +7,11 @@ import { useCountUp, rise } from "../lib/anim";
 import { useBreakpoint } from "../lib/breakpoint";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
 import LockBar from "./LockBar";
+import { AccountLiquidityCard } from "./Liquidity";
 
-export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAccount, onDeleteSnapshot }: {
-  view: View; onAddSnapshot: () => void; onEditAccount: () => void; onDeleteAccount: () => void; onDeleteSnapshot: (date: string) => void;
+export default function Detail({ view, account, onSaveLiquidity, onAddSnapshot, onEditAccount, onDeleteAccount, onDeleteSnapshot }: {
+  view: View; account?: AccountMeta; onSaveLiquidity: (plan: LiquidityPlan[] | undefined) => Promise<void>;
+  onAddSnapshot: () => void; onEditAccount: () => void; onDeleteAccount: () => void; onDeleteSnapshot: (date: string) => void;
 }) {
   const phone = useBreakpoint() === "phone";
   const d = view.detail;
@@ -53,6 +56,8 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
           {d.lock && <LockBar lock={d.lock} />}
         </div>
       )}
+
+      {account && <AccountLiquidityCard key={account.id} account={account} balance={d.balanceRaw} onSave={onSaveLiquidity} />}
 
       <div className="fv-rise" style={{ ...rise(70), ...card, padding: phone ? "16px 16px 10px" : "20px 24px 14px", marginBottom: phone ? 14 : 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>

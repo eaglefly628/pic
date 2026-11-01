@@ -4,10 +4,11 @@ import { buildView, type RangeKey } from "../lib/compute";
 import { addAccount, addSnapshot, deleteAccount, deleteSnapshotEntry, updateAccount } from "../vault/ops";
 import { hasSecret, createSecret, unlockSecret, saveSecret, changeSecretPassword, clearSecret } from "../vault/secretStore";
 import { passwordStrength, type UnlockedKeys } from "../lib/crypto";
-import type { Dataset } from "../data/types";
+import type { Dataset, LiquidityPlan } from "../data/types";
 import Dashboard from "./Dashboard";
 import Accounts, { type AccMode } from "./Accounts";
 import Detail from "./Detail";
+import Liquidity, { MaturityNotice } from "./Liquidity";
 import { InterestView } from "./Interest";
 import { RetirementView } from "./Retirement";
 import { AccountEditor, SnapshotEditor } from "./editors";
@@ -16,7 +17,7 @@ import { Btn, Field, Modal, TextField } from "../ui";
 import { IconKey, IconChevron, IconArrowRight } from "../icons";
 import { useBreakpoint } from "../lib/breakpoint";
 
-type Sub = "dashboard" | "accounts" | "detail" | "interest" | "retirement";
+type Sub = "dashboard" | "accounts" | "detail" | "liquidity" | "interest" | "retirement";
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
 /** 某账户真正记录过的日期 → 当时余额。snapshots 里每期都会给所有账户结转余额，
@@ -97,11 +98,12 @@ export default function Secret({ onExit }: { onExit: () => void }) {
   const currentAcc = ds?.accounts.find((a) => a.id === view?.detail.id);
   const mutate = (fn: (d: Dataset) => void) => {
     const keys = keysRef.current, current = dsRef.current;
-    if (!current || !keys) return;
+    if (!current || !keys) return Promise.resolve();
     const next = clone(current); fn(next);
     dsRef.current = next; setDs(next);
     const run = saveQueueRef.current.then(() => saveSecret(keys, next));
     saveQueueRef.current = run.catch(() => { /* 单次失败不阻塞后续保存 */ });
+    return run;
   };
   const open = (id: string) => { setSelectedId(id); setSub("detail"); };
   const strength = passwordStrength(pw);
@@ -129,6 +131,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
             <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2, marginLeft: 6 }}>
               <button onClick={() => setSub("dashboard")} className="fv-tap" style={seg(sub === "dashboard")}>仪表盘</button>
               <button onClick={() => setSub("accounts")} className="fv-tap" style={seg(sub === "accounts")}>账户</button>
+              <button onClick={() => setSub("liquidity")} className="fv-tap" style={seg(sub === "liquidity")}>资金安排</button>
               <button onClick={() => setSub("interest")} className="fv-tap" style={seg(sub === "interest")}>利息</button>
               <button onClick={() => setSub("retirement")} className="fv-tap" style={seg(sub === "retirement")}>退休预测</button>
             </div>
@@ -144,6 +147,7 @@ export default function Secret({ onExit }: { onExit: () => void }) {
             <div style={{ display: "flex", gap: 2, background: "var(--fill-quaternary)", borderRadius: 8, padding: 2 }}>
               <button onClick={() => setSub("dashboard")} className="fv-tap" style={seg(sub === "dashboard")}>仪表盘</button>
               <button onClick={() => setSub("accounts")} className="fv-tap" style={seg(sub === "accounts")}>账户</button>
+              <button onClick={() => setSub("liquidity")} className="fv-tap" style={seg(sub === "liquidity")}>资金安排</button>
               <button onClick={() => setSub("interest")} className="fv-tap" style={seg(sub === "interest")}>利息</button>
               <button onClick={() => setSub("retirement")} className="fv-tap" style={seg(sub === "retirement")}>退休预测</button>
             </div>
@@ -155,16 +159,20 @@ export default function Secret({ onExit }: { onExit: () => void }) {
         <>
           <div className="fv-scroll" style={{ flex: 1, overflowY: "auto" }}>
             {sub === "dashboard" && <>
+              <div style={{ padding: phone ? "14px 14px 0" : "18px 32px 0" }}><MaturityNotice dataset={ds} onOpen={() => setSub("liquidity")} /></div>
               <Dashboard view={view} onOpen={open} range={range} setRange={setRange} />
               {/* 两本账的走势叠在一起看——只有解锁了独立管理的这一屏同时握着两边的数据 */}
               {data && <SecretOverlay secret={ds} main={data.dataset} />}
             </>}
-            {sub === "accounts" && <Accounts view={view} mode={accMode} onModeChange={setAccMode} onOpen={open} onAddAccount={() => setAccEditor({ open: true, editing: false })} />}
+            {sub === "accounts" && <Accounts view={view} mode={accMode} onModeChange={setAccMode} onOpen={open} onLiquidity={() => setSub("liquidity")} onAddAccount={() => setAccEditor({ open: true, editing: false })} />}
+            {sub === "liquidity" && <Liquidity dataset={ds} onOpen={open} />}
             {sub === "interest" && <InterestView dataset={ds} onSetRate={(id, dec) => mutate((d) => { const a = d.accounts.find((x) => x.id === id); if (a) a.rate = dec; })} />}
             {sub === "retirement" && <RetirementView dataset={ds} onSave={(plan) => mutate((d) => { d.retirement = plan; })} />}
             {sub === "detail" && (
               <Detail
                 view={view}
+                account={currentAcc}
+                onSaveLiquidity={(plan: LiquidityPlan[] | undefined) => mutate((d) => { const a = d.accounts.find((x) => x.id === currentAcc?.id); if (a) a.liquidity = plan; })}
                 onAddSnapshot={() => setSnapEditor(true)}
                 onEditAccount={() => setAccEditor({ open: true, editing: true })}
                 onDeleteAccount={() => { if (currentAcc && confirm(`删除「${currentAcc.name}」及其全部快照？`)) { mutate((d) => deleteAccount(d, currentAcc.id)); setSub("accounts"); } }}

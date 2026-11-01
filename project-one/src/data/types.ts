@@ -3,6 +3,21 @@
 
 export type Category = "liquid" | "invest" | "estate" | "fixed" | "debt" | "trust";
 
+/** 账户级资金安排。仅用于模拟，不改变余额或真实转账记录。 */
+export interface LiquidityPlan {
+  /** 同一账户里的这一笔资金名称，例如「三年定存」；可留空。 */
+  label?: string;
+  /** 可调出的金额；留空表示尚未评估。 */
+  amount?: number;
+  /** 从提出申请到到账的天数；留空表示未知。 */
+  arrivalDays?: number;
+  /** 本笔资金的存入日和到期日，均为 YYYY-MM-DD。 */
+  depositedOn?: string;
+  maturesOn?: string;
+  /** 到期前多少天进入提醒列表，默认 30 天。 */
+  remindDays?: number;
+}
+
 export interface AccountMeta {
   id: string;
   name: string;
@@ -26,6 +41,8 @@ export interface AccountMeta {
   lockStart?: string;
   /** 锁定期（月）。24 = 2 年。0 / undefined = 不锁定 */
   lockMonths?: number;
+  /** 每笔资金分别填写可调金额、到账时间和到期提醒。 */
+  liquidity?: LiquidityPlan[];
 }
 
 export interface Snapshot {

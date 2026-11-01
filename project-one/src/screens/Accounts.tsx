@@ -10,8 +10,8 @@ export type AccMode = "group" | "flat" | "updated";
 
 // mode 由外层(Shell)托管、当 props 传进来——账户列表进详情页再退出时组件会被卸载重挂载，
 // 排序方式如果放在这个组件自己的 state 里就会跟着丢、变回默认"按分类"，这里改成受控。
-export default function Accounts({ view, mode, onModeChange, onOpen, onAddAccount }: {
-  view: View; mode: AccMode; onModeChange: (m: AccMode) => void; onOpen: (id: string) => void; onAddAccount: () => void;
+export default function Accounts({ view, mode, onModeChange, onOpen, onAddAccount, onLiquidity }: {
+  view: View; mode: AccMode; onModeChange: (m: AccMode) => void; onOpen: (id: string) => void; onAddAccount: () => void; onLiquidity: () => void;
 }) {
   const phone = useBreakpoint() === "phone";
   const t = view.totals;
@@ -42,7 +42,10 @@ export default function Accounts({ view, mode, onModeChange, onOpen, onAddAccoun
             </div>
           </div>
         </div>
-        <Btn onClick={onAddAccount} style={{ height: phone ? 44 : 36, width: phone ? "100%" : undefined, flex: "none" }}><IconPlus />新增账户</Btn>
+        <div style={{ display: "flex", flexDirection: phone ? "column" : "row", gap: 8 }}>
+          <Btn variant="soft" onClick={onLiquidity} style={{ height: phone ? 44 : 36, width: phone ? "100%" : undefined }}>查看可调资金与到期</Btn>
+          <Btn onClick={onAddAccount} style={{ height: phone ? 44 : 36, width: phone ? "100%" : undefined, flex: "none" }}><IconPlus />新增账户</Btn>
+        </div>
       </div>
 
       <div className="fv-rise" style={{ ...rise(70), display: "flex", alignItems: "center", marginBottom: 16 }}>

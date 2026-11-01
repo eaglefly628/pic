@@ -29,7 +29,8 @@ export function addAccount(ds: Dataset, meta: AccountInput, balance: number) {
 
 export function updateAccount(ds: Dataset, id: string, meta: AccountInput) {
   const i = ds.accounts.findIndex((a) => a.id === id);
-  if (i >= 0) ds.accounts[i] = { ...meta, id } as AccountMeta;
+  // 通用账户编辑器没有资金安排字段；修改名称/颜色时保留先前手工填写的模拟设定。
+  if (i >= 0) ds.accounts[i] = { ...ds.accounts[i], ...meta, id } as AccountMeta;
 }
 
 export function deleteAccount(ds: Dataset, id: string) {

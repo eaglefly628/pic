@@ -5,6 +5,7 @@ import { buildView, trustEnabled, type RangeKey } from "./lib/compute";
 import { useBreakpoint } from "./lib/breakpoint";
 import { isEmbedded, goHomeHub } from "./lib/embed";
 import type { VaultData } from "./vault/types";
+import type { LiquidityPlan } from "./data/types";
 import { addAccount, addSnapshot, deleteAccount, deleteSnapshotEntry, updateAccount } from "./vault/ops";
 import {
   IconShield, IconDashboard, IconCard, IconLock, IconUser, IconImport, IconGear, IconChevron, IconSearch, IconKey,
@@ -23,13 +24,14 @@ import Income from "./screens/Income";
 import Budget from "./screens/Budget";
 import Markets from "./screens/Markets";
 import Pension from "./screens/Pension";
+import Liquidity, { MaturityNotice } from "./screens/Liquidity";
 import Secret from "./screens/Secret";
 import { AccountEditor, SnapshotEditor } from "./screens/editors";
 import Search, { type SearchTarget } from "./screens/Search";
 
 type Screen =
   | "dashboard" | "accounts" | "detail" | "passwords" | "info" | "import"
-  | "settings" | "interest" | "income" | "budget" | "markets" | "pension"
+  | "settings" | "interest" | "income" | "budget" | "markets" | "pension" | "liquidity"
   | "more";   // 仅手机：装下 Tab Bar 放不下的入口
 
 const glass: React.CSSProperties = {
@@ -146,24 +148,29 @@ function Shell({ data }: { data: VaultData }) {
   const TITLES: Record<Screen, string> = {
     dashboard: "仪表盘", accounts: "资金账户", detail: view.detail.name, passwords: "密码保险箱",
     info: "个人信息", import: "导入 / 导出", settings: "设置", interest: "利息预测",
-    income: "收入情况", budget: "预算与预测", markets: "财经行情", pension: "养老金测算", more: "更多",
+    income: "收入情况", budget: "预算与预测", markets: "财经行情", pension: "养老金测算", liquidity: "资金安排", more: "更多",
   };
   const pageTitle = TITLES[screen];
 
   // 返回目标 = 栈里的上一层。桌面/平板有常驻侧栏，只有账户详情需要返回。
   const back: Screen | undefined = isPhone
     ? (stack.length > 1 ? stack[stack.length - 2] : undefined)
-    : (screen === "detail" ? "accounts" : undefined);
+    : (screen === "detail" || screen === "liquidity" ? "accounts" : undefined);
 
   const sidebarW = collapsed ? 68 : 236;
 
   const content = (
     <>
-      {screen === "dashboard" && <Dashboard view={view} onOpen={open} range={range} setRange={setRange} />}
-      {screen === "accounts" && <Accounts view={view} mode={accMode} onModeChange={setAccMode} onOpen={open} onAddAccount={() => setAccEditor({ open: true, editing: false })} />}
+      {screen === "dashboard" && <><div style={{ padding: isPhone ? "14px 14px 0" : "18px 32px 0" }}><MaturityNotice dataset={data.dataset} onOpen={() => push("liquidity")} /></div><Dashboard view={view} onOpen={open} range={range} setRange={setRange} /></>}
+      {screen === "accounts" && <Accounts view={view} mode={accMode} onModeChange={setAccMode} onOpen={open} onAddAccount={() => setAccEditor({ open: true, editing: false })} onLiquidity={() => push("liquidity")} />}
       {screen === "detail" && (
         <Detail
           view={view}
+          account={currentAcc}
+          onSaveLiquidity={(plan: LiquidityPlan[] | undefined) => update((d) => {
+            const account = d.dataset.accounts.find((a) => a.id === currentAcc?.id);
+            if (account) { if (plan) account.liquidity = plan; else delete account.liquidity; }
+          })}
           onAddSnapshot={() => setSnapEditor(true)}
           onEditAccount={() => setAccEditor({ open: true, editing: true })}
           onDeleteAccount={() => {
@@ -184,6 +191,7 @@ function Shell({ data }: { data: VaultData }) {
       {screen === "budget" && <Budget />}
       {screen === "markets" && <Markets />}
       {screen === "pension" && <Pension />}
+      {screen === "liquidity" && <Liquidity dataset={data.dataset} onOpen={open} />}
       {screen === "more" && <More onGo={push} onLock={lock} embedded={embedded} accounts={view.meta.accountCount} pwCount={data.passwords.length} />}
     </>
   );
@@ -242,6 +250,7 @@ function Shell({ data }: { data: VaultData }) {
               <NavBtn c={collapsed} active={screen === "markets"} onClick={() => setScreen("markets")} icon={<IconMarkets />} label="财经行情" />
               {!collapsed && <div style={groupLabel}>资金</div>}
               <NavBtn c={collapsed} active={screen === "accounts" || screen === "detail"} onClick={() => setScreen("accounts")} icon={<IconCard />} label="资金账户" badge={String(view.meta.accountCount)} />
+              <NavBtn c={collapsed} active={screen === "liquidity"} onClick={() => setScreen("liquidity")} icon={<IconWallet />} label="资金安排" />
               <NavBtn c={collapsed} active={screen === "interest"} onClick={() => setScreen("interest")} icon={<IconPercent />} label="利息预测" />
               <NavBtn c={collapsed} active={screen === "pension"} onClick={() => setScreen("pension")} icon={<IconChartUp />} label="养老金测算" />
               <NavBtn c={collapsed} active={screen === "import"} onClick={() => setScreen("import")} icon={<IconImport />} label="导入 / 导出" />
@@ -376,7 +385,7 @@ function NavBtn({ active, onClick, icon, label, badge, c }: {
    5 个标签，高 83px（含安全区）。10 个侧栏入口收成：4 个常用 + 「更多」。 */
 const TABS: { key: Screen; label: string; icon: React.ReactNode; owns: Screen[] }[] = [
   { key: "dashboard", label: "仪表盘", icon: <IconDashboard size={21} />, owns: ["dashboard"] },
-  { key: "accounts", label: "账户", icon: <IconCard size={21} />, owns: ["accounts", "detail"] },
+  { key: "accounts", label: "账户", icon: <IconCard size={21} />, owns: ["accounts", "detail", "liquidity"] },
   { key: "income", label: "收支", icon: <IconWallet size={21} />, owns: ["income", "budget"] },
   { key: "passwords", label: "保险箱", icon: <IconKey size={21} />, owns: ["passwords"] },
   { key: "more", label: "更多", icon: <IconGear size={21} />, owns: ["more", "interest", "pension", "markets", "import", "info", "settings"] },
@@ -416,6 +425,7 @@ function More({ onGo, onLock, accounts, pwCount, embedded }: {
   const rows: { key: Screen; label: string; icon: React.ReactNode; note?: string }[] = [
     { key: "interest", label: "利息预测", icon: <IconPercent /> },
     { key: "pension", label: "养老金测算", icon: <IconChartUp /> },
+    { key: "liquidity", label: "资金安排", icon: <IconWallet /> },
     { key: "budget", label: "预算与预测", icon: <IconChartUp /> },
     { key: "markets", label: "财经行情", icon: <IconMarkets /> },
     { key: "import", label: "导入 / 导出", icon: <IconImport /> },
