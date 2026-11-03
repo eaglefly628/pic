@@ -18,12 +18,13 @@ import Health from "./screens/dev/Health";
 import Travel from "./screens/dev/Travel";
 import Disk from "./screens/dev/Disk";
 import Calendar from "./screens/dev/Calendar";
+import DailyPlan from "./screens/dev/DailyPlan";
 import CommandPalette from "./screens/dev/CommandPalette";
 import { IconTerminal, IconSearch } from "./icons";
 
-type View = "overview" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "accounts" | "company" | "spend" | "vehicle" | "fitness" | "health" | "travel" | "secrets" | "disk" | "settings";
+type View = "overview" | "daily" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "accounts" | "company" | "spend" | "vehicle" | "fitness" | "health" | "travel" | "secrets" | "disk" | "settings";
 const TABS: { v: View; l: string }[] = [
-  { v: "overview", l: "概览" }, { v: "tasks", l: "任务" }, { v: "calendar", l: "日程" }, { v: "notes", l: "笔记" },
+  { v: "overview", l: "概览" }, { v: "daily", l: "每日模块" }, { v: "tasks", l: "任务" }, { v: "calendar", l: "日程" }, { v: "notes", l: "笔记" },
   { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "accounts", l: "账户" }, { v: "company", l: "公司" }, { v: "spend", l: "记账" },
   { v: "vehicle", l: "爱车" }, { v: "fitness", l: "健身" }, { v: "health", l: "健康" }, { v: "travel", l: "旅游" },
   { v: "secrets", l: "密钥" }, { v: "disk", l: "磁盘" }, { v: "settings", l: "设置" },
@@ -71,6 +72,7 @@ export default function App() {
       <main style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
         <div style={{ maxWidth: 1080, margin: "0 auto", padding: view === "settings" ? 0 : "22px 26px 40px" }}>
           {view === "overview" && <Overview data={data} mut={update} goto={(t) => setView(t)} />}
+          {view === "daily" && <DailyPlan data={data} mut={update} />}
           {view === "tasks" && <Tasks data={data} mut={update} />}
           {view === "calendar" && <Calendar data={data} mut={update} />}
           {view === "notes" && <Notes data={data} mut={update} />}

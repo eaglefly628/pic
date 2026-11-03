@@ -112,7 +112,7 @@ APP_LABEL = APP_VERSION + ("-dev" if APP_CHANNEL == "dev" else "")   # 开发版
 #   ② 新版写的数据，老版能「只读打开」查看（不认识的新字段忽略、不删）；
 #   ③ 老版保存时，服务端拒绝用较低版本覆盖磁盘上更高版本的数据（护栏，见 backup_save）。
 # 这样开发版 / 安装版即使一时新旧不一，也只会「后者只读、不互相写坏」。
-DATA_VERSION = 6
+DATA_VERSION = 7
 # 写盘协议和数据结构版本分开：前者保证客户端带有并发基线，后者保护数据形状。
 # 老安装版不会发送 syncProtocol；它的写入会被保留成冲突副本，但不能覆盖 current.home。
 SYNC_PROTOCOL = 2

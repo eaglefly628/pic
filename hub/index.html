@@ -452,6 +452,7 @@
     };
     // 男主：中年男人的爱好全家桶（开发世界已实装，其余为占位）
     const MALE = [
+      { icon: I(G.journal), name: '每日模块', desc: '15 分钟专注·阅读·月度追踪', app: 'dev', tab: 'daily' },
       { icon: I(G.code), name: '开发世界', desc: '任务·日程·笔记·片段·书签·密钥', app: 'dev' },
       { icon: I(G.fish), name: '钓鱼', desc: '钓点·渔获·装备·潮汐天气' },
       { icon: I(G.car), name: '爱车', desc: '保养·油耗·里程·违章·改装', app: 'dev', tab: 'vehicle' },
@@ -518,9 +519,19 @@
     const LIB = { male: MALE, female: FEMALE };
     const PAL = { male: MALE_PAL, female: FEM_PAL };
     const CKEY = (w) => 'home.cards.' + w;
-    const DEFAULT_CARDS = { male: ['开发世界', '爱车', '健身', '健康记录', '旅游计划'], female: [] };
+    const DEFAULT_CARDS = { male: ['每日模块', '开发世界', '爱车', '健身', '健康记录', '旅游计划'], female: [] };
     function myCards(w) {
-      try { const v = JSON.parse(localStorage.getItem(CKEY(w))); if (Array.isArray(v)) return v; } catch (e) {}
+      try {
+        const v = JSON.parse(localStorage.getItem(CKEY(w)));
+        if (Array.isArray(v)) {
+          if (w === 'male' && !localStorage.getItem('home.daily.card-added.v1')) {
+            if (!v.includes('每日模块')) v.unshift('每日模块');
+            localStorage.setItem(CKEY(w), JSON.stringify(v));
+            localStorage.setItem('home.daily.card-added.v1', '1');
+          }
+          return v;
+        }
+      } catch (e) {}
       return DEFAULT_CARDS[w].slice();
     }
     function saveCards(w, list) { localStorage.setItem(CKEY(w), JSON.stringify(list)); }

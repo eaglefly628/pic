@@ -291,6 +291,12 @@ export interface MatchOdds {
 
 /** 解锁后内存中的完整数据 */
 export interface DevData {
+  dailyPlan?: {
+    modules: { id: string; name: string; icon: string; minutes: number; target: number; frequency: "daily" | "manual"; archived?: boolean }[];
+    sessions: { id: string; moduleId: string; day: string; seconds: number; completed: boolean }[];
+    selectedDays: Record<string, string[]>;
+    active?: { moduleId: string; remainingSeconds: number; startedAt?: number };
+  };
   tasks: DevTask[];
   notes: DevNote[];
   snippets: DevSnippet[];
