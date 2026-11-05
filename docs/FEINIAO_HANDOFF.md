@@ -26,7 +26,7 @@ shared/pic/versions.js 是分区规则。finance（理财主库和还原点）�
 
 ## 验证
 
-根目录 npm ci，npm run web:build，npm run web:test；python scripts/test-health-archive.py；node scripts/build-mac-cloud.mjs。原 Mac/Python 备份测试需按新 syncProtocol=3 与 backup_versions 更新，不能把旧的 savedAt 顺序断言当新协议。真实手机/桌面浏览器验收当前不可用；模拟 DOM 测试不能冒充实机视觉通过。
+根目录 npm ci，npm run web:build，npm run web:test；python scripts/test-health-archive.py；node scripts/build-mac-cloud.mjs。Mac/Python 备份安全测试已按 syncProtocol=3 与 backup_versions 更新并通过；不再把 savedAt 顺序当作备份优先级。真实手机/桌面浏览器验收当前不可用；模拟 DOM 测试不能冒充实机视觉通过。
 
 不恢复旧 GitHub 备份事项、不重复创建游戏/AI/上海定时任务、不修改现有访问范围、不向 Git 提交个人明文、密钥或运行环境秘密。
 
