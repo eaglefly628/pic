@@ -93,6 +93,10 @@
       {
         "from": "../project-four/dist",
         "to": "payload/project-four/dist"
+      },
+      {
+        "from": "../health_archive.py",
+        "to": "payload/health_archive.py"
       }
     ],
     "afterSign": "afterSign.js",

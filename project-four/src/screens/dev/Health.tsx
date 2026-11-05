@@ -1,11 +1,12 @@
 import { useState } from "react";
+import HealthArchive from "./HealthArchive";
 import type { DevData, HealthData, MealType } from "../../types";
 import { card, Btn, inputStyle, Segmented } from "../../ui";
 import { IconPlus, IconTrash } from "../../icons";
 import { uid } from "./shared";
 
 type Mut = (fn: (d: DevData) => void) => void;
-type Sub = "bp" | "lipid" | "diet";
+type Sub = "archive" | "bp" | "lipid" | "diet";
 
 const todayStr = () => { const d = new Date(); const p = (n: number) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
 const MEALS: MealType[] = ["早餐", "午餐", "晚餐", "加餐"];
@@ -42,15 +43,16 @@ function lipidFlag(key: "tc" | "tg" | "ldl" | "hdl", v?: number) {
 
 export default function Health({ data, mut }: { data: DevData; mut: Mut }) {
   const hd = data.health ?? { bp: [], lipids: [], diet: [] };
-  const [sub, setSub] = useState<Sub>("bp");
+  const [sub, setSub] = useState<Sub>("archive");
 
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 20, fontWeight: 700 }}>健康记录</div>
-        <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 4, lineHeight: 1.6 }}>血压、血脂、饮食，自己记着看趋势。<strong>仅供个人参考，不是医嘱</strong>，数值异常或不舒服请就医。</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 4, lineHeight: 1.6 }}>体检、医院化验与日常记录，按时间看变化。<strong>仅供个人参考，不是医嘱</strong>，数值异常或不舒服请就医。</div>
       </div>
-      <Segmented value={sub} onChange={setSub} style={{ marginBottom: 16, maxWidth: 320 }} options={[{ value: "bp", label: "血压" }, { value: "lipid", label: "血脂" }, { value: "diet", label: "饮食" }]} />
+      <Segmented value={sub} onChange={setSub} style={{ marginBottom: 16, maxWidth: 460 }} options={[{ value: "archive", label: "健康档案" }, { value: "bp", label: "手记血压" }, { value: "lipid", label: "血脂" }, { value: "diet", label: "饮食" }]} />
+      {sub === "archive" && <HealthArchive />}
       {sub === "bp" && <BPPanel rows={hd.bp ?? []} mut={mut} />}
       {sub === "lipid" && <LipidPanel rows={hd.lipids ?? []} mut={mut} />}
       {sub === "diet" && <DietPanel rows={hd.diet ?? []} mut={mut} />}
