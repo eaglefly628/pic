@@ -2,6 +2,14 @@
 export type MetricInfo = { categories: string[]; what: string; meaning: string; limits: string; sources: { title: string; url: string }[]; checkedOn: string };
 export const HEALTH_CATEGORIES = ["心血管与血脂", "血糖与代谢", "肝脏与胆道", "肾脏与尿检", "血常规", "凝血功能", "甲状腺", "肿瘤标志物", "感染与免疫", "铁代谢与营养", "电解质与酸碱", "体征与身体成分", "眼科", "消化道检测"] as const;
 export const METRIC_INFO: Record<string, MetricInfo> = {
+  "hpylori.overview": {
+    "categories": ["消化道检测", "感染与免疫"],
+    "what": "汇总幽门螺杆菌的 C13 尿素呼气试验、血清抗体和胃黏膜病理记录；每条保留其检查方法。",
+    "meaning": "按年份查看不同检查的原始结果。C13 呼气试验检测值可单独画趋势，定性结论按日期列出。",
+    "limits": "血清抗体可反映既往接触，不能单凭抗体阳性确认当前感染；抗体数值与呼气试验数值不可直接比较。检测解释还受用药和检查条件影响。",
+    "sources": [{"title": "MedlinePlus · 幽门螺杆菌检测", "url": "https://medlineplus.gov/lab-tests/helicobacter-pylori-h-pylori-tests/"}],
+    "checkedOn": "2026-11-05"
+  },
   "lipid.tc": {
     "categories": [
       "心血管与血脂"
@@ -1745,13 +1753,21 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     ],
     "checkedOn": "2026-11-05"
   },
+  "vital.heart_rate": {
+    "categories": ["体征与身体成分", "心血管与血脂"],
+    "what": "每分钟心脏跳动次数。本档案包括内科体检和心电图记录。",
+    "meaning": "帮助查看不同年份的测量值；与脉搏通常相关，但同一天不同时间或方法的数值应分别保留。",
+    "limits": "活动、情绪、药物和测量时机都可能影响结果；不要把心电图心率与另一时刻的体检脉搏当作同一测量。",
+    "sources": [{"title": "American Heart Association · All About Heart Rate", "url": "https://www.heart.org/en/health-topics/high-blood-pressure/the-facts-about-high-blood-pressure/all-about-heart-rate-pulse"}],
+    "checkedOn": "2026-11-05"
+  },
   "vital.pulse": {
     "categories": [
-      "体征与身体成分"
+      "体征与身体成分", "心血管与血脂"
     ],
-    "what": "每分钟脉搏次数，记录测量时的循环状态。",
-    "meaning": "用于记录身体状态，长期比较时尽量保持测量设备和条件一致。",
-    "limits": "静息、运动和情绪会影响；体检脉搏不等于手表全天平均或静息心率。",
+    "what": "每分钟心脏搏动或外周脉搏次数。档案把心率、脉搏放在同一时间线，保留原报告名称。",
+    "meaning": "用于查看各年的心搏频率；同一天不同检查时刻的结果分别显示。",
+    "limits": "心电图心率与体检脉搏可能在不同时间测得；活动、情绪和药物也会影响读数，不能将两次读数直接视为同一次测量。",
     "sources": [
       {
         "title": "MedlinePlus · 生命体征",

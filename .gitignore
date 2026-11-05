@@ -12,6 +12,10 @@ dist-ssr/
 # 本地敏感数据与备份（不入库）
 **/src/data/history.json
 *.vault
+*.home
+*.key
+raw-pages.json
+archive-index.json
 *.xlsx
 *.xls
 photo-index*.sqlite3*

@@ -3168,7 +3168,8 @@ def disk_clean(spec):
     return {"ok": True, "freed": freed, "count": count, "mode": mode, "errors": errs[:5]}
 
 
-# Health archives live outside the encrypted workspace backup and have their own portable export.
+# Health archives live outside the browser workspace backup. Manual full backups
+# package both stores together and encrypt them before they can be copied offsite.
 # Also support importlib-based regression scripts launched from scripts/.
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -3571,6 +3572,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ln = int(self.headers.get("Content-Length", "0") or "0")
                 raw = self.rfile.read(ln) if ln else b""
                 res = backup_save(raw)
+            except Exception as e:
+                res = {"ok": False, "error": str(e)}
+            return self._send_json(res)
+        if bare == "/api/backup/full/create":
+            origin = self.headers.get("Origin", "")
+            if origin and origin not in ("http://localhost:%d" % PORT, "http://127.0.0.1:%d" % PORT):
+                self.send_error(403); return
+            try:
+                from encrypted_backup import create_snapshot as create_encrypted_snapshot
+                raw_pages = DATA_DIR / "health" / "raw-pages.json"
+                res = create_encrypted_snapshot(DATA_DIR, _HEALTH_ROOT, raw_pages)
             except Exception as e:
                 res = {"ok": False, "error": str(e)}
             return self._send_json(res)

@@ -374,9 +374,9 @@
         <div class="seclabel">本机自动备份 · 防丢失
           <span id="verlabel" style="margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--fill);color:var(--text-secondary);font-size:11px;font-weight:600"></span>
         </div>
-        <div class="shint" id="bkstatus">每隔一会儿、以及每次离开页面时，自动把全屋数据存到本机磁盘；开机若发现本机是空的会自动恢复。换新版本 App 也照样读回来。</div>
+        <div class="shint" id="bkstatus">主应用数据会自动存到本机磁盘；点击“立即备份”时还会把健康档案与原件一起加密打包。换新版本 App 仍可读取。</div>
         <div class="row2">
-          <button class="pbtn soft" id="bknow">立即备份到本机</button>
+          <button class="pbtn soft" id="bknow">立即备份整屋与健康数据</button>
           <button class="pbtn ghost" id="bkrestore">从本机备份恢复…</button>
         </div>
         <div id="bkpick" hidden style="margin-top:10px;padding:10px 12px;border:0.5px solid var(--sep);border-radius:10px;background:var(--bg2)">
@@ -389,13 +389,13 @@
         <div class="shint" id="bkdir" style="color:var(--text-tertiary);word-break:break-all"></div>
       </div>
       <div class="sec">
-        <div class="seclabel">整屋备份 · 一个文件，含所有世界 + 设置</div>
+        <div class="seclabel">主应用数据导出 · 一个文件，含各世界 + 设置</div>
         <div class="row2">
           <button class="pbtn soft" id="bkexport">导出全部</button>
           <button class="pbtn ghost" id="bkimport">从备份恢复…</button>
           <input type="file" id="bkfile" style="display:none" />
         </div>
-        <div class="shint">导出的是<b>一个文件</b>，可拷到 U 盘/云盘异地留底。恢复会用所选文件<b>替换</b>本机当前全部数据，完成后自动刷新。</div>
+        <div class="shint">此按钮只导出主应用数据。含健康档案与原件的加密备份请点上方“立即备份整屋与健康数据”。恢复主应用文件会替换当前主应用数据。</div>
         <div class="shint" id="bkmsg" style="color:var(--accent)"></div>
       </div>
     </div>
@@ -1000,7 +1000,19 @@
         markNoBackend('连不上本机服务（' + (e && e.message || e) + '）');
       }
     }
-    if (bknow) bknow.addEventListener('click', async () => { bknow.disabled = true; const r = await autoSave('manual'); toast(r && r.ok ? '已备份到本机' : '备份失败（要从 run.py 启动才有本机备份）'); bknow.disabled = false; });
+    if (bknow) bknow.addEventListener('click', async () => {
+      bknow.disabled = true;
+      try {
+        const r = await autoSave('manual');
+        if (!(r && r.ok)) throw new Error('主应用数据尚未写盘');
+        const full = await fetch('/api/backup/full/create', { method: 'POST' }).then(x => x.json());
+        if (!full.ok) throw new Error(full.error || '健康档案打包失败');
+        bkstatus.textContent = `整屋与健康档案已加密备份 · ${fmtTime(Date.now())} · ${full.health_reports} 份健康原件、${full.health_observations} 条结构化结果。`;
+        bkdir.textContent = `密文：${full.path} · 恢复密钥：${full.key_path}（请单独离线保存，勿上传 Git）`;
+        toast('整屋与健康数据已加密备份到本机');
+      } catch (e) { toast('备份失败：' + (e && e.message || e)); }
+      finally { bknow.disabled = false; }
+    });
     if (bkrestore) bkrestore.addEventListener('click', restoreFromDisk);
     const bkgo = document.getElementById('bkgo');
     if (bkgo) bkgo.addEventListener('click', restoreChosen);
