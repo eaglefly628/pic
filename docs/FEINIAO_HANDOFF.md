@@ -1,3 +1,5 @@
+接手目标 Session：codex://threads/01a1161d-eaa6-7aa0-93cb-a6b48b66dbc9
+
 # 飞鸟 / PIC 接手入口
 
 统一主仓库：https://github.com/eaglefly628/pic 。默认分支沿用 claude/setup-beauty-platform-Dd0m9。家庭源码 project-one～four 供 Mac 和 Web 共同构建；Web 构建适配在 web/feiniao/scripts/pic-web-adapter.mjs。不要再次维护 integrations/pic 的代码副本。
@@ -27,3 +29,5 @@ shared/pic/versions.js 是分区规则。finance（理财主库和还原点）�
 根目录 npm ci，npm run web:build，npm run web:test；python scripts/test-health-archive.py；node scripts/build-mac-cloud.mjs。原 Mac/Python 备份测试需按新 syncProtocol=3 与 backup_versions 更新，不能把旧的 savedAt 顺序断言当新协议。真实手机/桌面浏览器验收当前不可用；模拟 DOM 测试不能冒充实机视觉通过。
 
 不恢复旧 GitHub 备份事项、不重复创建游戏/AI/上海定时任务、不修改现有访问范围、不向 Git 提交个人明文、密钥或运行环境秘密。
+
+用户已明确授权统一工程实施、处理 PR、发布原站，并由上述 Session 接续两个工程。当前工具没有跨 Session 消息发送接口，未伪称完成直接通知。请将此文件作为共同接手入口。

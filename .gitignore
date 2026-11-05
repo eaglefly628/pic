@@ -35,3 +35,5 @@ desktop/cloud-runtime.cjs
 .env
 *.pem
 cloud-device*.json
+
+**/pic-cloud-device.json
