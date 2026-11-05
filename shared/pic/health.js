@@ -78,8 +78,8 @@ export class HealthStore{
    return {ok:true,added,duplicates,reports:reports.size,total:rows.size};
   }finally{this.running=false;}
  }
- async export(){const data=await this.read(),files={'archive-index.json':strToU8(JSON.stringify(data))};let total=files['archive-index.json'].length;for(const row of data.observations){row.date??=null;row.normalized_value??=null;row.normalized_unit??=null;}
-  for(const r of data.reports){r.date??=null;const blob=await this.source(r.source_id);if(blob){const bytes=new Uint8Array(await blob.arrayBuffer());if(await digest(bytes)!==r.sha256)throw Error('原件校验失败，备份未完成');files[path(r.pdf)]=bytes;total+=bytes.length;if(total>MAX)throw Error('备份超过 100 MiB，请使用页面顶部的加密整屋备份');}}this.ensure();return zipSync(files,{level:0});}
+ async export(){const data=await this.read();for(const row of data.observations){row.date??=null;row.normalized_value??=null;row.normalized_unit??=null;}
+  for(const r of data.reports)r.date??=null;this.ensure();return zipSync({'archive-index.json':strToU8(JSON.stringify(data))},{level:6});}
  async fetch(input,options={}){
   this.ensure();const url=new URL(typeof input==='string'?input:input.url,location.origin),name=url.pathname.split('/').pop();let output;
   if(name==='archive'&&(!options.method||options.method==='GET'))output=await this.list();

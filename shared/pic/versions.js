@@ -11,7 +11,7 @@ export function compareVersions(incoming,current){
 export function domainBundle(bundle,domain){
  if(!DOMAINS.includes(domain))throw Error('未知数据分区');
  const ls=Object.fromEntries(Object.entries(bundle.localStorage||{}).filter(([k])=>domain==='finance'?FINANCE_KEYS.includes(k):domain==='shared'&&!FINANCE_KEYS.includes(k)&&/^(familyvault\.|home\.user|.*theme)/.test(k)));
- const db=(bundle.indexedDB||[]).filter(d=>domain==='health'?d.name==='healtharchive':domain==='shared'&&d.name!=='healtharchive');
+ const db=(bundle.indexedDB||[]).filter(d=>domain==='health'?d.name==='healtharchive':domain==='shared'&&d.name!=='healtharchive').map(d=>domain==='health'?{...d,stores:d.stores.map(s=>s.name==='sources'?{...s,recs:[],keys:[]}:s)}:d);
  return {__home_backup:1,v:1,localStorage:ls,indexedDB:db};
 }
 export function combineDomains(parts){const result={__home_backup:1,v:1,localStorage:{},indexedDB:[]};for(const domain of DOMAINS){const b=domainBundle(parts[domain]||{},domain);Object.assign(result.localStorage,b.localStorage);result.indexedDB.push(...b.indexedDB);}return result;}

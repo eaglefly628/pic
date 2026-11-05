@@ -205,14 +205,15 @@ class HealthArchive:
                 temp.unlink(missing_ok=True)
             return {"ok": True, "added": added, "duplicates": duplicate, "reports": len(reports), "total": len(rows)}
 
-    def export(self):
+    def export(self, include_originals=False):
         with _LOCK:
             data = self.read()
             output = io.BytesIO()
             with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr("archive-index.json", json.dumps(data, ensure_ascii=False, allow_nan=False))
-                for report in data["reports"]:
-                    path = self._source_path(report)
-                    if path.is_file():
-                        archive.writestr(path.relative_to(self.root).as_posix(), self.source(report["source_id"]))
+                if include_originals:
+                    for report in data["reports"]:
+                        path = self._source_path(report)
+                        if path.is_file():
+                            archive.writestr(path.relative_to(self.root).as_posix(), self.source(report["source_id"]))
             return output.getvalue()

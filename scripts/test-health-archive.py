@@ -40,6 +40,8 @@ class ArchiveTest(unittest.TestCase):
             restored = HealthArchive(other)
             restored.import_data(self.store.export())
             self.assertEqual(restored.read(), self.store.read())
+            self.assertFalse((restored.root / "sources/test.pdf").exists())
+            restored.import_data(self.store.export(include_originals=True))
             self.assertEqual(restored.source(SID), PDF)
     def test_image_sample_provenance_backup(self):
         data = fixture()

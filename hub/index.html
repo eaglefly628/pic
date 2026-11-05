@@ -374,9 +374,10 @@
         <div class="seclabel">本机自动备份 · 防丢失
           <span id="verlabel" style="margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--fill);color:var(--text-secondary);font-size:11px;font-weight:600"></span>
         </div>
-        <div class="shint" id="bkstatus">主应用数据会自动存到本机磁盘；点击“立即备份”时还会把健康档案与原件一起加密打包。换新版本 App 仍可读取。</div>
+        <div class="shint" id="bkstatus">日常备份只含整理后的健康数据。报告 PDF、截图等原件单独加密保存；GitHub 公开仓库只接收密文，恢复密钥留在本机。</div>
         <div class="row2">
-          <button class="pbtn soft" id="bknow">立即备份整屋与健康数据</button>
+          <button class="pbtn soft" id="bknow">备份轻量数据到本机</button>
+          <button class="pbtn soft" id="bkcloud">加密备份并上传 GitHub</button>
           <button class="pbtn ghost" id="bkrestore">从本机备份恢复…</button>
         </div>
         <div id="bkpick" hidden style="margin-top:10px;padding:10px 12px;border:0.5px solid var(--sep);border-radius:10px;background:var(--bg2)">
@@ -395,7 +396,7 @@
           <button class="pbtn ghost" id="bkimport">从备份恢复…</button>
           <input type="file" id="bkfile" style="display:none" />
         </div>
-        <div class="shint">此按钮只导出主应用数据。含健康档案与原件的加密备份请点上方“立即备份整屋与健康数据”。恢复主应用文件会替换当前主应用数据。</div>
+        <div class="shint">此按钮只导出主应用数据。健康结果的轻量加密备份及报告原件的独立密文备份请使用上方按钮。恢复主应用文件会替换当前主应用数据。</div>
         <div class="shint" id="bkmsg" style="color:var(--accent)"></div>
       </div>
     </div>
@@ -800,7 +801,7 @@
     async function buildBundle() {
       const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k === 'home.bio' || k === 'home.diskSyncedAt') continue; ls[k] = localStorage.getItem(k); }
       let dbs = []; try { dbs = (await indexedDB.databases()) || []; } catch (e) { dbs = []; }
-      const idb = []; for (const info of dbs) if (info.name) idb.push(await dumpDB(info.name));
+      const idb = []; for (const info of dbs) if (info.name) { const db = await dumpDB(info.name); if (db.name === 'healtharchive') db.stores = db.stores.map(s => s.name === 'sources' ? {...s, recs: [], keys: []} : s); idb.push(db); }
       // baseSavedAt = 我上次跟磁盘同步到的时间戳。服务端用它判断有没有别的入口在我之后写过，
       // 有的话拒绝这次写入，免得「后写的赢」把对方的改动抹掉。
       return { __home_backup: 1, v: 1, appVersion: HOME_VERSION, origin: location.origin, localStorage: ls, indexedDB: idb,
@@ -1011,11 +1012,25 @@
         if (!(r && r.ok)) throw new Error('主应用数据尚未写盘');
         const full = await fetch('/api/backup/full/create', { method: 'POST' }).then(x => x.json());
         if (!full.ok) throw new Error(full.error || '健康档案打包失败');
-        bkstatus.textContent = `整屋与健康档案已加密备份 · ${fmtTime(Date.now())} · ${full.health_reports} 份健康原件、${full.health_observations} 条结构化结果。`;
+        bkstatus.textContent = `轻量数据已加密备份 · ${fmtTime(Date.now())} · ${full.health_reports} 份报告索引、${full.health_observations} 条健康结果；不含原件。`;
         bkdir.textContent = `密文：${full.path} · 恢复密钥：${full.key_path}（请单独离线保存，勿上传 Git）`;
-        toast('整屋与健康数据已加密备份到本机');
+        toast('轻量数据已加密备份到本机');
       } catch (e) { toast('备份失败：' + (e && e.message || e)); }
       finally { bknow.disabled = false; }
+    });
+    const bkcloud = document.getElementById('bkcloud');
+    if (bkcloud) bkcloud.addEventListener('click', async () => {
+      bkcloud.disabled = true;
+      try {
+        const saved = await autoSave('manual');
+        if (!(saved && saved.ok)) throw new Error('主应用数据尚未写盘');
+        const result = await fetch('/api/backup/full/cloud', { method: 'POST' }).then(r => r.json());
+        if (!result.ok) throw new Error(result.error || 'GitHub 上传失败');
+        bkstatus.textContent = `已上传加密备份 · ${result.health_observations} 条健康结果、${result.originals_files} 份原件。`;
+        bkdir.textContent = `GitHub: ${result.files.join('、')}。恢复密钥只在本机，请另行离线保存。`;
+        toast('轻量数据与原件密文已上传 GitHub');
+      } catch (e) { toast('云端备份失败：' + (e && e.message || e)); }
+      finally { bkcloud.disabled = false; }
     });
     if (bkrestore) bkrestore.addEventListener('click', restoreFromDisk);
     const bkgo = document.getElementById('bkgo');

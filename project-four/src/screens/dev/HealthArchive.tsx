@@ -153,7 +153,7 @@ export default function HealthArchive() {
   }
   async function backup() {
     setBusy(true); setError("");
-    try { const r = await fetch("/api/health/export"); if (!r.ok || !r.headers.get("content-type")?.includes("zip")) throw new Error("备份未完成，请核对原件是否可读取"); download(await r.blob(), "health-archive.zip"); setNotice("ZIP 已导出，含健康明细及可用原件，此文件未加密，请妥善保存；加密整屋备份可使用页面顶部按钮。"); } catch(e) { setError(errorText(e)); } finally { setBusy(false); }
+    try { const r = await fetch("/api/health/export"); if (!r.ok || !r.headers.get("content-type")?.includes("zip")) throw new Error("备份未完成"); download(await r.blob(), "health-archive.zip"); setNotice("健康数据 ZIP 已导出，不含 PDF 和图片原件。原件请在大厅单独加密备份。"); } catch(e) { setError(errorText(e)); } finally { setBusy(false); }
   }
   function exportCsv() {
     const fields: (keyof Row)[] = ["date", "name", "metric_key", "original_value", "original_unit", "normalized_value", "normalized_unit", "reference_range_raw", "report_flag"];

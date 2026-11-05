@@ -2472,6 +2472,9 @@ def _backup_save_locked(raw: bytes) -> dict:
     bundle = json.loads(raw)
     if not isinstance(bundle, dict) or not bundle.get("__home_backup"):
         return {"ok": False, "error": "不是本系统的备份数据"}
+    versions = bundle.get("backup_versions") or {}
+    if isinstance(versions, dict) and isinstance(versions.get("finance"), int) and versions["finance"] > 0 and "familyvault.vault.v1" not in (bundle.get("localStorage") or {}):
+        return {"ok": False, "error": "当前页面缺少已有理财库，已阻止空数据覆盖本机备份"}
     def _content(b):
         return json.dumps({"localStorage": b.get("localStorage"), "indexedDB": b.get("indexedDB")}, sort_keys=True, ensure_ascii=False)
     new_content = _content(bundle)
@@ -3585,8 +3588,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_error(403); return
             try:
                 from encrypted_backup import create_snapshot as create_encrypted_snapshot
-                raw_pages = DATA_DIR / "health" / "raw-pages.json"
-                res = create_encrypted_snapshot(DATA_DIR, _HEALTH_ROOT, raw_pages)
+                res = create_encrypted_snapshot(DATA_DIR, _HEALTH_ROOT)
+            except Exception as e:
+                res = {"ok": False, "error": str(e)}
+            return self._send_json(res)
+        if bare == "/api/backup/full/cloud":
+            origin = self.headers.get("Origin", "")
+            if origin and origin not in ("http://localhost:%d" % PORT, "http://127.0.0.1:%d" % PORT):
+                self.send_error(403); return
+            try:
+                from backup_git import upload as upload_encrypted_backup
+                res = upload_encrypted_backup(DATA_DIR, _HEALTH_ROOT)
             except Exception as e:
                 res = {"ok": False, "error": str(e)}
             return self._send_json(res)
