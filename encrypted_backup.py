@@ -128,7 +128,7 @@ def create_snapshot(data_dir: Path, health_root: Path) -> dict:
     summary = extract(target, key_path)
     return {'ok': True, 'path': str(target), 'key_path': str(key_path), **summary}
 
-def verify_originals(path: Path, key_path: Path) -> dict:
+def verify_originals(path: Path, key_path: Path, include_manifest: bool = False) -> dict:
     key = key_path.read_bytes()
     if len(key) != 32:
         raise ValueError('恢复密钥格式无效')
@@ -152,8 +152,11 @@ def verify_originals(path: Path, key_path: Path) -> dict:
             data = archive.read(name)
             if len(data) != expected['bytes'] or _sha(data) != expected['sha256']:
                 raise ValueError('原件哈希不一致')
-    return {'files': len(entries), 'source_bytes': sum(v['bytes'] for v in entries.values()),
-            'cipher_sha256': _sha(encoded), 'cipher_bytes': len(encoded)}
+    summary = {'files': len(entries), 'source_bytes': sum(v['bytes'] for v in entries.values()),
+               'cipher_sha256': _sha(encoded), 'cipher_bytes': len(encoded)}
+    if include_manifest:
+        summary['manifest'] = entries
+    return summary
 
 def create_originals_snapshot(data_dir: Path, health_root: Path) -> dict:
     health = HealthArchive(health_root)
@@ -188,6 +191,43 @@ def create_originals_snapshot(data_dir: Path, health_root: Path) -> dict:
     finally:
         if os.path.exists(temp_name): os.unlink(temp_name)
     return {'ok': True, 'path': str(target), 'key_path': str(key_path), **verify_originals(target, key_path)}
+
+def restore_originals(path: Path, key_path: Path, health_root: Path) -> dict:
+    verified = verify_originals(path, key_path)
+    encoded = path.read_bytes()
+    key = key_path.read_bytes()
+    nonce = encoded[len(ORIGINALS_MAGIC):len(ORIGINALS_MAGIC)+12]
+    body = AESGCM(key).decrypt(nonce, encoded[len(ORIGINALS_MAGIC)+12:], ORIGINALS_MAGIC)
+    health = HealthArchive(health_root)
+    reports = {health._source_path(r).relative_to(health.root).as_posix(): r
+               for r in health.read()['reports']}
+    restored = 0
+    with zipfile.ZipFile(io.BytesIO(body)) as archive:
+        manifest = json.loads(archive.read('manifest.json'))
+        targets = []
+        for name, expected in manifest['files'].items():
+            report = reports.get(name)
+            if not report or report['sha256'] != expected['sha256']:
+                raise ValueError('原件包与健康档案索引不匹配')
+            target = health._source_path(report)
+            if target.is_symlink():
+                raise ValueError('原件目标是符号链接，已停止恢复')
+            if target.exists():
+                if _sha(target.read_bytes()) != expected['sha256']:
+                    raise ValueError('本机已有不同原件，已停止恢复')
+                continue
+            targets.append((name, target))
+        for name, target in targets:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                with os.fdopen(fd, 'wb') as output:
+                    output.write(archive.read(name)); output.flush(); os.fsync(output.fileno())
+            except Exception:
+                target.unlink(missing_ok=True)
+                raise
+            restored += 1
+    return {'restored': restored, **verified}
 
 if __name__ == '__main__':
     app = Path.home() / 'Library/Application Support/我家里的一切'

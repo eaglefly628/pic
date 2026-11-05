@@ -3602,6 +3602,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 res = {"ok": False, "error": str(e)}
             return self._send_json(res)
+        if bare == "/api/backup/full/restore-cloud":
+            origin = self.headers.get("Origin", "")
+            if origin and origin not in ("http://localhost:%d" % PORT, "http://127.0.0.1:%d" % PORT):
+                self.send_error(403); return
+            try:
+                from backup_git import restore as restore_encrypted_backup
+                res = restore_encrypted_backup(DATA_DIR, _HEALTH_ROOT)
+            except Exception as e:
+                res = {"ok": False, "error": str(e)}
+            return self._send_json(res)
         if bare == "/api/disk/clean":
             origin = self.headers.get("Origin", "")
             if origin and origin not in ("http://localhost:%d" % PORT, "http://127.0.0.1:%d" % PORT):

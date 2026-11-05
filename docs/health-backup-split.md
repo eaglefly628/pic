@@ -9,4 +9,6 @@
 
 恢复密钥在本机 App 数据目录的 `backup-recovery.key`，永远不进入 Git。请另存离线副本；丢失后 GitHub 上的密文无法恢复。旧版 `encrypted-backups` 已有密文保留作迁移前恢复点，新备份不再写入该目录。
 
+大厅“从 GitHub 恢复最新备份”会下载最新月份的两份密文，先校验认证标签、文件哈希、健康记录数量及两包的原件关联，再把健康结果和原件恢复到本机。覆盖主应用数据前会留一份本机副本；如果云端版本比本机旧，恢复会停止。需要当前机器的恢复密钥，换机时应先把离线保存的密钥放回本机数据目录。
+
 本机命令：`python3 encrypted_backup.py verify <轻量密文>` 和 `python3 encrypted_backup.py verify-originals <原件密文>`。上传流程 `backup_git.py` 需要本机 Git 已登录且可推送 `eaglefly628/pic` 的 `main` 分支。

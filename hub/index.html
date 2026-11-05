@@ -378,6 +378,7 @@
         <div class="row2">
           <button class="pbtn soft" id="bknow">备份轻量数据到本机</button>
           <button class="pbtn soft" id="bkcloud">加密备份并上传 GitHub</button>
+          <button class="pbtn ghost" id="bkcloudrestore">从 GitHub 恢复最新备份</button>
           <button class="pbtn ghost" id="bkrestore">从本机备份恢复…</button>
         </div>
         <div id="bkpick" hidden style="margin-top:10px;padding:10px 12px;border:0.5px solid var(--sep);border-radius:10px;background:var(--bg2)">
@@ -1031,6 +1032,21 @@
         toast('轻量数据与原件密文已上传 GitHub');
       } catch (e) { toast('云端备份失败：' + (e && e.message || e)); }
       finally { bkcloud.disabled = false; }
+    });
+    const bkcloudrestore = document.getElementById('bkcloudrestore');
+    if (bkcloudrestore) bkcloudrestore.addEventListener('click', async () => {
+      bkcloudrestore.disabled = true;
+      try {
+        const result = await fetch('/api/backup/full/restore-cloud', { method: 'POST' }).then(r => r.json());
+        if (!result.ok) throw new Error(result.error || '云端恢复失败');
+        const latest = await fetch('/api/backup/latest').then(r => r.json());
+        await applyBundle(latest);
+        localStorage.setItem('home.backupVersions.v2', JSON.stringify(latest.backup_versions));
+        localStorage.setItem('home.diskSyncedAt', String(latest.savedAt || Date.now()));
+        toast(`已从 ${result.month} 云端备份恢复，含 ${result.health_observations} 条健康结果`);
+        location.reload();
+      } catch (e) { toast('云端恢复失败：' + (e && e.message || e)); }
+      finally { bkcloudrestore.disabled = false; }
     });
     if (bkrestore) bkrestore.addEventListener('click', restoreFromDisk);
     const bkgo = document.getElementById('bkgo');
