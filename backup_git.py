@@ -101,6 +101,13 @@ def restore_files(data_dir: Path, health_root: Path, compact_path: Path, origina
             if isinstance(now, dict) and isinstance(versions, dict) and any(versions.get(k, -1) < now.get(k, 0) for k in ('finance', 'shared', 'health')):
                 raise ValueError('云端备份早于本机数据，已保留当前版本')
         health_zip = (extracted / 'health/health-archive.zip').read_bytes()
+        incoming_activity_path = extracted / 'health/apple-health-activity.json'
+        activity_target = health_root / 'apple-health-activity.json'
+        if incoming_activity_path.exists() and activity_target.exists():
+            incoming_activity = json.loads(incoming_activity_path.read_bytes())
+            current_activity = json.loads(activity_target.read_bytes())
+            if current_activity.get('data_cutoff_date', '') > incoming_activity.get('data_cutoff_date', ''):
+                raise ValueError('云端 Apple Watch 数据早于本机，已保留本机')
         with zipfile.ZipFile(io.BytesIO(health_zip)) as archive:
             health_index = json.loads(archive.read('archive-index.json'))
         report_paths = {r['pdf']: r['sha256'] for r in health_index['reports']}
@@ -128,6 +135,16 @@ def restore_files(data_dir: Path, health_root: Path, compact_path: Path, origina
                 output.write(current_path.read_bytes()); output.flush(); os.fsync(output.fileno())
         health_result = health.import_data(health_zip)
         originals_result = restore_originals(originals_path, key_path, health_root)
+        if incoming_activity_path.exists():
+            health_root.mkdir(parents=True, exist_ok=True)
+            if activity_target.exists():
+                activity_safety = data_dir / 'backups' / ('apple-activity-before-' + datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '.json')
+                activity_safety.write_bytes(activity_target.read_bytes())
+                activity_safety.chmod(0o600)
+            replacement_activity = health_root / ('.apple-activity-' + os.urandom(8).hex() + '.tmp')
+            replacement_activity.write_bytes(incoming_activity_path.read_bytes())
+            replacement_activity.chmod(0o600)
+            os.replace(replacement_activity, activity_target)
         replacement = data_dir / ('.cloud-restore-' + os.urandom(8).hex() + '.tmp')
         replacement.write_bytes((extracted / 'home/current.home').read_bytes())
         replacement.chmod(0o600)

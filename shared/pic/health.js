@@ -46,7 +46,18 @@ export function parseHealth(bytes){
 export class HealthStore{
  constructor(memory,{flush=async()=>{},active=()=>true}={}){this.memory=memory;this.flush=flush;this.active=active;this.urls=new Map();this.running=false;}
  ensure(){if(!this.active())throw Error('家庭云空间已锁定，请重新解锁');}
- async db(){this.ensure();const r=this.memory.factory.open('healtharchive',1);r.onupgradeneeded=()=>{for(const s of ['archive','sources','history'])r.result.createObjectStore(s);};return req(r);}
+ async db(){this.ensure();const r=this.memory.factory.open('healtharchive',2);r.onupgradeneeded=()=>{for(const s of ['archive','sources','history','activity'])if(!r.result.objectStoreNames.contains(s))r.result.createObjectStore(s);};return req(r);}
+ async activity(){const db=await this.db();try{return await req(db.transaction('activity','readonly').objectStore('activity').get('watch'))||{ok:true,watch_source:'',last_import_at:'',data_cutoff_date:'',heart_rate_hourly:[],steps_daily:[],sleep_nights:[],metric_series:[],workouts:[],unassigned_count:0,import_issues:[]};}finally{db.close();}}
+ async importActivity(bytes){
+  this.ensure();if(bytes.length>1024*1024)throw Error('运动数据同步文件超过 1 MB');
+  const value=JSON.parse(strFromU8(bytes));
+  if(value?.schema!==1||value.watch_source!=='Apple Watch'||!/^\d{4}-\d{2}-\d{2}$/.test(value.data_cutoff_date)||!Number.isFinite(Date.parse(value.last_import_at))||!Array.isArray(value.heart_rate_hourly)||!Array.isArray(value.steps_daily)||!Array.isArray(value.sleep_nights)||!Array.isArray(value.metric_series)||!Array.isArray(value.workouts)||value.heart_rate_ids||value.step_ids||value.sleep_segments||value.unassigned_measurements||value.metrics)throw Error('运动数据同步文件无效或包含未经整理的原始数据');
+  const current=await this.activity();
+  if(current.data_cutoff_date&&current.data_cutoff_date>value.data_cutoff_date)throw Error('云端数据比导入文件更新，已保留云端');
+  if(current.data_cutoff_date===value.data_cutoff_date&&current.last_import_at&&current.last_import_at>value.last_import_at)throw Error('云端已有更新的同日导入，已保留云端');
+  await this.flush();this.ensure();const db=await this.db();try{const t=db.transaction('activity','readwrite'),finished=done(t);t.objectStore('activity').put(value,'watch');await finished;}finally{db.close();}
+  await this.flush();this.ensure();return {ok:true,cutoff:value.data_cutoff_date};
+ }
  async read(){const db=await this.db();try{return await req(db.transaction('archive','readonly').objectStore('archive').get('main'))||empty();}finally{db.close();}}
  async source(id){const db=await this.db();try{return req(db.transaction('sources','readonly').objectStore('sources').get(id));}finally{db.close();}}
  async list(){const data=structuredClone(await this.read());this.ensure();
@@ -82,7 +93,9 @@ export class HealthStore{
   for(const r of data.reports)r.date??=null;this.ensure();return zipSync({'archive-index.json':strToU8(JSON.stringify(data))},{level:6});}
  async fetch(input,options={}){
   this.ensure();const url=new URL(typeof input==='string'?input:input.url,location.origin),name=url.pathname.split('/').pop();let output;
-  if(name==='archive'&&(!options.method||options.method==='GET'))output=await this.list();
+  if(name==='activity'&&(!options.method||options.method==='GET'))output=await this.activity();
+  else if(name==='sync'&&url.pathname.endsWith('/activity/sync')&&options.method==='POST'){const b=options.body,bytes=b instanceof Uint8Array?b:new Uint8Array(await b.arrayBuffer());output=await this.importActivity(bytes);}
+  else if(name==='archive'&&(!options.method||options.method==='GET'))output=await this.list();
   else if(name==='import'&&options.method==='POST'){const b=options.body,bytes=b instanceof Uint8Array?b:new Uint8Array(await b.arrayBuffer());output=await this.import(bytes);}
   else if(name==='export'&&(!options.method||options.method==='GET'))return new Response(await this.export(),{headers:{'content-type':'application/zip','cache-control':'no-store'}});
   else throw Error('不支持的健康操作');

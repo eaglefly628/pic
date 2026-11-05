@@ -40,8 +40,10 @@ def _key(data_dir: Path, create: bool) -> tuple[Path, bytes]:
         raise ValueError('备份恢复密钥格式无效')
     return path, key
 
-def _payload(home: bytes, health: bytes) -> bytes:
+def _payload(home: bytes, health: bytes, activity: bytes | None = None) -> bytes:
     files = {'home/current.home': home, 'health/health-archive.zip': health}
+    if activity is not None:
+        files['health/apple-health-activity.json'] = activity
     manifest = {'format': 1, 'files': {name: {'sha256': _sha(content), 'bytes': len(content)}
                                      for name, content in files.items()}}
     buffer = io.BytesIO()
@@ -82,6 +84,10 @@ def extract(path: Path, key_path: Path, output_dir: Path | None = None) -> dict:
             rel = report['pdf']
             if rel in health_zip.namelist() and _sha(health_zip.read(rel)) != report['sha256']:
                 raise ValueError('健康原件哈希不一致')
+    if 'health/apple-health-activity.json' in contents:
+        activity = json.loads(contents['health/apple-health-activity.json'])
+        if activity.get('schema') != 1 or not isinstance(activity.get('heart_rate_ids'), list) or not isinstance(activity.get('metrics'), list):
+            raise ValueError('Apple Watch 运动备份无效')
     if output_dir:
         output_dir.mkdir(parents=True, exist_ok=False)
         for name, data in contents.items():
@@ -110,8 +116,10 @@ def create_snapshot(data_dir: Path, health_root: Path) -> dict:
                     source_store['keys'] = []
     home = json.dumps(home_data, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     health = HealthArchive(health_root).export()
+    activity_path = health_root / 'apple-health-activity.json'
+    activity = activity_path.read_bytes() if activity_path.exists() else None
     key_path, key = _key(data_dir, create=True)
-    encrypted = MAGIC + (nonce := secrets.token_bytes(12)) + AESGCM(key).encrypt(nonce, _payload(home, health), MAGIC)
+    encrypted = MAGIC + (nonce := secrets.token_bytes(12)) + AESGCM(key).encrypt(nonce, _payload(home, health, activity), MAGIC)
     backup_dir = data_dir / 'backups' / 'encrypted-full'
     backup_dir.mkdir(parents=True, exist_ok=True)
     import datetime

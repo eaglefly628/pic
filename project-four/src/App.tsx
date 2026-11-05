@@ -20,6 +20,7 @@ import Disk from "./screens/dev/Disk";
 import Calendar from "./screens/dev/Calendar";
 import DailyPlan from "./screens/dev/DailyPlan";
 import HealthArchive from "./screens/dev/HealthArchive";
+import HealthActivity from "./screens/dev/HealthActivity";
 import CommandPalette from "./screens/dev/CommandPalette";
 import { IconTerminal, IconSearch } from "./icons";
 
@@ -42,6 +43,7 @@ export default function App() {
   const [view, setView] = useState<View>(initialView);
   const [palette, setPalette] = useState(false);
   const [unlockHealth, setUnlockHealth] = useState(false);
+  const [lockedHealthTab, setLockedHealthTab] = useState<"archive" | "activity">("archive");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -61,7 +63,7 @@ export default function App() {
       <strong>男主 · 健康档案</strong>
       <button className="fv-btn" style={lockBtn} onClick={() => setUnlockHealth(true)}>解锁健康手记</button>
     </header>
-    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "22px 26px 40px" }}><p style={{ lineHeight: 1.8 }}>此页显示体检与化验档案。血压、血脂和饮食手记保存在原工作台加密库中，请点“解锁健康手记”，使用原工作台主密码查看；这里的档案数量不代表全部健康记录。</p><HealthArchive /></main>
+    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "22px 26px 40px" }}><p style={{ lineHeight: 1.8 }}>体检档案与 Apple Watch 运动数据可分别查看。血压、血脂和饮食手记保存在原工作台加密库中。</p><div style={{ display: "flex", gap: 8, marginBottom: 16 }}><button className="fv-btn" onClick={() => setLockedHealthTab("archive")}>健康档案</button><button className="fv-btn" onClick={() => setLockedHealthTab("activity")}>运动数据</button></div>{lockedHealthTab === "archive" ? <HealthArchive /> : <HealthActivity />}</main>
   </div>;
   if (status !== "unlocked") return <Lock />;
 

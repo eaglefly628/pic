@@ -1,7 +1,7 @@
 {
   "name": "wojiali-desktop",
   "productName": "我家里的一切",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "我家里的一切 —— 本地加密、一家人专属的桌面 App（理财 / 影像 / 密码 / 开发世界）",
   "author": "junbai",
   "private": true,
@@ -107,6 +107,10 @@
       {
         "from": "../health_archive.py",
         "to": "payload/health_archive.py"
+      },
+      {
+        "from": "../apple_health_activity.py",
+        "to": "payload/apple_health_activity.py"
       },
       {
         "from": "../backup_versions.py",

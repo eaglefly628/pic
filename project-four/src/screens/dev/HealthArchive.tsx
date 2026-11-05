@@ -191,7 +191,7 @@ export default function HealthArchive() {
       {HEALTH_INFO[infoKey] ? <><section><h3>它测的是什么？</h3><p>{HEALTH_INFO[infoKey].what}</p></section><section><h3>常用于了解什么？</h3><p>{HEALTH_INFO[infoKey].meaning}</p></section><section className="ha-info-limits"><h3>解读时需要注意</h3><p>{HEALTH_INFO[infoKey].limits}</p></section><section><h3>参考资料</h3>{HEALTH_INFO[infoKey].sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a>)}<small>资料核对：{HEALTH_INFO[infoKey].checkedOn} · 通用医学科普，未对你的结果作个体诊断。具体参考范围见各次原报告。</small></section></> : <p>该新指标的医学说明尚待整理，保留原始结果，不自动生成解释。</p>}
       <Btn onClick={() => { setMetric(infoKey); setGroup("全部"); setQuery(""); setReportId(""); setView("trends"); setInfoKey(null); }}>查看我的历史曲线</Btn></>}
     </dialog>
-    <footer className="ha-footer">健康档案与手记分开保存；请根据各端的同步状态核对备份版本。<br/>支持标准化健康 JSON 和健康 ZIP；Apple 健康 XML 自动解析暂未接入。历史数据不表示当前状况。</footer>
+    <footer className="ha-footer">健康档案与手记分开保存；请根据各端的同步状态核对备份版本。<br/>此页支持标准化体检健康 JSON 和健康 ZIP；Apple Watch 数据请到“运动数据”导入。历史数据不表示当前状况。</footer>
   </div>;
 }
 

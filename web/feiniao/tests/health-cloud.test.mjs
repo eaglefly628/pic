@@ -42,3 +42,15 @@ test('health success waits for durable cloud sync, while failures retain encrypt
  fail=false;await s.import(zip());assert.ok(called>=3);
  let active=true;const locked=new HealthStore(new PicMemory(),{active:()=>active});active=false;await assert.rejects(()=>locked.read(),/锁定/);
 });
+test('Apple Watch chart summary survives encrypted health sync and rejects raw samples',async()=>{
+ const memory=new PicMemory(),s=new HealthStore(memory);
+ const summary={schema:1,ok:true,watch_source:'Apple Watch',last_import_at:'2026-11-06T00:00:00Z',data_cutoff_date:'2026-11-05',heart_rate_hourly:[{hour:'2026-11-05T12:00+0800',average:72,count:4}],steps_daily:[{date:'2026-11-05',count:1000}],sleep_nights:[],metric_series:[],workouts:[],unassigned_count:4,import_issues:[]};
+ await s.importActivity(strToU8(JSON.stringify(summary)));
+ assert.equal((await s.activity()).steps_daily[0].count,1000);
+ const key=await keyFor('apple-activity-test',b64(new Uint8Array(16))),objects=new Map();
+ const manifest=await uploadSnapshot(domainBundle(await memory.dump(),'health'),key,null,async(id,bytes)=>objects.set(id,bytes));
+ const restored=new PicMemory();await restored.restore(await downloadSnapshot(manifest,key,async id=>objects.get(id)));
+ assert.equal((await new HealthStore(restored).activity()).steps_daily[0].count,1000);
+ await assert.rejects(()=>s.importActivity(strToU8(JSON.stringify({...summary,metrics:[{value:72}]}))),/原始数据/);
+ await assert.rejects(()=>s.importActivity(strToU8(JSON.stringify({...summary,data_cutoff_date:'2026-11-01'}))),/云端数据比/);
+});

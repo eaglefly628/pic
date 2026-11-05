@@ -3181,6 +3181,7 @@ def disk_clean(spec):
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from health_archive import HealthArchive, MAX_BYTES as HEALTH_MAX_BYTES
+from apple_health_activity import import_zip as import_apple_health, public as apple_activity_public
 _HEALTH_SEED = ROOT / "health-data.local"
 _HEALTH_ROOT = Path(os.environ.get("HOME_HEALTH_DIR") or (str(_HEALTH_SEED) if (_HEALTH_SEED / "archive-index.json").exists() else str(DATA_DIR / "health")))
 HEALTH_ARCHIVE = HealthArchive(_HEALTH_ROOT)
@@ -3228,6 +3229,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(body)
             except (ValueError, OSError, KeyError) as exc:
                 return self._send_json({"ok": False, "error": str(exc)})
+            return
+        if bare == "/api/health/activity":
+            return self._send_json(apple_activity_public(_HEALTH_ROOT))
+        if bare == "/api/health/activity/export":
+            body = json.dumps(apple_activity_public(_HEALTH_ROOT), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="apple-watch-activity.json"')
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers(); self.wfile.write(body)
             return
         if bare == "/api/gold":
             from urllib.parse import urlparse, parse_qs
@@ -3475,6 +3487,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     raise ValueError("请选择不超过 100 MB 的健康档案 JSON 或 ZIP")
                 result = HEALTH_ARCHIVE.import_data(self.rfile.read(length))
             except (ValueError, OSError, KeyError, zipfile.BadZipFile) as exc:
+                result = {"ok": False, "error": str(exc)}
+            return self._send_json(result)
+        if bare == "/api/health/activity/import":
+            if self.headers.get("Origin", "") != "http://" + self.headers.get("Host", ""):
+                self.send_error(403); return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= HEALTH_MAX_BYTES:
+                    raise ValueError("请选择不超过 100 MB 的 Apple 健康 ZIP")
+                result = import_apple_health(self.rfile.read(length), _HEALTH_ROOT)
+            except (ValueError, OSError, KeyError, zipfile.BadZipFile, zipfile.LargeZipFile) as exc:
                 result = {"ok": False, "error": str(exc)}
             return self._send_json(result)
         if bare in ("/api/photos/addresses/save", "/api/photos/browse/archive/preview",
