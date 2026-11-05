@@ -1,4 +1,7 @@
-接手目标 Session：codex://threads/01a1161d-eaa6-7aa0-93cb-a6b48b66dbc9
+飞鸟网页接手 Session：codex://threads/01a1ac1c-952b-7410-aa31-6aaf169e6912
+PIC/Mac 原接续 Session：codex://threads/01a1161d-eaa6-7aa0-93cb-a6b48b66dbc9
+
+分工：网页会话先拉取最新默认主干、阅读本文件与根 README，以 web/feiniao 的飞鸟网页开发为主。家庭应用只使用 project-one～four 的同一份源码；共享协议修改需联动 shared/pic 与 Mac 接续会话，不再复制另一份 PIC。
 
 # 飞鸟 / PIC 接手入口
 
@@ -31,3 +34,10 @@ shared/pic/versions.js 是分区规则。finance（理财主库和还原点）�
 不恢复旧 GitHub 备份事项、不重复创建游戏/AI/上海定时任务、不修改现有访问范围、不向 Git 提交个人明文、密钥或运行环境秘密。
 
 用户已明确授权统一工程实施、处理 PR、发布原站，并由上述 Session 接续两个工程。当前工具没有跨 Session 消息发送接口，未伪称完成直接通知。请将此文件作为共同接手入口。
+
+## 交付证据（2026-11-05）
+
+PR #2 已合并：https://github.com/eaglefly628/pic/pull/2 ，合并提交 50116167ce152a1dc85ff4aeeaadd7eeff015fda。
+Web 和 Mac 云构建均通过：https://github.com/eaglefly628/pic/actions/runs/42046263506 。未签名 Mac 包 artifact 13423794147（PIC-Mac-unsigned）。这证明打包成功，不证明真实设备配对、钥匙串、个人数据往返或 Apple 公证完成。
+原站发布镜像在 Sites 自有 Git 端点；从 DEPLOY_SOURCE.json 核对其 GitHub 来源，不要把镜像 SHA 当作 PIC 主干 SHA。网站发布后的精确版本/部署号还应查看 PR #2 的最终交付评论，不能凭源码写入推断线上成功。
+用户实际 .home/.json 文件没有提供，健康数据完整恢复尚未基于该真实文件验证；新增结构诊断不能冒充真实资料恢复完成。
