@@ -1,39 +1,65 @@
 import React from "react";
+import type { AccountMeta, LiquidityPlan } from "../data/types";
 import type { View } from "../lib/compute";
 import { card } from "../ui";
 import { fmt } from "../lib/format";
 import { useCountUp, rise } from "../lib/anim";
+import { useBreakpoint } from "../lib/breakpoint";
 import { IconPlus, IconEdit, IconTrash } from "../icons";
+import LockBar from "./LockBar";
+import { AccountLiquidityCard } from "./Liquidity";
 
-export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAccount }: {
-  view: View; onAddSnapshot: () => void; onEditAccount: () => void; onDeleteAccount: () => void;
+export default function Detail({ view, account, onSaveLiquidity, onAddSnapshot, onEditAccount, onDeleteAccount, onDeleteSnapshot }: {
+  view: View; account?: AccountMeta; onSaveLiquidity: (plan: LiquidityPlan[] | undefined) => Promise<void>;
+  onAddSnapshot: () => void; onEditAccount: () => void; onDeleteAccount: () => void; onDeleteSnapshot: (date: string) => void;
 }) {
+  const phone = useBreakpoint() === "phone";
   const d = view.detail;
   const balAnim = useCountUp(d.balanceRaw);
   return (
-    <div style={{ padding: "24px 32px 40px" }}>
-      <div className="fv-rise" style={{ ...rise(0), display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 22 }}>
+    <div style={{ padding: phone ? "16px 14px 28px" : "24px 32px 40px" }}>
+      <div className="fv-rise" style={{ ...rise(0), display: "flex", flexDirection: phone ? "column" : "row", alignItems: phone ? "stretch" : "flex-start", gap: phone ? 12 : 16, marginBottom: phone ? 16 : 22 }}>
         <span style={{ width: 54, height: 54, borderRadius: 13, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${d.color} 15%, transparent)`, color: d.color }}>
           <span style={{ fontSize: 19, fontWeight: 700 }}>{d.initial}</span>
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <h1 style={{ fontSize: 21, fontWeight: 600, color: "var(--text-primary)" }}>{d.name}</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+            <h1 style={{ fontSize: phone ? 18 : 21, fontWeight: 600, color: "var(--text-primary)", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.name}</h1>
             <span style={{ fontSize: 11, color: "var(--text-secondary)", background: "var(--fill-quaternary)", padding: "3px 9px", borderRadius: 6 }}>{d.type}</span>
+            {d.offBalance && <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 9px", borderRadius: 6, whiteSpace: "nowrap" }}>独立运营</span>}
           </div>
           <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 4 }}>{d.sub}</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={onEditAccount} title="编辑账户" className="fv-icnbtn" style={iconBtn}><IconEdit size={15} stroke="var(--text-secondary)" /></button>
-          <button onClick={onDeleteAccount} title="删除账户" className="fv-icnbtn" style={iconBtn}><IconTrash size={15} stroke="var(--red)" /></button>
-          <div style={{ textAlign: "right", marginLeft: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: phone ? "space-between" : "flex-start", flexDirection: phone ? "row-reverse" : "row" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+            <button onClick={onEditAccount} title="编辑账户" className="fv-icnbtn" style={iconBtn}><IconEdit size={15} stroke="var(--text-secondary)" /></button>
+            <button onClick={onDeleteAccount} title="删除账户" className="fv-icnbtn" style={iconBtn}><IconTrash size={15} stroke="var(--red)" /></button>
+          </div>
+          <div style={{ textAlign: phone ? "left" : "right", marginLeft: phone ? 0 : 8, minWidth: 0 }}>
             <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>当前余额</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em", marginTop: 2 }}>{fmt(balAnim)}</div>
+            <div style={{ fontSize: phone ? 24 : 26, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmt(balAnim)}</div>
           </div>
         </div>
       </div>
 
-      <div className="fv-rise" style={{ ...rise(70), ...card, padding: "20px 24px 14px", marginBottom: 18 }}>
+      {(d.offBalance || d.lock) && (
+        <div className="fv-rise" style={{ ...rise(40), ...card, padding: phone ? "16px 16px" : "18px 24px", marginBottom: phone ? 14 : 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: d.lock ? 12 : 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>独立运营</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>
+              {d.offBalance ? "不计入净资产、总资产/负债和资产构成，在仪表盘单独列示" : "计入家庭总资产"}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }} />
+            {d.ratePct && <span style={{ fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>年化 <strong style={{ color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{d.ratePct}</strong></span>}
+            <span style={{ fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>归属 <strong style={{ color: "var(--text-primary)" }}>{d.owner}</strong></span>
+          </div>
+          {d.lock && <LockBar lock={d.lock} />}
+        </div>
+      )}
+
+      {account && <AccountLiquidityCard key={account.id} account={account} onSave={onSaveLiquidity} />}
+
+      <div className="fv-rise" style={{ ...rise(70), ...card, padding: phone ? "16px 16px 10px" : "20px 24px 14px", marginBottom: phone ? 14 : 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>余额历史</div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
@@ -41,7 +67,7 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
             <span style={{ fontWeight: 600, color: d.trendColor, fontVariantNumeric: "tabular-nums" }}>{d.trendLabel}</span>
           </div>
         </div>
-        <svg viewBox="0 0 600 200" style={{ width: "100%", height: 194, display: "block", overflow: "visible" }}>
+        <svg viewBox="0 0 600 200" style={{ width: "100%", height: phone ? 118 : 194, display: "block", overflow: "visible" }}>
           <defs>
             <linearGradient id="fvArea2" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.24" />
@@ -68,7 +94,7 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
       {d.changes.length > 0 && (
         <div className="fv-rise" style={{ ...rise(140), ...card, padding: "18px 22px", marginBottom: 18 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>每月变化量</div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 96 }}>
+          <div className="fv-scroll" style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 96, overflowX: phone ? "auto" : "visible" }}>
             {d.changes.map((c, i) => (
               <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: c.up ? "var(--green)" : "var(--red)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{c.text}</div>
@@ -92,14 +118,20 @@ export default function Detail({ view, onAddSnapshot, onEditAccount, onDeleteAcc
           <span style={{ flex: 1, textAlign: "right" }}>余额</span>
           <span style={{ width: 130, textAlign: "right" }}>较上次</span>
           <span style={{ width: 80, textAlign: "right" }}>来源</span>
+          <span style={{ width: 32 }} />
         </div>
         {d.snapshots.map((s, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", padding: "12px 22px", borderTop: "0.5px solid var(--separator)", fontSize: 13 }}>
+          <div key={i} className="fv-row" style={{ display: "flex", alignItems: "center", padding: "12px 22px", borderTop: "0.5px solid var(--separator)", fontSize: 13 }}>
             <span style={{ width: 120, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{s.date}</span>
             <span style={{ flex: 1, textAlign: "right", fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{s.amount}</span>
             <span style={{ width: 130, textAlign: "right", fontWeight: 600, color: s.changeColor, fontVariantNumeric: "tabular-nums" }}>{s.change}</span>
             <span style={{ width: 80, textAlign: "right" }}>
               <span style={{ fontSize: 10.5, color: "var(--text-tertiary)", border: "0.5px solid var(--separator-strong)", borderRadius: 5, padding: "1px 6px" }}>{s.source}</span>
+            </span>
+            <span style={{ width: 32, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => { if (confirm(`删除 ${s.date} 这条快照记录？`)) onDeleteSnapshot(s.rawDate); }} title="删除这条快照" className="fv-icnbtn" style={{ width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, background: "transparent", border: "none", cursor: "pointer" }}>
+                <IconTrash size={13} stroke="var(--text-tertiary)" />
+              </button>
             </span>
           </div>
         ))}

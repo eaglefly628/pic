@@ -1,6 +1,7 @@
 // 对某个 Dataset 的纯修改操作（主账户与「私房钱」独立账户复用）。
 import type { AccountMeta, Dataset, Snapshot } from "../data/types";
 import { uid } from "../ui";
+import { latestClosedMonthEnd, migrateStatisticalMonths, statisticalMonthKey } from "../lib/statMonth";
 
 export type AccountInput = Omit<AccountMeta, "id"> & { comp?: string };
 
@@ -17,38 +18,87 @@ export function addAccount(ds: Dataset, meta: AccountInput, balance: number) {
   ds.accounts.push({ ...meta, id } as AccountMeta);
   const snaps = ds.snapshots;
   if (snaps.length === 0) {
-    snaps.push({ date: new Date().toISOString().slice(0, 10), balances: { [id]: balance }, source: "manual" });
+    const date = latestClosedMonthEnd();
+    snaps.push({ date, period: statisticalMonthKey(date), balances: { [id]: balance }, source: "manual", touched: [id] });
   } else {
-    snaps[snaps.length - 1].balances[id] = balance;
+    const last = snaps[snaps.length - 1];
+    last.balances[id] = balance;
+    if (last.touched) last.touched.push(id); // 该期已经区分过"谁是真正被改的"，这个新账户也算
   }
 }
 
 export function updateAccount(ds: Dataset, id: string, meta: AccountInput) {
   const i = ds.accounts.findIndex((a) => a.id === id);
-  if (i >= 0) ds.accounts[i] = { ...meta, id } as AccountMeta;
+  // 通用账户编辑器没有资金安排字段；修改名称/颜色时保留先前手工填写的模拟设定。
+  if (i >= 0) ds.accounts[i] = { ...ds.accounts[i], ...meta, id } as AccountMeta;
 }
 
 export function deleteAccount(ds: Dataset, id: string) {
   ds.accounts = ds.accounts.filter((a) => a.id !== id);
-  for (const s of ds.snapshots) delete s.balances[id];
+  for (const s of ds.snapshots) {
+    delete s.balances[id];
+    // touched 也要清。原来只删了 balances，touched 里会留下这个账户的 id，
+    // 虽然不影响金额，但「最后更新」这类按 touched 判断的逻辑会读到已经不存在的账户。
+    if (s.touched) s.touched = s.touched.filter((t) => t !== id);
+  }
 }
 
-/** 为某账户在指定日期新增/更新一条余额快照（新日期会结转其它账户的上次余额，保持净值一致） */
+/** 清掉快照里指向「已经不存在的账户」的残留数据。
+ *  早期版本删账户时只从账户列表里移除、没有清理历史快照，这些数据在混用不同
+ *  版本之后会留在文件里。金额上不会算错（求和只遍历当前账户），但留着没意义，
+ *  而且一旦有账户复用了同一个 id 就会把旧值带回来。返回清理掉的条目数。 */
+export function pruneOrphanBalances(ds: Dataset): number {
+  const alive = new Set(ds.accounts.map((a) => a.id));
+  let n = 0;
+  for (const s of ds.snapshots) {
+    for (const id of Object.keys(s.balances)) {
+      if (!alive.has(id)) { delete s.balances[id]; n++; }
+    }
+    if (s.touched) {
+      const kept = s.touched.filter((t) => alive.has(t));
+      if (kept.length !== s.touched.length) { n += s.touched.length - kept.length; s.touched = kept; }
+    }
+  }
+  return n;
+}
+
+/** 为某账户在指定日期新增/更新一条余额快照（新日期会结转其它账户的上次余额，保持净值一致）。
+ *  结转进来的其它账户不算"这期更新过"——只有 accId 自己被记进 touched，
+ *  这样"最后更新日期"才不会因为别的账户改了一下就被一起刷新。 */
 export function addSnapshot(ds: Dataset, accId: string, date: string, amount: number) {
   const snaps = ds.snapshots;
   const existing = snaps.find((s) => s.date === date);
   if (existing) {
+    existing.period = statisticalMonthKey(date);
     existing.balances[accId] = amount;
+    // 第一次给这条旧快照区分 touched 时，把它当时已有的账户都当"确实记录过"兜底，
+    // 不然这次编辑会让同一期里其它账户的"最后更新"莫名回退到更早的一条快照。
+    if (!existing.touched) existing.touched = Object.keys(existing.balances).filter((k) => existing.balances[k] != null);
+    if (!existing.touched.includes(accId)) existing.touched.push(accId);
     return;
   }
   const balances: Record<string, number | null> = {};
   for (const a of ds.accounts) balances[a.id] = lastKnownOnOrBefore(snaps, a.id, date);
   balances[accId] = amount;
-  snaps.push({ date, balances, source: "manual" });
+  snaps.push({ date, period: statisticalMonthKey(date), balances, source: "manual", touched: [accId] });
   snaps.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 删除某账户在指定日期的一条快照记录（比如手滑记错了、想撤销）。只删这个账户在
+ *  这一期的数据，不影响同一期里结转的其它账户；如果这一期删完后不再有任何账户的
+ *  数据了，这条快照本身也顺手清掉，不留空壳。 */
+export function deleteSnapshotEntry(ds: Dataset, accId: string, date: string) {
+  const snap = ds.snapshots.find((s) => s.date === date);
+  if (!snap) return;
+  delete snap.balances[accId];
+  if (snap.touched) snap.touched = snap.touched.filter((id) => id !== accId);
+  const hasAny = Object.values(snap.balances).some((v) => v != null);
+  if (!hasAny) ds.snapshots = ds.snapshots.filter((s) => s !== snap);
 }
 
 /** 空的「私房钱」独立数据集 */
 export function emptyDataset(name: string, userName: string): Dataset {
-  return { vaultName: name, userName, real: false, accounts: [], snapshots: [] };
+  const ds: Dataset = { vaultName: name, userName, real: false, accounts: [], snapshots: [] };
+  migrateStatisticalMonths(ds);
+  return ds;
 }

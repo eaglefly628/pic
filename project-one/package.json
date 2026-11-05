@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:stat-month": "node scripts/test-stat-month.cjs",
     "preview": "vite preview",
     "import:excel": "node scripts/import-excel.mjs",
     "tauri": "tauri",
@@ -24,9 +25,9 @@
     "@tauri-apps/cli": "^2.11.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^6.1.1",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11",
-    "xlsx": "^0.18.5"
+    "vite": "^8.3.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

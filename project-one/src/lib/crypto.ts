@@ -3,7 +3,9 @@
 //
 // 备注：PBKDF2 为浏览器内置、零依赖的稳妥选择；后续可升级为 Argon2id（见 README 路线图）。
 
-const KDF_ITER = 310_000;
+// PBKDF2 迭代次数：与家庭密码/开发世界统一到 OWASP 现行建议量级。
+// 老金库里存着它自己的 iter，仍能正常打开；解锁时会自动升级到这个值（见 needsKdfUpgrade）。
+export const KDF_ITER = 600_000;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -98,6 +100,16 @@ export async function rewrapVault(keys: UnlockedKeys, blob: VaultBlob, newPasswo
   const wrap = await aesEncrypt(kek, keys.dekRaw);
   const meta = { v: 1 as const, kdf: "PBKDF2-SHA256" as const, iter: KDF_ITER, salt: b64encode(salt), wrap };
   return { blob: { ...meta, data: blob.data }, keys: { ...keys, meta } };
+}
+
+/** 这个金库的 KDF 是否弱于当前标准（老版本 310k）——解锁时据此静默升级 */
+export function needsKdfUpgrade(blob: VaultBlob): boolean {
+  return (blob.iter || 0) < KDF_ITER;
+}
+
+/** 把金库的 KDF 升级到当前迭代次数：用主密码重新包裹同一个 DEK，数据密文原样不动 */
+export async function upgradeKdf(keys: UnlockedKeys, blob: VaultBlob, password: string): Promise<{ blob: VaultBlob; keys: UnlockedKeys }> {
+  return rewrapVault(keys, blob, password);
 }
 
 /** 粗略的密码强度评估（0-4） */

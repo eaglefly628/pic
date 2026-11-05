@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { parseWorkbook, type ParseResult } from "../lib/parseExcel";
 import { exportDatasetToExcel } from "../lib/exportExcel";
+import { migrateStatisticalMonths } from "../lib/statMonth";
 import { Btn, Field, Select, TextField, card } from "../ui";
 import { IconImport, IconCheck, IconDownload } from "../icons";
 
@@ -26,8 +27,32 @@ export default function ImportData() {
   };
 
   const apply = () => {
-    if (!result) return;
-    update((d) => { d.dataset.accounts = result.dataset.accounts; d.dataset.snapshots = result.dataset.snapshots; d.dataset.real = true; });
+    if (!result || !data) return;
+    // 这是全站最容易误伤的操作：会把现有全部账户和快照整个换掉。
+    // 把「现在有什么、会变成什么」都写进确认框，让人看清楚再点。
+    const cur = data.dataset;
+    const msg =
+      `确定用这份 Excel 替换全部数据？\n\n` +
+      `现在：${cur.accounts.length} 个账户、${cur.snapshots.length} 期快照\n` +
+      `替换后：${result.accountCount} 个账户、${result.snapshotCount} 期快照` +
+      (result.from ? `（${result.from} ～ ${result.to}）` : "") + `\n\n` +
+      `现有的账户、快照、手工补录都会被覆盖；账户名称完全相同且唯一的资金安排会保留。建议先到「设置 · 程序内备份」建一个还原点。`;
+    if (!confirm(msg)) return;
+    // 导入时就完成一次月度归属整理并写入版本标记；以后启动只检查标记，不会重复扫描历史记录。
+    migrateStatisticalMonths(result.dataset);
+    update((d) => {
+      const byName = new Map<string, typeof d.dataset.accounts[number] | null>();
+      for (const account of d.dataset.accounts) {
+        byName.set(account.name, byName.has(account.name) ? null : account);
+      }
+      d.dataset.accounts = result.dataset.accounts.map((account) => {
+        const previous = byName.get(account.name);
+        return previous?.liquidity ? { ...account, liquidity: previous.liquidity } : account;
+      });
+      d.dataset.snapshots = result.dataset.snapshots;
+      d.dataset.migrations = result.dataset.migrations;
+      d.dataset.real = true;
+    });
     setDone(true);
   };
 

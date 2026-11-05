@@ -11,22 +11,35 @@ import Life from "./screens/dev/Life";
 import Secrets from "./screens/dev/Secrets";
 import Accounts from "./screens/dev/Accounts";
 import Company from "./screens/dev/Company";
-import Sports from "./screens/dev/Sports";
 import Spend from "./screens/dev/Spend";
+import VehicleScreen from "./screens/dev/Vehicle";
+import Fitness from "./screens/dev/Fitness";
+import Health from "./screens/dev/Health";
+import Travel from "./screens/dev/Travel";
 import Disk from "./screens/dev/Disk";
 import Calendar from "./screens/dev/Calendar";
+import DailyPlan from "./screens/dev/DailyPlan";
+import HealthArchive from "./screens/dev/HealthArchive";
 import CommandPalette from "./screens/dev/CommandPalette";
 import { IconTerminal, IconSearch } from "./icons";
 
-type View = "overview" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "accounts" | "company" | "sports" | "spend" | "secrets" | "disk" | "settings";
+type View = "overview" | "daily" | "tasks" | "calendar" | "notes" | "snippets" | "links" | "life" | "accounts" | "company" | "spend" | "vehicle" | "fitness" | "health" | "travel" | "secrets" | "disk" | "settings";
 const TABS: { v: View; l: string }[] = [
-  { v: "overview", l: "概览" }, { v: "tasks", l: "任务" }, { v: "calendar", l: "日程" }, { v: "notes", l: "笔记" },
-  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "accounts", l: "账户" }, { v: "company", l: "公司" }, { v: "sports", l: "看球" }, { v: "spend", l: "记账" }, { v: "secrets", l: "密钥" }, { v: "disk", l: "磁盘" }, { v: "settings", l: "设置" },
+  { v: "overview", l: "概览" }, { v: "daily", l: "每日模块" }, { v: "tasks", l: "任务" }, { v: "calendar", l: "日程" }, { v: "notes", l: "笔记" },
+  { v: "snippets", l: "片段" }, { v: "links", l: "书签" }, { v: "life", l: "生活" }, { v: "accounts", l: "账户" }, { v: "company", l: "公司" }, { v: "spend", l: "记账" },
+  { v: "vehicle", l: "爱车" }, { v: "fitness", l: "健身" }, { v: "health", l: "健康" }, { v: "travel", l: "旅游" },
+  { v: "secrets", l: "密钥" }, { v: "disk", l: "磁盘" }, { v: "settings", l: "设置" },
 ];
+// hub 卡片可以深链到某个具体 tab（如 /dev/#vehicle）——开机读一次 hash，之后就是普通的 tab 状态。
+const VALID_VIEWS = new Set<string>(TABS.map((t) => t.v));
+function initialView(): View {
+  const h = location.hash.replace(/^#/, "");
+  return VALID_VIEWS.has(h) ? (h as View) : "overview";
+}
 
 export default function App() {
   const { status, toast, data, update } = useVault();
-  const [view, setView] = useState<View>("overview");
+  const [view, setView] = useState<View>(initialView);
   const [palette, setPalette] = useState(false);
 
   useEffect(() => {
@@ -40,18 +53,28 @@ export default function App() {
   if (status === "loading") {
     return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)" }}>载入中…</div>;
   }
+  // The imported examination archive lives separately from the encrypted workbench.
+  // Keep it readable from the Health card while leaving every vault-backed view locked.
+  if (status !== "unlocked" && view === "health") return <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    <header style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 24px", borderBottom: "1px solid var(--separator)", background: "var(--bg-content)" }}>
+      <strong>男主 · 健康档案</strong>
+      <button className="fv-btn" style={lockBtn} onClick={() => setView("overview")}>打开加密工作台</button>
+    </header>
+    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "22px 26px 40px" }}><HealthArchive /></main>
+  </div>;
   if (status !== "unlocked") return <Lock />;
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--bg)" }}>
       <header style={{ flex: "none", height: 54, display: "flex", alignItems: "center", gap: 6, padding: "0 18px", borderBottom: "0.5px solid var(--separator)", background: "var(--bg-content)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, fontWeight: 700, fontSize: 15, marginRight: 12 }}>
-          <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(160deg, var(--accent), var(--accent2))", display: "flex", alignItems: "center", justifyContent: "center" }}><IconTerminal size={16} stroke="#fff" /></span>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, fontWeight: 700, fontSize: 15, marginRight: 12, flex: "none", whiteSpace: "nowrap" }}>
+          <span style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(160deg, var(--accent), var(--accent2))", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}><IconTerminal size={16} stroke="#fff" /></span>
           男主的开发世界
         </div>
-        {TABS.map((t) => <Tab key={t.v} active={view === t.v} onClick={() => setView(t.v)}>{t.l}</Tab>)}
-        <div style={{ flex: 1 }} />
-        <button onClick={() => setPalette(true)} className="fv-btn" style={{ ...lockBtn, marginRight: 8 }} title="搜索 (⌘K)">
+        <div className="fv-tabscroll" style={{ display: "flex", alignItems: "center", gap: 2, overflowX: "auto", flex: 1, minWidth: 0 }}>
+          {TABS.map((t) => <Tab key={t.v} active={view === t.v} onClick={() => setView(t.v)}>{t.l}</Tab>)}
+        </div>
+        <button onClick={() => setPalette(true)} className="fv-btn" style={{ ...lockBtn, marginRight: 8, flex: "none" }} title="搜索 (⌘K)">
           <IconSearch size={14} stroke="currentColor" /> 搜索 <span style={{ fontSize: 10.5, color: "var(--text-tertiary)", border: "0.5px solid var(--separator)", borderRadius: 4, padding: "0 4px", marginLeft: 2 }}>⌘K</span>
         </button>
       </header>
@@ -59,6 +82,7 @@ export default function App() {
       <main style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
         <div style={{ maxWidth: 1080, margin: "0 auto", padding: view === "settings" ? 0 : "22px 26px 40px" }}>
           {view === "overview" && <Overview data={data} mut={update} goto={(t) => setView(t)} />}
+          {view === "daily" && <DailyPlan data={data} mut={update} />}
           {view === "tasks" && <Tasks data={data} mut={update} />}
           {view === "calendar" && <Calendar data={data} mut={update} />}
           {view === "notes" && <Notes data={data} mut={update} />}
@@ -67,8 +91,11 @@ export default function App() {
           {view === "life" && <Life data={data} mut={update} />}
           {view === "accounts" && <Accounts data={data} mut={update} />}
           {view === "company" && <Company data={data} mut={update} />}
-          {view === "sports" && <Sports data={data} mut={update} />}
           {view === "spend" && <Spend data={data} mut={update} />}
+          {view === "vehicle" && <VehicleScreen data={data} mut={update} />}
+          {view === "fitness" && <Fitness data={data} mut={update} />}
+          {view === "health" && <Health data={data} mut={update} />}
+          {view === "travel" && <Travel data={data} mut={update} />}
           {view === "secrets" && <Secrets data={data} mut={update} />}
           {view === "disk" && <Disk />}
           {view === "settings" && <SettingsScreen />}
@@ -86,7 +113,7 @@ export default function App() {
 
 function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className={"fv-nav fv-tap" + (active ? " active" : "")} style={{ border: "none", background: active ? "var(--fill)" : "transparent", color: active ? "var(--text-primary)" : "var(--text-secondary)", fontSize: 13.5, fontWeight: 500, padding: "7px 14px", borderRadius: 9 }}>{children}</button>
+    <button onClick={onClick} className={"fv-nav fv-tap" + (active ? " active" : "")} style={{ border: "none", background: active ? "var(--fill)" : "transparent", color: active ? "var(--text-primary)" : "var(--text-secondary)", fontSize: 13.5, fontWeight: 500, padding: "7px 14px", borderRadius: 9, flex: "none", whiteSpace: "nowrap" }}>{children}</button>
   );
 }
 

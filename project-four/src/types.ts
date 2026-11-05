@@ -8,6 +8,7 @@ export interface DevTask {
   status: TaskStatus;
   priority: TaskPriority;
   due?: string;        // YYYY-MM-DD
+  dueTime?: string;    // HH:MM，可选的到期具体时间（不填就只到"天"）
   tags?: string[];
   note?: string;
   createdAt: number;
@@ -139,6 +140,120 @@ export interface SpendLog {
   title?: string;      // @deprecated
 }
 
+// ── 爱车 · 保养 / 油耗 / 里程 ────────────────────────────────────
+export interface Vehicle {
+  id: string;
+  name: string;          // 车辆昵称，如「Model 3」
+  plate?: string;        // 车牌
+  note?: string;
+  createdAt: number;
+}
+export type VehicleLogType = "fuel" | "maintenance" | "other";
+/** 一条用车记录：加油(里程+升数+花费，算油耗) / 保养(项目+花费) / 其它。 */
+export interface VehicleLog {
+  id: string;
+  vehicleId: string;
+  type: VehicleLogType;
+  date: string;           // YYYY-MM-DD
+  odometer?: number;      // 里程表读数(km)
+  liters?: number;        // 加油：升数
+  cost?: number;          // 花费
+  label?: string;         // 保养项目 / 简短标题
+  note?: string;
+  createdAt: number;
+}
+export interface VehicleData { vehicles: Vehicle[]; logs: VehicleLog[] }
+
+// ── 健身 · 体重管理 ──────────────────────────────────────────────
+export interface WeightEntry {
+  id: string;
+  date: string;            // YYYY-MM-DD
+  weight: number;          // kg
+  bodyFat?: number;        // 体脂率 %
+  note?: string;
+  createdAt: number;
+}
+export interface FitnessGoal {
+  heightCm?: number;       // 身高(算 BMI)
+  targetWeight?: number;   // 目标体重 kg
+  targetDate?: string;     // YYYY-MM-DD 目标日期
+}
+export interface FitnessData { goal?: FitnessGoal; entries: WeightEntry[] }
+
+// ── 健康记录 · 血压 / 血脂 / 饮食 ─────────────────────────────────
+/** 血压：收缩压(高压)/舒张压(低压)/脉搏。 */
+export interface BPReading {
+  id: string;
+  date: string;
+  systolic: number;
+  diastolic: number;
+  pulse?: number;
+  note?: string;
+  createdAt: number;
+}
+/** 血脂四项，单位 mmol/L。 */
+export interface LipidReading {
+  id: string;
+  date: string;
+  tc?: number;    // 总胆固醇
+  tg?: number;    // 甘油三酯
+  ldl?: number;   // 低密度脂蛋白胆固醇
+  hdl?: number;   // 高密度脂蛋白胆固醇
+  note?: string;
+  createdAt: number;
+}
+export type MealType = "早餐" | "午餐" | "晚餐" | "加餐";
+export interface DietEntry {
+  id: string;
+  date: string;
+  meal: MealType;
+  items: string;   // 吃了什么，自由文本
+  note?: string;
+  createdAt: number;
+}
+export interface HealthData { bp: BPReading[]; lipids: LipidReading[]; diet: DietEntry[] }
+
+// ── 旅游计划 · 世界景点清单 + 真实地图 + 行程/预算 ───────────────────
+export type TravelStatus = "wishlist" | "planned" | "done";
+export interface TravelSpot {
+  id: string;
+  name: string;
+  country: string;
+  continent: string;
+  lat?: number;
+  lon?: number;
+  status: TravelStatus;
+  visitDate?: string;   // YYYY-MM-DD
+  note?: string;
+  createdAt: number;
+}
+/** 行程里的一站：引用某个景点，可选给个计划到访日期，按数组顺序就是游览顺序。 */
+export interface TripStop {
+  spotId: string;
+  date?: string; // YYYY-MM-DD
+}
+/** 一趟行程：把想去的景点串起来、定个时间范围，配一个预算。 */
+export interface Trip {
+  id: string;
+  name: string;         // "日本关西 7 日游"
+  startDate?: string;
+  endDate?: string;
+  stops: TripStop[];    // 按顺序 = 游览顺序
+  budget?: number;      // 这趟行程的预算
+  note?: string;
+  createdAt: number;
+}
+/** 一笔行程花费。只记开销，跟预算对比。 */
+export interface TripExpense {
+  id: string;
+  tripId: string;
+  amount: number;
+  label: string;
+  date?: string; // YYYY-MM-DD
+  createdAt: number;
+}
+export interface TravelData { spots: TravelSpot[]; trips?: Trip[]; tripExpenses?: TripExpense[] }
+
 // ── 看球 · 世界杯淘汰赛数据模型（大小球 / 波胆 统计） ─────────────
 export interface KnockoutMatch {
   id: string;
@@ -176,6 +291,12 @@ export interface MatchOdds {
 
 /** 解锁后内存中的完整数据 */
 export interface DevData {
+  dailyPlan?: {
+    modules: { id: string; name: string; icon: string; minutes: number; target: number; frequency: "daily" | "manual"; archived?: boolean }[];
+    sessions: { id: string; moduleId: string; day: string; seconds: number; completed: boolean }[];
+    selectedDays: Record<string, string[]>;
+    active?: { moduleId: string; remainingSeconds: number; startedAt?: number };
+  };
   tasks: DevTask[];
   notes: DevNote[];
   snippets: DevSnippet[];
@@ -189,6 +310,10 @@ export interface DevData {
   bets: Bet[];                    // 看球：下注台账
   wc?: WcModel;                   // 看球：世界杯淘汰赛数据模型
   spend?: SpendLog;               // 临时小记账（只记开销）
+  vehicle?: VehicleData;          // 爱车：保养 / 油耗 / 里程
+  fitness?: FitnessData;          // 健身：体重管理
+  health?: HealthData;            // 健康记录：血压 / 血脂 / 饮食
+  travel?: TravelData;            // 旅游计划：世界景点清单 + 地图
   settings: DevSettings;
   updatedAt: number;
 }

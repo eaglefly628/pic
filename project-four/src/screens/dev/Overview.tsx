@@ -3,7 +3,7 @@ import type { DevData, DevTask } from "../../types";
 import { card } from "../../ui";
 import { rise } from "../../lib/anim";
 import { IconPlus, IconList, IconCalendar, IconNote, IconCode, IconLink, IconArrowRight } from "../../icons";
-import { PRIORITY, fmtDue, dueColor, SectionTitle, uid, ACCENT_SOFT } from "./shared";
+import { PRIORITY, fmtDue, dueTimeSuffix, dueColor, SectionTitle, uid, ACCENT_SOFT } from "./shared";
 import { accountAlerts, toneColor } from "../../lib/accounts";
 
 type Mut = (fn: (d: DevData) => void) => void;
@@ -94,7 +94,7 @@ export default function Overview({ data, mut, goto }: { data: DevData; mut: Mut;
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: PRIORITY[t.priority].color, flex: "none" }} />
                   <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</span>
                   {t.status === "doing" && <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--accent)", background: ACCENT_SOFT, padding: "1px 7px", borderRadius: 5, flex: "none" }}>进行中</span>}
-                  {due.text && <span style={{ fontSize: 11.5, fontWeight: 600, color: dueColor(due.tone), flex: "none" }}>{due.text}</span>}
+                  {due.text && <span style={{ fontSize: 11.5, fontWeight: 600, color: dueColor(due.tone), flex: "none" }}>{due.text}{dueTimeSuffix(t)}</span>}
                 </div>
               );
             })}

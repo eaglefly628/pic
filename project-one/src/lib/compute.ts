@@ -3,6 +3,7 @@
 
 import type { AccountMeta, Category, Dataset, Snapshot } from "../data/types";
 import { fmt, fmtSigned, fmtWan, fmtPct } from "./format";
+import { collapseStatisticalMonths, latestClosedMonthEnd, periodOf, snapshotMonth, statisticalMonthKey } from "./statMonth";
 
 export type RangeKey = "3m" | "1y" | "all";
 
@@ -12,21 +13,82 @@ export const CAT_TITLE: Record<Category, string> = {
   estate: "家庭房产",
   fixed: "家庭其他固定资产",
   debt: "负债",
+  trust: "家族信托",
 };
-export const CAT_ORDER: Category[] = ["liquid", "invest", "estate", "fixed", "debt"];
+export const CAT_ORDER: Category[] = ["liquid", "invest", "estate", "fixed", "debt", "trust"];
 
-// 资产构成分组的展示颜色（与设计稿色板一致）
+/** 「家族信托 / 独立运营资产」默认开启——本产品面向有一定资产规模的家庭，
+ *  家族信托是这类家庭资产里很常规的一块，不该藏在开关后面。
+ *  家里没有这类资产的人可以在设置里关掉（features.trust = false），界面会跟着收起来。
+ *  关掉时 offBalance 一律当没设过——所有账户照常计入家庭总资产，
+ *  所以关开关不会让任何一笔钱从总数里凭空消失，只是不再单独列示。 */
+export function trustEnabled(ds: Dataset): boolean {
+  return ds.features?.trust !== false;
+}
+/** 这个账户算不算进家庭总资产（净资产、总资产/负债、资产构成、净值曲线） */
+export function countsInTotal(ds: Dataset, a: AccountMeta): boolean {
+  return !(a.offBalance && trustEnabled(ds));
+}
+
+/** 加 n 个月，并把「1月31日 + 1个月」这种夹到当月最后一天，不要溢出到 3 月 */
+function addMonths(d: Date, n: number): Date {
+  const day = d.getDate();
+  const t = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  t.setDate(Math.min(day, new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()));
+  return t;
+}
+
+export interface LockInfo {
+  start: string; end: string; months: number;
+  totalDays: number; leftDays: number;
+  /** 0~1，已经过去的比例 */
+  pct: number;
+  unlocked: boolean;
+  /** 「还锁 1 年 3 个月」/「还锁 45 天」/「已解锁」 */
+  label: string;
+}
+
+/** 锁定期。没设起始日或期限就返回 null（= 不锁定）。 */
+export function lockInfo(a: AccountMeta, now = new Date()): LockInfo | null {
+  if (!a.lockStart || !a.lockMonths) return null;
+  const start = new Date(a.lockStart + "T00:00:00");
+  if (isNaN(start.getTime())) return null;
+  const end = addMonths(start, a.lockMonths);
+  const DAY = 86_400_000;
+  const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY));
+  const leftDays = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / DAY));
+  const unlocked = leftDays === 0;
+  let label: string;
+  if (unlocked) label = "已解锁";
+  else if (leftDays <= 60) label = `还锁 ${leftDays} 天`;
+  else {
+    const m = Math.round(leftDays / 30.44);
+    label = m >= 12 ? `还锁 ${Math.floor(m / 12)} 年${m % 12 ? ` ${m % 12} 个月` : ""}` : `还锁 ${m} 个月`;
+  }
+  return {
+    start: a.lockStart,
+    end: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`,
+    months: a.lockMonths, totalDays, leftDays,
+    pct: Math.max(0, Math.min(1, (totalDays - leftDays) / totalDays)),
+    unlocked, label,
+  };
+}
+
+// 资产构成分组的展示颜色。走 CSS 变量，跟着明暗主题各用一套（见 styles.css 的 --cat-*）。
+// 核心 5 类是经 CVD/对比度校验的「全对可分」组；实际数据也正好落在这 5 类里。
+// 后面几类很少与核心类同时出现，且环形图右侧有图例（名称+数值）做二次编码，故复用核心色相。
 const COMP_COLOR: Record<string, string> = {
-  房产: "#007AFF",
-  股票: "#34C759",
-  "理财/固收": "#FF9500",
-  基金: "#5E5CE6",
-  现金及银行: "#FF2D55",
-  黄金: "#FFD60A",
-  养老金: "#5AC8FA",
-  公积金: "#AF52DE",
-  其他固定资产: "#A2845E",
-  其他: "#8E8E93",
+  现金及银行: "var(--cat-1)",
+  "理财/固收": "var(--cat-2)",
+  美债: "var(--cat-2)",
+  股票: "var(--cat-3)",
+  房产: "var(--cat-4)",
+  基金: "var(--cat-5)",
+  黄金: "var(--cat-2)",
+  养老金: "var(--cat-4)",
+  公积金: "var(--cat-5)",
+  其他固定资产: "var(--cat-other)",
+  其他: "var(--cat-other)",
 };
 
 function lastBalance(snaps: Snapshot[], id: string): number {
@@ -37,8 +99,14 @@ function lastBalance(snaps: Snapshot[], id: string): number {
   return 0;
 }
 
+// 某账户「最后更新」是哪一期：优先看 touched（真正被改过的账户），而不是 balances 里
+// 是否有值——一条快照的 balances 里，除了真正被改的账户，还会结转其它账户的上次余额
+// 好保证净值算得对；touched 缺失（导入数据 / 本字段上线前的旧快照）时兜底按老逻辑。
 function lastDate(snaps: Snapshot[], id: string): string | null {
-  for (let i = snaps.length - 1; i >= 0; i--) if (snaps[i].balances[id] != null) return snaps[i].date;
+  for (let i = snaps.length - 1; i >= 0; i--) {
+    const s = snaps[i];
+    if (s.touched ? s.touched.includes(id) : s.balances[id] != null) return s.date;
+  }
   return null;
 }
 
@@ -49,10 +117,10 @@ export function latestBalances(ds: Dataset): Record<string, number> {
   return out;
 }
 
-/** 当前净资产（所有账户最新余额之和，含负债） */
+/** 当前净资产（计入家庭总资产的账户最新余额之和，含负债；独立运营资产不算在内） */
 export function currentNetWorth(ds: Dataset): number {
   const lb = latestBalances(ds);
-  return ds.accounts.reduce((s, a) => s + lb[a.id], 0);
+  return ds.accounts.filter((a) => countsInTotal(ds, a)).reduce((s, a) => s + lb[a.id], 0);
 }
 
 /** 预计年利息合计（按各账户自身年化利率，默认 0；rate 为小数） */
@@ -69,53 +137,88 @@ function freshness(dateISO: string): { label: string; days: number } {
 }
 
 /** 某账户的历史序列（去掉无记录的点） */
-export function accountSeries(ds: Dataset, id: string): { date: string; v: number }[] {
-  const out: { date: string; v: number }[] = [];
+export function accountSeries(ds: Dataset, id: string): { date: string; period?: string; v: number }[] {
+  const out: { date: string; period?: string; v: number }[] = [];
   for (const s of ds.snapshots) {
     const v = s.balances[id];
-    if (v != null) out.push({ date: s.date, v });
+    if (v != null) out.push({ date: s.date, period: snapshotMonth(s), v });
   }
   return out;
 }
 
-/** 每期净值（所有账户余额之和，含负债） */
-export function netSeries(ds: Dataset): { date: string; v: number }[] {
-  return ds.snapshots.map((s) => {
+/** 每期净值（所有账户余额之和，含负债）
+ *
+ *  ⚠ 「这一期没记这个账户」不等于「这个账户这一期是 0」。原来写的是
+ *  `s.balances[a.id] ?? 0`，于是 Excel 里某个账户的单元格一旦留空（或者某个月
+ *  忘了填），那笔钱就在那个月整笔归零，曲线上出现一个假的断崖——比如账户有
+ *  50 万、7 月起不再填，8 月净值就凭空少 50 万。
+ *
+ *  正确语义是沿用它最近一次记录的余额（跟 addSnapshot 手工建快照时的结转一致）；
+ *  账户第一次出现之前才算 0（那时候它还不存在）。
+ *  真要让一个账户从历史里消失，用 deleteAccount——那会把它从所有快照里删干净。 */
+export function netSeries(ds: Dataset): { date: string; period?: string; v: number }[] {
+  const snaps = [...ds.snapshots].sort((a, b) => a.date.localeCompare(b.date));
+  const accs = ds.accounts.filter((a) => countsInTotal(ds, a));   // 独立运营资产不进家庭净值曲线
+  const carried: Record<string, number> = {};
+  return snaps.map((s) => {
     let sum = 0;
-    for (const a of ds.accounts) sum += s.balances[a.id] ?? 0;
-    return { date: s.date, v: sum };
+    for (const a of accs) {
+      const v = s.balances[a.id];
+      if (v != null) carried[a.id] = v;
+      sum += carried[a.id] ?? 0;
+    }
+    return { date: s.date, period: snapshotMonth(s), v: sum };
+  });
+}
+
+/** 最近 n 个已完成统计月的月份键（"2026-09"）。月初不会凭空先插入一个当月。 */
+export function lastMonthKeys(n: number, end = new Date()): string[] {
+  const out: string[] = [];
+  const [endYear, endMonth] = latestClosedMonthEnd(end).split("-").map(Number);
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(endYear, endMonth - 1 - i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
+/** 把一条净值序列对齐到给定的月份上，每月取该月最后一条记录；
+ *  某个月没记就沿用上一期（跟净值的结转语义一致，不是归零）；
+ *  第一条记录之前给 null——那时这本账还不存在，画成 0 会凭空多出一段假的平线。
+ *  两本账（家庭账 / 独立管理）快照日期各记各的，要叠在一张图上就得先这样对齐。 */
+export function alignMonthly(series: { date: string; period?: string; v: number }[], months: string[]): (number | null)[] {
+  const sorted = collapseStatisticalMonths(series);
+  let i = 0;
+  let cur: number | null = null;
+  return months.map((m) => {
+    while (i < sorted.length && periodOf(sorted[i]) <= m) { cur = sorted[i].v; i++; }
+    return cur;
   });
 }
 
 /** 同一个月可能记了好几笔——「每月」视图里只保留当月最后一次（最新那笔），
  *  避免一个月出现好几个节点。返回按月升序、每月一个点。 */
-function collapseMonthly<T extends { date: string }>(series: T[]): T[] {
-  const byMonth = new Map<string, T>();
-  for (const p of series) {
-    const k = p.date.slice(0, 7);
-    const ex = byMonth.get(k);
-    if (!ex || p.date >= ex.date) byMonth.set(k, p); // 当月日期更靠后的覆盖前面的
-  }
-  return [...byMonth.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+export function collapseMonthly<T extends { date: string; period?: string }>(series: T[]): T[] {
+  return collapseStatisticalMonths(series);
 }
 
-function monthLabel(iso: string): string {
-  const [, m] = iso.split("-");
+function monthLabel(iso: string, period?: string): string {
+  const [, m] = (period || statisticalMonthKey(iso)).split("-");
   return parseInt(m, 10) + "月";
 }
-function ymLabel(iso: string): string {
-  const [y, m] = iso.split("-");
+function ymLabel(iso: string, period?: string): string {
+  const [y, m] = (period || statisticalMonthKey(iso)).split("-");
   return `${y.slice(2)}/${m}`;
 }
 
-function filterRange<T extends { date: string }>(series: T[], range: RangeKey): T[] {
+function filterRange<T extends { date: string; period?: string }>(series: T[], range: RangeKey): T[] {
   if (range === "all" || series.length === 0) return series;
-  const last = new Date(series[series.length - 1].date);
+  const last = new Date(periodOf(series[series.length - 1]) + "-01T00:00:00");
   const months = range === "3m" ? 3 : 12;
   const cut = new Date(last);
   cut.setMonth(cut.getMonth() - months);
-  const cutIso = cut.toISOString().slice(0, 10);
-  const filtered = series.filter((p) => p.date >= cutIso);
+  const cutKey = `${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, "0")}`;
+  const filtered = series.filter((p) => periodOf(p) >= cutKey);
   return filtered.length >= 2 ? filtered : series.slice(-2);
 }
 
@@ -166,39 +269,44 @@ export interface UIState {
 
 export function buildView(ds: Dataset, ui: UIState) {
   const accs = ds.accounts;
-  const last = ds.snapshots[ds.snapshots.length - 1];
-  const prev = ds.snapshots[ds.snapshots.length - 2];
+  const monthlySnapshots = collapseMonthly([...ds.snapshots].sort((a, b) => a.date.localeCompare(b.date)));
+  const last = monthlySnapshots[monthlySnapshots.length - 1];
+  const prev = monthlySnapshots[monthlySnapshots.length - 2];
 
   const latest: Record<string, number> = {};
   for (const a of accs) latest[a.id] = lastBalance(ds.snapshots, a.id);
 
-  const totalAssets = accs.reduce((s, a) => s + Math.max(0, latest[a.id]), 0);
-  const totalLiab = accs.reduce((s, a) => s + Math.min(0, latest[a.id]), 0);
+  // 独立运营资产（家族信托这类）不进总资产/负债/净资产/资产构成，单独成块
+  const inTotal = accs.filter((a) => countsInTotal(ds, a));
+  const offAccs = trustEnabled(ds) ? accs.filter((a) => a.offBalance) : [];
+
+  const totalAssets = inTotal.reduce((s, a) => s + Math.max(0, latest[a.id]), 0);
+  const totalLiab = inTotal.reduce((s, a) => s + Math.min(0, latest[a.id]), 0);
   const net = totalAssets + totalLiab;
 
   // 较上期变化
-  const netPrev = prev ? accs.reduce((s, a) => s + (prev.balances[a.id] ?? latest[a.id]), 0) : net;
+  const netPrev = prev ? inTotal.reduce((s, a) => s + (prev.balances[a.id] ?? latest[a.id]), 0) : net;
   const netDelta = net - netPrev;
   const netPct = netPrev ? netDelta / Math.abs(netPrev) : 0;
 
   // ---- 趋势 ----
-  const fullNet = netSeries(ds);
+  const fullNet = collapseMonthly(netSeries(ds));
   const series = filterRange(fullNet, ui.range);
   const tc = buildChart(series.map((p) => p.v), 600, 200, 44, 8, 16, 30);
-  const trendXLabels = pickXLabels(series.map((p) => ymLabel(p.date)), tc.pts);
+  const trendXLabels = pickXLabels(series.map((p) => ymLabel(p.date, p.period)), tc.pts);
   const trendPoints = series.map((p, i) => ({ x: tc.pts[i].x, y: tc.pts[i].y, date: p.date, value: p.v }));
 
   // 净资产每月变化量（近 12 个月，独立于时间范围）；同月多笔只取当月最后一笔
-  const recentNet = collapseMonthly(fullNet).slice(-13);
+  const recentNet = fullNet.slice(-13);
   const mcMax = recentNet.reduce((m, p, i) => (i === 0 ? m : Math.max(m, Math.abs(p.v - recentNet[i - 1].v))), 0) || 1;
   const mNotes = ds.monthNotes || {};
   const monthlyChanges = recentNet
-    .map((p, i) => (i === 0 ? null : { label: ymLabel(p.date), key: p.date.slice(0, 7), delta: p.v - recentNet[i - 1].v }))
-    .filter((x): x is { label: string; key: string; delta: number } => x != null)
+    .map((p, i) => (i === 0 ? null : { label: ymLabel(p.date, p.period), key: periodOf(p), rawKey: p.date.slice(0, 7), delta: p.v - recentNet[i - 1].v }))
+    .filter((x): x is { label: string; key: string; rawKey: string; delta: number } => x != null)
     .map((c) => ({
       label: c.label,
       key: c.key,
-      note: mNotes[c.key] || "",
+      note: mNotes[c.key] || mNotes[c.rawKey] || "",
       text: c.delta >= 0 ? "+" + fmtWan(c.delta) : fmtWan(c.delta),
       up: c.delta >= 0,
       ratio: Math.abs(c.delta) / mcMax,
@@ -206,11 +314,11 @@ export function buildView(ds: Dataset, ui: UIState) {
   const rangeCaption =
     ui.range === "3m" ? "最近 3 个月 · 按月快照"
       : ui.range === "1y" ? "最近 12 个月 · 按月快照"
-        : `全部历史 · ${fullNet[0] ? fullNet[0].date.slice(0, 7) : ""} 至今`;
+        : `全部历史 · ${fullNet[0] ? periodOf(fullNet[0]) : ""} 至今`;
 
   // ---- 资产构成（按 comp 分组，仅资产）----
   const compMap = new Map<string, number>();
-  for (const a of accs) {
+  for (const a of inTotal) {
     const v = latest[a.id];
     if (v <= 0) continue;
     const key = (a as AccountMeta & { comp?: string }).comp || "其他";
@@ -261,7 +369,7 @@ export function buildView(ds: Dataset, ui: UIState) {
     const upd = lastDate(ds.snapshots, a.id);
     const wa = upd ? freshness(upd) : null;
     // 本次余额 vs 上一次余额的差值
-    const series = accountSeries(ds, a.id);
+    const series = collapseMonthly(accountSeries(ds, a.id));
     const curr = series.length ? series[series.length - 1].v : null;
     const prev = series.length >= 2 ? series[series.length - 2].v : null;
     const delta = curr != null && prev != null ? curr - prev : null;
@@ -286,6 +394,8 @@ export function buildView(ds: Dataset, ui: UIState) {
       deltaText: delta == null ? "首次" : delta === 0 ? "持平" : fmtSigned(delta),
       deltaColor: delta == null || delta === 0 ? "var(--text-tertiary)" : delta > 0 ? "var(--green)" : "var(--red)",
       prevDate: series.length >= 2 ? series[series.length - 2].date : null,
+      offBalance: !countsInTotal(ds, a),          // 独立运营：列表里打个标，说明它没进总数
+      lock: lockInfo(a),
     };
   };
   const byAbs = (a: AccountMeta, b: AccountMeta) => Math.abs(latest[b.id]) - Math.abs(latest[a.id]);
@@ -305,6 +415,13 @@ export function buildView(ds: Dataset, ui: UIState) {
 
   // ---- 全部账户（按金额排序，不分组）----
   const flatAccounts = accs.slice().sort(byAbs).map(mkAcc);
+  // ---- 全部账户（按最后更新时间排序，最近的在前；没记录过的排最后）----
+  const byUpdated = [...flatAccounts].sort((a, b) => {
+    if (a.updated === "—" && b.updated === "—") return 0;
+    if (a.updated === "—") return 1;
+    if (b.updated === "—") return -1;
+    return b.updated.localeCompare(a.updated);
+  });
 
   // ---- 账户详情 ----
   const da = accs.find((a) => a.id === ui.selectedId) || accs[0] ||
@@ -316,14 +433,14 @@ export function buildView(ds: Dataset, ui: UIState) {
   const detailDots = detailShown.map((p, i) => ({
     x: dc.pts[i] ? dc.pts[i].x.toFixed(1) : "0",
     y: dc.pts[i] ? dc.pts[i].y.toFixed(1) : "0",
-    label: monthLabel(p.date),
+    label: monthLabel(p.date, p.period),
   }));
   const dFirst = detailShown[0]?.v ?? 0;
   const dLast = detailShown[detailShown.length - 1]?.v ?? 0;
   const dDelta = dLast - dFirst;
   // 每期（每月）变化量，用于柱状预览
   const detailChanges = detailShown
-    .map((p, i) => (i === 0 ? null : { label: monthLabel(p.date), delta: p.v - detailShown[i - 1].v }))
+    .map((p, i) => (i === 0 ? null : { label: monthLabel(p.date, p.period), delta: p.v - detailShown[i - 1].v }))
     .filter((x): x is { label: string; delta: number } => x != null);
   const changeMax = detailChanges.reduce((m, c) => Math.max(m, Math.abs(c.delta)), 0) || 1;
   const snapshots = ds2
@@ -333,6 +450,7 @@ export function buildView(ds: Dataset, ui: UIState) {
       const realIdx = ds2.length - 1 - idx;
       const change = realIdx > 0 ? ds2[realIdx].v - ds2[realIdx - 1].v : null;
       return {
+        rawDate: p.date, // 原始 ISO 日期，删除这条快照时要用
         date: p.date.replace(/-/g, " / "),
         amount: fmt(p.v),
         change: change == null ? "—" : fmtSigned(change),
@@ -341,8 +459,38 @@ export function buildView(ds: Dataset, ui: UIState) {
       };
     });
 
+  const offTotalRaw = offAccs.reduce((s, a) => s + latest[a.id], 0);
+  const offBalance = {
+    on: trustEnabled(ds),
+    count: offAccs.length,
+    totalRaw: offTotalRaw,
+    total: fmt(offTotalRaw),
+    /** 连同独立运营资产在内的「全部家当」——家庭总资产 + 独立运营 */
+    grandTotalRaw: net + offTotalRaw,
+    grandTotal: fmt(net + offTotalRaw),
+    annualInterest: offAccs.reduce((s, a) => s + latest[a.id] * (a.rate ?? 0), 0),
+    accounts: offAccs
+      .slice()
+      .sort((a, b) => Math.abs(latest[b.id]) - Math.abs(latest[a.id]))
+      .map((a) => {
+        const lk = lockInfo(a);
+        return {
+          id: a.id, name: a.name, color: a.color,
+          type: (a as AccountMeta & { comp?: string }).comp ?? a.type,
+          owner: a.owner ?? "全家",
+          institution: a.institution && a.institution !== "—" ? a.institution : "",
+          balance: fmt(latest[a.id]), balanceRaw: latest[a.id],
+          ratePct: a.rate != null && a.rate !== 0 ? (a.rate * 100).toFixed(2) + "%" : "—",
+          annualInterest: fmt(latest[a.id] * (a.rate ?? 0)),
+          lock: lk,
+        };
+      }),
+  };
+
   return {
-    meta: { vaultName: ds.vaultName, userName: ds.userName, real: !!ds.real, accountCount: accs.length },
+    // accountCount = 账户列表里一共有几个（侧边栏徽标、「更多」页用它）；
+    // inTotalCount = 其中有几个计入家庭总资产（「总资产」卡下面那行用它，独立运营的不算）
+    meta: { vaultName: ds.vaultName, userName: ds.userName, real: !!ds.real, accountCount: accs.length, inTotalCount: inTotal.length },
     totals: {
       totalAssets: fmt(totalAssets),
       totalLiabilities: fmt(totalLiab),
@@ -366,14 +514,20 @@ export function buildView(ds: Dataset, ui: UIState) {
     },
     donut,
     recent,
+    offBalance,
     groups,
     flatAccounts,
+    byUpdated,
     monthlyChanges,
     detail: {
       id: da.id,
       name: da.name,
       type: daComp,
       color: da.color,
+      offBalance: !!da.id && !countsInTotal(ds, da),
+      lock: da.id ? lockInfo(da) : null,
+      ratePct: da.rate != null && da.rate !== 0 ? (da.rate * 100).toFixed(2) + "%" : null,
+      owner: da.owner ?? "全家",
       initial: da.name.slice(0, 1),
       sub: (da.institution && da.institution !== "—" ? da.institution + " · " : "") + "归属 " + (da.owner ?? "全家") + " · " + daComp,
       balance: fmt(dLast),

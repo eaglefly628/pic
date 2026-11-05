@@ -1,6 +1,6 @@
 // 密码保险箱的「二次验证」独立加密库：可选启用。启用后密码条目用单独的密码加密，
 // 与主密码相互独立；进入密码保险箱需再输入这道独立密码。
-import { createVault, rewrapVault, sealVault, unlockVault, type UnlockedKeys, type VaultBlob } from "../lib/crypto";
+import { createVault, needsKdfUpgrade, rewrapVault, sealVault, unlockVault, upgradeKdf, type UnlockedKeys, type VaultBlob } from "../lib/crypto";
 import type { PasswordItem } from "./types";
 
 const KEY = "familyvault.pwbox.v1";
@@ -19,16 +19,30 @@ export async function unlockPwBox(pw: string): Promise<{ items: PasswordItem[]; 
   const s = localStorage.getItem(KEY);
   if (!s) return null;
   try {
-    const { data, keys } = await unlockVault<PasswordItem[]>(pw, JSON.parse(s));
+    const blob = JSON.parse(s) as VaultBlob;
+    const { data, keys } = await unlockVault<PasswordItem[]>(pw, blob);
+    if (needsKdfUpgrade(blob)) {
+      try {
+        const upgraded = await upgradeKdf(keys, blob, pw);
+        localStorage.setItem(KEY, JSON.stringify(upgraded.blob));
+        return { items: data, keys: upgraded.keys };
+      } catch { /* 本次仍可用老参数解锁，下次再升级 */ }
+    }
     return { items: data, keys };
   } catch {
     return null;
   }
 }
 
-export async function savePwBox(keys: UnlockedKeys, items: PasswordItem[]): Promise<void> {
-  const blob = await sealVault(keys, items);
-  localStorage.setItem(KEY, JSON.stringify(blob));
+let saveQueue: Promise<unknown> = Promise.resolve();
+export function savePwBox(keys: UnlockedKeys, items: PasswordItem[]): Promise<void> {
+  const snapshot = structuredClone(items);
+  const run = saveQueue.then(async () => {
+    const blob = await sealVault(keys, snapshot);
+    localStorage.setItem(KEY, JSON.stringify(blob));
+  });
+  saveQueue = run.catch(() => { /* 单次失败不堵住后续保存 */ });
+  return run;
 }
 
 export async function changePwBoxPassword(keys: UnlockedKeys, newPw: string): Promise<void> {

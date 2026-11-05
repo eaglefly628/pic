@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { DevData, DevTask } from "../../types";
 import { card } from "../../ui";
 import { IconBack, IconArrowRight, IconPlus } from "../../icons";
-import { PRIORITY, STATUS, fmtDue, dueColor, uid } from "./shared";
+import { PRIORITY, STATUS, fmtDue, dueTimeSuffix, dueColor, uid } from "./shared";
 
 type Mut = (fn: (d: DevData) => void) => void;
 const WD = ["一", "二", "三", "四", "五", "六", "日"];
@@ -128,7 +128,7 @@ function Line({ t, onToggle, showDue }: { t: DevTask; onToggle: () => void; show
       <span onClick={onToggle} title="完成" style={{ width: 16, height: 16, flex: "none", borderRadius: 5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", border: done ? "none" : "1.5px solid var(--text-tertiary)", background: done ? "var(--green)" : "transparent", color: "#fff", fontSize: 11 }}>{done ? "✓" : ""}</span>
       <span style={{ width: 6, height: 6, borderRadius: "50%", flex: "none", background: PRIORITY[t.priority].color }} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: done ? "var(--text-tertiary)" : "var(--text-primary)", textDecoration: done ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</span>
-      {showDue && due.text && <span style={{ fontSize: 11, fontWeight: 600, color: dueColor(due.tone), flex: "none" }}>{due.text}</span>}
+      {showDue && due.text && <span style={{ fontSize: 11, fontWeight: 600, color: dueColor(due.tone), flex: "none" }}>{due.text}{dueTimeSuffix(t)}</span>}
       {!showDue && t.status === "doing" && <span style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", flex: "none" }}>{STATUS.doing.label}</span>}
     </div>
   );

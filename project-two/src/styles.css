@@ -126,4 +126,35 @@ body { background: #b8c6db; }
   background: var(--bg-card);
   color: var(--text-primary);
 }
+
+/* 远程索引报告：主应用、平板和窄窗口都不能让目录统计被右侧卡片盖住。 */
+@media (max-width: 920px) {
+  .fv-report-split { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+@media (max-width: 680px) {
+  .fv-remote-index { padding: 16px 14px 28px !important; }
+  .fv-directory-row { align-items: flex-start !important; flex-wrap: wrap; row-gap: 2px !important; }
+  .fv-directory-row > span:first-child { flex-basis: 100% !important; }
+  .fv-indexed-timeline { padding: 16px 14px 28px !important; }
+  .fv-location-row { grid-template-columns: minmax(0, 1fr) auto !important; }
+  .fv-location-row > div:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  .fv-location-row > div:nth-child(3) { grid-column: 2; grid-row: 1; }
+}
 .fv-root select, .fv-root input, .fv-root textarea { color-scheme: inherit; }
+@media (max-width: 760px) {
+  .fv-root { padding: 0 !important; }
+  .fv-root > div { height: 100vh !important; border-radius: 0 !important; }
+  .fv-sidebar { width: 62px !important; }
+  .fv-sidebar > div:nth-child(2) { padding: 4px 12px 14px !important; }
+  .fv-sidebar > div:nth-child(2) > div:last-child,
+  .fv-sidebar nav > div:not(.fv-navhi),
+  .fv-sidebar .fv-nav > span { display: none !important; }
+  .fv-sidebar nav { padding: 4px 10px !important; }
+  .fv-sidebar .fv-nav { justify-content: center !important; padding: 9px 0 !important; }
+  .fv-toolbar-search, .fv-toolbar-import { display: none !important; }
+  .fv-indexed-shell { padding: 12px !important; }
+  .fv-indexed-columns { grid-template-columns: minmax(0, 1fr) !important; }
+  .fv-indexed-columns > div:first-child { max-height: 154px !important; }
+  .fv-indexed-timeline { padding: 12px !important; }
+}

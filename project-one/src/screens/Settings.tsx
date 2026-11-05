@@ -2,10 +2,11 @@ import React, { useState } from "react";
 import { useVault } from "../vault/VaultContext";
 import { useTheme } from "../lib/theme";
 import { passwordStrength } from "../lib/crypto";
-import { clearVault, listBackups, addBackup, restoreBackup, deleteBackup } from "../lib/storage";
+import { clearAllVaultData, listBackups, addBackup, restoreBackup, deleteBackup, exportBlobString, importBlobString, MAX_BACKUPS, StorageFullError } from "../lib/storage";
 import { hasPwBox, createPwBox, unlockPwBox, changePwBoxPassword, clearPwBox, pwSession } from "../vault/pwStore";
-import { Btn, Field, Select, TextField, card } from "../ui";
-import { IconDownload, IconCheck } from "../icons";
+import { trustEnabled } from "../lib/compute";
+import { Btn, Field, Select, Switch, TextField, card } from "../ui";
+import { IconDownload, IconUpload, IconCheck } from "../icons";
 
 export default function Settings() {
   const { data, update, changePassword, lock, reload } = useVault();
@@ -23,9 +24,19 @@ export default function Settings() {
   const [pwOn, setPwOn] = useState(hasPwBox());
   const [npw, setNpw] = useState(""); const [cpw, setCpw] = useState(""); const [pwBoxMsg, setPwBoxMsg] = useState("");
 
+  // 功能模块：家族信托 / 独立运营资产（默认开启，见 compute.trustEnabled）
+  const trustOn = data ? trustEnabled(data.dataset) : true;
+  const trustAccounts = (data?.dataset.accounts ?? []).filter((a) => a.offBalance);
+  const toggleTrust = (v: boolean) => {
+    // 关掉时那些账户不会消失、也不会被改——只是重新计回家庭总资产。说清楚再关。
+    if (!v && trustAccounts.length > 0 &&
+      !confirm(`当前有 ${trustAccounts.length} 个账户设成了「不计入家庭总资产」。\n\n关闭这个功能后，它们会重新计入净资产和资产构成（账户和余额一个都不会少，只是不再单独列示）。要继续吗？`)) return;
+    update((d) => { d.dataset.features = { ...d.dataset.features, trust: v }; });
+  };
+
   const enablePwBox = async () => {
     setPwBoxMsg("");
-    if (npw.length < 4) return setPwBoxMsg("密码至少 4 位");
+    if (npw.length < 8) return setPwBoxMsg("密码至少 8 位");
     await createPwBox(npw, data?.passwords ?? []);
     update((d) => { d.passwords = []; }); // 已迁移到独立加密库
     pwSession.set(null); setPwOn(true); setNpw(""); setPwBoxMsg("ok");
@@ -33,7 +44,7 @@ export default function Settings() {
   };
   const changePwBox = async () => {
     setPwBoxMsg("");
-    if (npw.length < 4) return setPwBoxMsg("新密码至少 4 位");
+    if (npw.length < 8) return setPwBoxMsg("新密码至少 8 位");
     const r = await unlockPwBox(cpw);
     if (!r) return setPwBoxMsg("当前密码错误");
     await changePwBoxPassword(r.keys, npw);
@@ -49,8 +60,22 @@ export default function Settings() {
   };
 
   const refreshBk = () => setBackups(listBackups());
-  const createBackup = () => { addBackup(bkLabel.trim() || `备份 ${new Date().toLocaleString("zh-CN")}`); setBkLabel(""); refreshBk(); };
-  const restoreBk = (id: string) => { if (confirm("恢复到该备份？当前数据会被替换（建议先创建一个当前备份）。恢复后需用该备份对应的主密码解锁。")) { restoreBackup(id); reload(); } };
+  const [bkMsg, setBkMsg] = useState("");
+  const createBackup = () => {
+    setBkMsg("");
+    try {
+      addBackup(bkLabel.trim() || `备份 ${new Date().toLocaleString("zh-CN")}`);
+      setBkLabel("");
+      refreshBk();
+    } catch (e) {
+      setBkMsg(e instanceof StorageFullError ? e.message : "创建还原点失败：" + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+  const restoreBk = (id: string) => {
+    if (!confirm("恢复到该备份？当前数据会被替换（建议先创建一个当前备份）。恢复后需用该备份对应的主密码解锁。")) return;
+    try { restoreBackup(id); reload(); }
+    catch (e) { setBkMsg(e instanceof StorageFullError ? e.message : "恢复失败：" + (e instanceof Error ? e.message : String(e))); }
+  };
   const deleteBk = (id: string) => { if (confirm("删除该备份？")) { deleteBackup(id); refreshBk(); } };
 
   const saveNames = () => {
@@ -64,7 +89,7 @@ export default function Settings() {
 
   const doChangePw = async () => {
     setPwMsg("");
-    if (pw.length < 6) return setPwMsg("新密码至少 6 位");
+    if (pw.length < 8) return setPwMsg("新密码至少 8 位");
     if (pw !== pw2) return setPwMsg("两次输入不一致");
     await changePassword(pw);
     setPw(""); setPw2(""); setPwMsg("ok");
@@ -72,9 +97,40 @@ export default function Settings() {
   };
 
   const resetAll = () => {
-    if (!confirm("确定要删除本机金库及全部数据吗？此操作不可恢复（建议先导出备份）。")) return;
-    clearVault();
+    if (!confirm(
+      "确定要删除本机全部数据吗？\n\n会一并删除：理财主数据、密码保险箱、独立管理、以及全部程序内还原点。\n" +
+      "此操作不可恢复。建议先用下面的「导出金库文件」存一份。"
+    )) return;
+    clearAllVaultData();     // 以前只删了主金库，密码箱和独立管理会残留
     reload();
+  };
+
+  // ③ 导出/导入金库文件。以前 storage.ts 里这两个函数定义了却没人调用，
+  //    而「重置金库」的确认框却写着「建议先导出备份」——指向一个不存在的按钮。
+  const [ioMsg, setIoMsg] = useState("");
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const exportVaultFile = () => {
+    const blob = exportBlobString();
+    if (!blob) { setIoMsg("本机还没有金库可导出。"); return; }
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([blob], { type: "application/json" }));
+    a.download = `家庭理财-金库-${stamp}.fvault`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    setIoMsg("已导出。文件仍是加密的，恢复时要用导出当时的那个主密码。");
+  };
+  const importVaultFile = async (f: File) => {
+    setIoMsg("");
+    if (!confirm(`用「${f.name}」替换本机当前的理财数据？\n\n当前数据会被覆盖，之后需用该文件对应的主密码解锁。`)) return;
+    try {
+      const text = await f.text();
+      if (!importBlobString(text)) { setIoMsg("这个文件不是本应用导出的金库文件（或已损坏）。"); return; }
+      reload();
+    } catch (e) {
+      setIoMsg(e instanceof StorageFullError ? e.message : "读取文件失败：" + (e instanceof Error ? e.message : String(e)));
+    }
   };
 
   const st = passwordStrength(pw);
@@ -153,6 +209,27 @@ export default function Settings() {
         {pwBoxMsg === "ok" ? <div style={{ fontSize: 12.5, color: "var(--green)", marginTop: 10, display: "flex", alignItems: "center", gap: 4 }}><IconCheck stroke="var(--green)" />已完成</div> : pwBoxMsg && <div style={{ fontSize: 12.5, color: "var(--red)", marginTop: 10 }}>{pwBoxMsg}</div>}
       </Section>
 
+      {/* 功能模块 */}
+      <Section title="功能模块">
+        <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.7, marginBottom: 4 }}>
+          家里没有对应的资产就关掉，相关的入口和卡片会跟着收起来，账户和余额不受影响。
+        </div>
+        <Row label="家族信托 / 独立运营资产"
+          hint="家族信托、家族基金这类独立于日常收支运作的资产：不计入家庭总资产，单独列示并跟踪锁定期、归属人和年化。">
+          <Switch checked={trustOn} onChange={toggleTrust} />
+        </Row>
+        {trustOn ? (
+          <div style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.7, paddingTop: 10 }}>
+            到「资金账户 → 新增账户」把分组选成<strong>家族信托</strong>，就能设归属人、年化利率和锁定期。
+            {trustAccounts.length > 0 && <>当前有 <strong>{trustAccounts.length}</strong> 个独立运营账户。</>}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.7, paddingTop: 10 }}>
+            已关闭。账户分组里不再出现「家族信托」，之前标成独立运营的账户会照常计入家庭总资产。
+          </div>
+        )}
+      </Section>
+
       {/* 外观 */}
       <Section title="外观">
         <Row label="主题" hint="浅色 / 深色"><Btn variant="ghost" onClick={toggle}>{theme === "light" ? "🌙 切换深色" : "☀️ 切换浅色"}</Btn></Row>
@@ -160,6 +237,11 @@ export default function Settings() {
 
       {/* 程序内备份 */}
       <Section title="程序内备份（命名还原点）">
+        <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.7, marginBottom: 12 }}>
+          还原点存在<strong>浏览器本机</strong>，和主数据同生共死——清浏览器数据会一起没。
+          它是防误操作的快速回退，<strong>不能当灾难备份用</strong>；异地留底请用下面的「导出金库文件」或大厅的整屋导出。
+          最多保留 {MAX_BACKUPS} 个，超出会自动挤掉最旧的。
+        </div>
         <div style={{ display: "flex", gap: 10, marginBottom: backups.length ? 12 : 4 }}>
           <TextField value={bkLabel} onChange={(e) => setBkLabel(e.target.value)} placeholder="备份名称（如 月末盘点）" onKeyDown={(e) => { if (e.key === "Enter") createBackup(); }} />
           <Btn onClick={createBackup} style={{ whiteSpace: "nowrap" }}><IconDownload />创建备份</Btn>
@@ -182,10 +264,31 @@ export default function Settings() {
         )}
       </Section>
 
+      {bkMsg && (
+        <div style={{ fontSize: 12.5, color: "var(--red)", lineHeight: 1.7, padding: "0 2px 4px" }}>{bkMsg}</div>
+      )}
+
+      {/* ③ 金库文件：只含理财这一个库，可拷到 U 盘异地留底 */}
+      <Section title="金库文件（只含家庭理财）">
+        <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 12 }}>
+          导出成<strong>一个加密文件</strong>（<code>.fvault</code>），可以拷到 U 盘或云盘异地留底。
+          文件本身是密文，<strong>恢复时要用导出当时的那个主密码</strong>。
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Btn onClick={exportVaultFile}><IconDownload />导出金库文件</Btn>
+          <Btn variant="ghost" onClick={() => fileRef.current?.click()}><IconUpload size={15} stroke="currentColor" />从金库文件恢复…</Btn>
+          <input ref={fileRef} type="file" accept=".fvault,.json,application/json" style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) importVaultFile(f); e.currentTarget.value = ""; }} />
+        </div>
+        {ioMsg && <div style={{ fontSize: 12.5, color: "var(--accent)", lineHeight: 1.7, marginTop: 10 }}>{ioMsg}</div>}
+      </Section>
+
       {/* 整屋备份在大厅做 */}
-      <Section title="备份">
+      <Section title="整屋备份">
         <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7 }}>
-          导出/导入<strong>整屋一份</strong>的备份在<strong>大厅「设置 · 数据」</strong>里统一进行（一个文件含全家所有世界）。上面的「程序内备份」是本机的快速还原点，仍可随时用。
+          想一次性备份<strong>全家所有世界</strong>（理财 + 影像 + 密码 + 各人的空间）请去<strong>大厅「设置 · 数据」</strong>，
+          那里导出的是一个文件含全部。另外，<strong>从 <code>run.py</code> 启动时</strong>大厅会每隔一会儿自动把整屋数据写到本机磁盘并保留最近 40 份历史；
+          如果是直接打开网页的，那条自动备份不生效，大厅顶栏会有红色提示。
         </div>
       </Section>
 

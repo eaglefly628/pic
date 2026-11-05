@@ -7,123 +7,266 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
-    --accent: #007AFF; --text: #1d1d1f; --text2: #6e6e73; --text3: #a1a1a6;
-    --card: rgba(255,255,255,0.80); --sep: rgba(0,0,0,0.08);
+    --accent: #a4633a; --text: #241f18; --text2: rgba(48,38,26,0.74); --text3: rgba(48,38,26,0.56);
+    --card: #fffaf1; --tile: #ece3d3; --sep: rgba(120,96,64,0.18);
+    --paper: #f5efe4;
+    --text-secondary: var(--text2); --text-tertiary: var(--text3); --fill: var(--tile);
+    --serif: "Songti SC", "STSong", "SimSun", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
   }
   html, body { height: 100%; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased; color: var(--text);
-    background: linear-gradient(150deg, #e7d8ef 0%, #d3e0f6 46%, #d9efe7 100%);
-    display: flex; flex-direction: column; overflow: hidden; transition: background .4s ease;
+    font-family: var(--sans); -webkit-font-smoothing: antialiased; color: var(--text);
+    background: var(--paper);
+    display: flex; flex-direction: column; overflow: hidden;
   }
-  body.scene-male   { background: linear-gradient(150deg, #dde7f0 0%, #d7e8e2 52%, #e3ebf1 100%); }
-  body.scene-female { background: linear-gradient(150deg, #f6e0ea 0%, #efe1f4 50%, #f8eadf 100%); }
-  /* 顶部菜单 */
+  body.scene-male, body.scene-female, body.scene-home { background: var(--paper); }
+
+  /* 顶栏 */
   #bar {
-    height: 50px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px;
-    background: rgba(255,255,255,0.6); backdrop-filter: blur(30px) saturate(180%);
-    -webkit-backdrop-filter: blur(30px) saturate(180%); border-bottom: 0.5px solid var(--sep); z-index: 10;
+    height: 54px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 26px;
+    background: var(--paper); border-bottom: 0.5px solid var(--sep); z-index: 10;
   }
-  .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; margin-right: 14px; cursor: pointer; }
-  .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(160deg, var(--accent), #5E5CE6); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 800; }
-  .tab { border: none; background: transparent; cursor: pointer; font-size: 13.5px; font-weight: 500; color: var(--text2); padding: 7px 14px; border-radius: 9px; }
-  .tab:hover { background: rgba(0,0,0,0.05); }
-  .tab.active { background: var(--accent); color: #fff; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 500; font-size: 15px; letter-spacing: 1.6px; margin-right: 26px; cursor: pointer; }
+  .logo { width: 26px; height: 26px; border-radius: 7px; background: none; border: 0.5px solid rgba(140,106,69,0.5); display: flex; align-items: center; justify-content: center; color: var(--accent); font-family: var(--serif); font-size: 12px; font-weight: 500; }
+  .tab { border: none; background: transparent; cursor: pointer; font-size: 13px; font-weight: 400; color: var(--text2); padding: 8px 0; margin-right: 22px; border-radius: 0; border-bottom: 1px solid transparent; }
+  .tab:hover { background: transparent; color: var(--text); }
+  .tab.active { background: transparent; color: var(--text); font-weight: 500; border-bottom-color: var(--accent); }
   .spacer { flex: 1; }
-  .hint { font-size: 11.5px; color: var(--text3); }
+  .hint { font-size: 11px; letter-spacing: 1.4px; color: var(--text3); margin-right: 16px; }
+  .barbtn, .lockbtn { border: none; background: transparent; cursor: pointer; font-size: 12.5px; font-weight: 400; color: var(--text2); padding: 6px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; }
+  .barbtn:hover, .lockbtn:hover { background: var(--tile); color: var(--text); }
+  .lockbtn { display: none; } .lockbtn.show { display: inline-flex; }
+
   /* 主区 */
   #stage { flex: 1; position: relative; min-height: 0; }
+
+  /* ── 设备预览：把舞台收成平板/手机宽度，不接真机也能看响应式 ── */
+  /* 磁盘备份没跑起来时的常驻警示——数据只在浏览器里，清一下就没了，值得一直挂着 */
+  .nobk { border: 1px solid rgba(178,63,52,.34); background: rgba(178,63,52,.10); color: #b23f34;
+          font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+  .nobk:hover { background: rgba(178,63,52,.16); }
+  .nobk::before { content: "⚠ "; }
+
+  .devsw { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg2); border: 1px solid var(--line); }
+  .devsw button { border: none; background: transparent; cursor: pointer; border-radius: 6px; padding: 4px 9px; font-size: 11.5px; color: var(--text2); display: inline-flex; align-items: center; gap: 4px; transition: background-color .16s ease, color .16s ease; }
+  .devsw button:hover { color: var(--text); }
+  .devsw button.on { background: var(--card); color: var(--text); font-weight: 500; box-shadow: 0 1px 2px rgba(70,54,34,.12); }
+  .devsw svg { width: 13px; height: 13px; flex: none; }
+
+  body[data-view] #stage { display: flex; align-items: flex-start; justify-content: center; padding: 20px 0; overflow: auto; }
+  body[data-view] #stage > iframe.show,
+  body[data-view] #stage > .screen:not(.hide) {
+    position: relative; inset: auto; flex: none;
+    width: var(--dev-w); height: var(--dev-h); max-height: calc(100vh - 100px);
+    border-radius: 20px; border: 1px solid var(--line); overflow: auto;
+    box-shadow: 0 26px 64px -20px rgba(70, 54, 34, .42);
+    background: var(--bg);
+  }
+  body[data-view] #stage > .screen:not(.hide) { padding: 28px 20px 36px; }
+
+  /* ── 入口页自己的响应式 ──────────────────────────────────────
+     两套选择器写同一份规则：
+       @media  —— 真机/真窗口变窄时生效
+       body[data-view=…] —— 上面的设备预览生效（预览是定宽容器，
+       媒体查询看的是视口，不会触发，所以必须另写一套）
+     ─────────────────────────────────────────────────────────── */
+  @media (max-width: 1023px) {
+    .sharedcards { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .welcome h1 { font-size: 26px; }
+    .screen { padding: 34px 22px 40px; }
+    .sec-head { margin: 34px 0 14px; }
+  }
+  @media (max-width: 767px) {
+    .sharedcards { grid-template-columns: 1fr; gap: 12px; }
+    /* 单列后不需要 236 的高度，改成图标在左、文字在右的紧凑行 */
+    .scard { min-height: 0; padding: 16px 18px; flex-direction: row; align-items: center; gap: 14px; border-radius: 16px; }
+    .scard .ico { margin-bottom: 0; width: 32px; height: 32px; }
+    .scard .ico svg { width: 26px; height: 26px; }
+    .doors { grid-template-columns: 1fr; gap: 12px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .welcome { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .welcome h1 { font-size: 24px; letter-spacing: 2px; }
+    .welcome p { font-size: 11px; }
+    .screen { padding: 24px 16px 32px; }
+    .sec-head { margin: 26px 0 12px; gap: 10px; }
+    .sec-head .aside { display: none; }          /* 窄屏放不下右侧注脚，收掉 */
+    /* 顶栏在 390 宽下原来会挤成竖排单字、整体溢出 71px，「入口」被压成 13px 的缝。
+       元素本身不换行（nowrap）+ 砍掉窄屏用不上的东西，让它老实排成一行。 */
+    #bar { padding: 0 12px; gap: 2px; }
+    #bar .hint { display: none; }
+    #bar .brand { margin-right: 12px; font-size: 0; letter-spacing: 0; gap: 0; }  /* 只留「家」logo，标题字收掉 */
+    #bar .brand .logo { font-size: 12px; }
+    #bar .tab { margin-right: 0; padding: 8px 10px; white-space: nowrap; flex: none; min-height: 44px; }
+    #bar .devsw { display: none; }        /* 设备预览是桌面上用的，真手机上没意义 */
+    #bar .nobk { font-size: 0; padding: 6px 8px; }        /* 只留 ⚠ 图标，点开还是进设置 */
+    #bar .nobk::before { font-size: 13px; }
+    #bar .barbtn, #bar .lockbtn { padding: 6px 8px; white-space: nowrap; flex: none; }
+    #bar .barbtn svg { display: none; }
+  }
+
+  /* 设备预览容器内：同上，但按预览宽度而不是视口宽度 */
+  body[data-view] .sharedcards { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  body[data-view] .welcome h1 { font-size: 26px; }
+  body[data-view] .sec-head { margin: 34px 0 14px; }
+  body[data-view="phone"] .sharedcards { grid-template-columns: 1fr; gap: 12px; }
+  body[data-view="phone"] .scard { min-height: 0; padding: 16px 18px; flex-direction: row; align-items: center; gap: 14px; border-radius: 16px; }
+  body[data-view="phone"] .scard .ico { margin-bottom: 0; width: 32px; height: 32px; }
+  body[data-view="phone"] .scard .ico svg { width: 26px; height: 26px; }
+  body[data-view="phone"] .doors { grid-template-columns: 1fr; gap: 12px; }
+  body[data-view="phone"] .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  body[data-view="phone"] .welcome { flex-direction: column; align-items: flex-start; gap: 8px; }
+  body[data-view="phone"] .welcome h1 { font-size: 24px; letter-spacing: 2px; }
+  body[data-view="phone"] .sec-head { margin: 26px 0 12px; gap: 10px; }
+  body[data-view="phone"] .sec-head .aside { display: none; }
+  body[data-view="tablet"] { --dev-w: 900px; --dev-h: 1180px; }
+  body[data-view="phone"]  { --dev-w: 390px; --dev-h: 844px; }
+  /* 预览宽度比真机窄时，别让外壳自己再横向滚 */
+  body[data-view] .wrap { max-width: 100%; }
   iframe { width: 100%; height: 100%; border: none; display: none; background: #fff; }
   iframe.show { display: block; }
-  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; overflow: auto; padding: 40px 32px 48px; }
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; overflow: auto; padding: 54px 40px 56px; }
   .screen.hide { display: none; }
+  .wrap { width: 100%; max-width: 1060px; }
 
-  /* 首页：两扇门 */
-  #home { justify-content: center; gap: 30px; }
-  .welcome { text-align: center; }
-  .welcome h1 { font-size: 27px; letter-spacing: -0.01em; }
-  .welcome p { color: var(--text2); font-size: 14px; margin-top: 8px; }
-  .doors { display: flex; gap: 22px; width: 100%; max-width: 880px; }
-  .door {
-    flex: 1; min-height: 320px; border: none; cursor: pointer; border-radius: 24px; padding: 30px 28px;
-    color: #fff; text-align: left; display: flex; flex-direction: column; position: relative; overflow: hidden;
-    box-shadow: 0 18px 50px -18px rgba(20,20,40,0.45); transition: transform .18s, box-shadow .18s;
+  /* 首页页头 */
+  #home { justify-content: flex-start; gap: 0; }
+  .welcome { width: 100%; max-width: 1060px; display: flex; align-items: flex-end; justify-content: space-between; }
+  .welcome h1 { font-family: var(--serif); font-size: 32px; font-weight: 500; letter-spacing: 3px; line-height: 1.2; }
+  .welcome .eyebrow { font-size: 10.5px; letter-spacing: 3.4px; color: var(--text3); margin-bottom: 12px; }
+  .welcome p { color: var(--text3); font-size: 11.5px; font-family: var(--serif); letter-spacing: 1px; margin: 0; }
+
+  /* 分节标题 */
+  .sec-head { width: 100%; max-width: 1060px; display: flex; align-items: center; gap: 16px; margin: 46px 0 18px; }
+  .sec-head .lbl { font-size: 10.5px; letter-spacing: 3.4px; color: var(--text2); white-space: nowrap; }
+  .sec-head .rule { flex: 1; height: 0.5px; background: var(--sep); }
+  .sec-head .aside { font-size: 11px; color: var(--text3); white-space: nowrap; }
+
+  /* 家庭公用：三张大卡 */
+  .sharedrow { width: 100%; max-width: 1060px; }
+  .sharedcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .scard {
+    background: var(--card); border: 0.5px solid var(--sep); border-radius: 22px; padding: 26px;
+    cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; gap: 0;
+    text-align: left; min-height: 236px; transition: border-color .35s, transform .35s cubic-bezier(.16,.84,.3,1);
   }
-  .door:hover { transform: translateY(-4px); box-shadow: 0 26px 64px -20px rgba(20,20,40,0.55); }
-  .door.male   { background: linear-gradient(155deg, #3b6fb0 0%, #2f7d6b 60%, #274c5e 100%); }
-  .door.female { background: linear-gradient(155deg, #e683a4 0%, #c77fd8 58%, #b66ab0 100%); }
-  .door .demoji { font-size: 46px; }
-  .door .dtag { margin-top: auto; font-size: 13px; opacity: 0.85; font-weight: 600; letter-spacing: 0.04em; }
-  .door .dtitle { font-size: 30px; font-weight: 800; margin-top: 4px; letter-spacing: -0.01em; }
-  .door .dsub { font-size: 13px; opacity: 0.92; margin-top: 12px; line-height: 1.7; }
-  .door .denter { margin-top: 18px; font-size: 14px; font-weight: 700; }
-  .door .glow { position: absolute; right: -40px; top: -40px; width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,0.16); }
+  .scard:hover { transform: translateY(-3px); border-color: var(--accent); }
+  .scard .ico {
+    width: 44px; height: 44px; border-radius: 0; display: flex; align-items: center; justify-content: flex-start;
+    flex: none; margin-bottom: auto;
+    background: none !important; color: var(--accent) !important;
+  }
+  .scard .ico svg, .tico svg { width: 100%; height: 100%; display: block; }
+  .scard h4 { font-family: var(--serif); font-size: 20px; font-weight: 500; letter-spacing: 1.5px; margin-top: 22px; }
+  .scard .d { font-size: 12px; color: var(--text2); margin-top: 9px; line-height: 1.75; }
 
-  .sharedrow { width: 100%; max-width: 880px; }
-  .sharedlabel { font-size: 12px; color: var(--text3); font-weight: 600; margin-bottom: 10px; letter-spacing: 0.04em; }
-  .sharedcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .scard { background: var(--card); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 0.5px solid var(--sep); border-radius: 14px; padding: 14px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; text-align: left; transition: transform .15s; }
-  .scard:hover { transform: translateY(-2px); }
-  .scard .ico { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; flex: none; }
-  .scard h4 { font-size: 14px; } .scard .d { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  /* 两个世界：细长次要入口 */
+  .doors { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; width: 100%; max-width: 1060px; }
+  .door {
+    min-height: 0; border: 0.5px solid var(--sep); cursor: pointer; border-radius: 18px; padding: 20px 24px;
+    background: transparent; color: var(--text); text-align: left; display: flex; flex-direction: column;
+    position: relative; overflow: hidden; box-shadow: none;
+    transition: border-color .35s, background .35s;
+  }
+  .door:hover { transform: none; box-shadow: none; border-color: var(--accent); background: var(--card); }
+  .door.male, .door.female { background: transparent; }
+  .door .glow, .door .demoji { display: none; }
+  .door .dtag { margin-top: 0; font-size: 10px; letter-spacing: 2.6px; color: var(--text3); font-weight: 400; order: -1; }
+  .door .dtitle { font-family: var(--serif); font-size: 19px; font-weight: 500; letter-spacing: 1.5px; margin-top: 10px; }
+  .door .dsub { font-size: 11.5px; color: var(--text2); margin-top: 8px; line-height: 1.7; opacity: 1; }
+  .door .denter { margin-top: 14px; font-size: 12px; font-weight: 400; color: var(--accent); }
 
   /* 男主 / 女主世界 */
-  .back { align-self: flex-start; border: none; background: rgba(255,255,255,0.7); border: 0.5px solid var(--sep); cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text2); padding: 7px 14px; border-radius: 10px; margin-bottom: 18px; }
-  .back:hover { background: #fff; }
-  .whead { text-align: center; margin-bottom: 26px; }
-  .whead h2 { font-size: 25px; letter-spacing: -0.01em; }
-  .whead p { color: var(--text2); font-size: 13.5px; margin-top: 7px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 14px; width: 100%; max-width: 920px; }
+  .back { align-self: flex-start; border: none; background: transparent; cursor: pointer; font-size: 12.5px; font-weight: 400; color: var(--text2); padding: 6px 0; border-radius: 0; margin-bottom: 26px; }
+  .back:hover { background: transparent; color: var(--text); }
+  .whead { text-align: left; width: 100%; max-width: 1060px; margin-bottom: 30px; }
+  .whead h2 { font-family: var(--serif); font-size: 27px; font-weight: 500; letter-spacing: 2.4px; }
+  .whead p { color: var(--text3); font-size: 12px; margin-top: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; width: 100%; max-width: 1060px; }
   .tile {
-    position: relative; background: var(--card); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border: 0.5px solid var(--sep); border-radius: 16px; padding: 16px; cursor: pointer; text-align: left;
-    box-shadow: 0 8px 24px -14px rgba(20,20,40,0.3); transition: transform .15s, box-shadow .15s; display: flex; flex-direction: column;
+    position: relative; background: var(--card); border: 0.5px solid var(--sep); border-radius: 16px; padding: 18px;
+    cursor: pointer; text-align: left; box-shadow: none; display: flex; flex-direction: column;
+    transition: border-color .35s, transform .35s cubic-bezier(.16,.84,.3,1);
   }
-  .tile:hover { transform: translateY(-3px); box-shadow: 0 16px 36px -16px rgba(20,20,40,0.42); }
-  .tile.soon { cursor: default; }
-  .tile.soon:hover { transform: none; box-shadow: 0 8px 24px -14px rgba(20,20,40,0.3); }
-  .tico { width: 46px; height: 46px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; margin-bottom: 12px; }
-  .tname { font-size: 15px; font-weight: 700; }
-  .tdesc { font-size: 11.5px; color: var(--text2); margin-top: 5px; line-height: 1.55; min-height: 34px; }
-  .badge { margin-top: 11px; align-self: flex-start; font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
-  .badge.soon { background: rgba(0,0,0,0.05); color: var(--text3); }
-  .badge.live { background: rgba(0,122,255,0.12); color: var(--accent); }
-  .foot { font-size: 12px; color: var(--text3); margin-top: 30px; text-align: center; }
+  .tile:hover { transform: translateY(-3px); box-shadow: none; border-color: var(--accent); }
+  .tile.soon { cursor: default; opacity: 0.62; }
+  .tile.soon:hover { transform: none; box-shadow: none; border-color: var(--sep); }
+  .tico {
+    width: 30px; height: 30px; border-radius: 0; display: flex; align-items: center; justify-content: flex-start;
+    margin-bottom: 16px;
+    background: none !important; color: var(--accent) !important;
+  }
+  .tname { font-family: var(--serif); font-size: 15px; font-weight: 500; letter-spacing: 1px; }
+  .tdesc { font-size: 11px; color: var(--text2); margin-top: 6px; line-height: 1.6; min-height: 34px; }
+  .badge { margin-top: 12px; align-self: flex-start; font-size: 10px; font-weight: 400; letter-spacing: 1.2px; padding: 2px 0; border-radius: 0; }
+  .badge.soon { background: transparent; color: var(--text3); }
+  .badge.live { background: transparent; color: var(--accent); }
+  .foot { font-size: 11px; font-family: var(--serif); letter-spacing: 1px; color: var(--text3); margin-top: 46px; text-align: center; }
+
+  .tile.add {
+    background: transparent; border: 0.5px dashed var(--sep); align-items: center; justify-content: center;
+    color: var(--text3); min-height: 148px; gap: 10px;
+  }
+  .tile.add:hover { border-color: var(--accent); border-style: dashed; color: var(--accent); transform: none; }
+  .tile.add .plus { font-size: 20px; line-height: 1; font-weight: 300; }
+  .tile.add .lb { font-size: 12px; letter-spacing: 1.4px; }
+  .emptyhint { width: 100%; max-width: 1060px; font-size: 12px; color: var(--text3); line-height: 1.9; margin-bottom: 18px; }
+
+  #library { position: fixed; inset: 0; z-index: 95; display: none; align-items: center; justify-content: center; background: rgba(58,46,32,0.3); backdrop-filter: blur(3px); }
+  #library.show { display: flex; }
+  #library .lcard { width: 560px; max-width: 92%; max-height: 84%; display: flex; flex-direction: column; background: var(--card); border-radius: 20px; padding: 26px 28px; box-shadow: 0 24px 70px rgba(80,62,40,0.22); }
+  #library h3 { font-family: var(--serif); font-size: 18px; font-weight: 500; letter-spacing: 1.6px; }
+  #library .lsub { font-size: 11.5px; color: var(--text2); margin: 7px 0 18px; line-height: 1.7; }
+  #library .llist { overflow: auto; display: flex; flex-direction: column; }
+  #library .lrow { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-top: 0.5px solid var(--sep); }
+  #library .lrow:first-child { border-top: none; }
+  #library .lico { width: 22px; height: 22px; flex: none; color: var(--accent); }
+  #library .lico svg { width: 100%; height: 100%; display: block; }
+  #library .lname { font-family: var(--serif); font-size: 15px; font-weight: 500; letter-spacing: 1px; }
+  #library .ldesc { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  #library .lbtn { margin-left: auto; border: 0.5px solid var(--sep); background: transparent; color: var(--text2); border-radius: 9px; padding: 7px 15px; font-size: 12px; cursor: pointer; flex: none; }
+  #library .lbtn:hover { border-color: var(--accent); color: var(--accent); }
+  #library .lbtn.on { background: var(--tile); border-color: transparent; color: var(--text2); }
+  #library .lclose { float: right; border: none; background: transparent; cursor: pointer; color: var(--text3); line-height: 0; padding: 2px; }
+  #library .lclose:hover { color: var(--text); }
+
   /* toast */
-  #toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1d1d1f; color: #fff; font-size: 13px; padding: 10px 18px; border-radius: 11px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 50; }
+  #toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--paper); font-size: 12.5px; padding: 11px 20px; border-radius: 10px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 50; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  /* 大厅主密码门 */
-  #gate { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(150deg, #e7d8ef 0%, #d3e0f6 46%, #d9efe7 100%); }
+
+  /* 主密码门 */
+  #gate { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center; background: var(--paper); }
   #gate .gcard { width: 320px; max-width: 90%; display: flex; flex-direction: column; align-items: center; gap: 15px; }
-  #gate .glogo { width: 62px; height: 62px; border-radius: 17px; background: linear-gradient(160deg,var(--accent),#5E5CE6); display:flex; align-items:center; justify-content:center; color:#fff; font-size:28px; font-weight:800; box-shadow: 0 10px 30px rgba(94,92,230,0.32); }
-  #gate h2 { font-size: 18px; } #gate .gsub { font-size: 12.5px; color: var(--text2); margin-top: 5px; text-align:center; }
-  #gate input { width: 100%; height: 40px; padding: 0 14px; font-size: 14px; border-radius: 11px; border: 0.5px solid var(--sep); background: rgba(255,255,255,0.72); outline: none; }
-  #gate .gbtn { width: 100%; height: 40px; border: none; border-radius: 11px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
-  #gate .gbtn:disabled { opacity: 0.6; cursor: default; }
-  #gate .gerr { font-size: 12px; color: #FF3B30; min-height: 15px; text-align: center; }
-  #gate .gnote { font-size: 11px; color: var(--text3); text-align: center; line-height: 1.6; max-width: 280px; }
-  .lockbtn { border: none; background: rgba(0,0,0,0.05); cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text2); padding: 6px 12px; border-radius: 9px; display: none; align-items: center; gap: 5px; }
-  .lockbtn.show { display: inline-flex; }
-  .barbtn { border: none; background: rgba(0,0,0,0.05); cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text2); padding: 6px 12px; border-radius: 9px; display: inline-flex; align-items: center; gap: 5px; }
+  #gate .glogo { width: 58px; height: 58px; border-radius: 16px; background: none; border: 0.5px solid rgba(140,106,69,0.5); display:flex; align-items:center; justify-content:center; color: var(--accent); font-family: var(--serif); font-size:24px; font-weight:500; box-shadow: none; }
+  #gate h2 { font-family: var(--serif); font-size: 18px; font-weight: 500; letter-spacing: 1.6px; }
+  #gate .gsub { font-size: 12px; color: var(--text2); margin-top: 7px; text-align:center; line-height: 1.6; }
+  #gate input { width: 100%; height: 42px; padding: 0 14px; font-size: 14px; border-radius: 11px; border: 0.5px solid var(--sep); background: var(--card); outline: none; }
+  #gate input:focus { border-color: var(--accent); }
+  #gate .gbtn { width: 100%; height: 42px; border: none; border-radius: 11px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; }
+  #gate .gbtn:disabled { opacity: 0.5; cursor: default; }
+  #gate .gerr { font-size: 12px; color: #a8443c; min-height: 15px; text-align: center; }
+  #gate .gnote { font-size: 10.5px; color: var(--text3); text-align: center; line-height: 1.8; max-width: 290px; }
+
   /* 设置 · 数据 */
-  #settings { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.32); backdrop-filter: blur(3px); }
+  #settings { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; background: rgba(58,46,32,0.3); backdrop-filter: blur(3px); }
   #settings.show { display: flex; }
-  #settings .scard2 { width: 470px; max-width: 92%; max-height: 86%; overflow: auto; background: #fff; border-radius: 18px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(20,20,40,0.4); }
-  #settings h3 { font-size: 17px; }
-  #settings .ssub { font-size: 12px; color: var(--text2); margin: 4px 0 16px; }
-  #settings .sec { border-top: 0.5px solid var(--sep); padding: 15px 0; }
+  #settings .scard2 { width: 480px; max-width: 92%; max-height: 86%; overflow: auto; background: var(--card); border-radius: 20px; padding: 26px 28px; box-shadow: 0 24px 70px rgba(80,62,40,0.22); }
+  #settings h3 { font-family: var(--serif); font-size: 18px; font-weight: 500; letter-spacing: 1.6px; }
+  #settings .ssub { font-size: 11.5px; color: var(--text2); margin: 7px 0 20px; }
+  #settings .sec { border-top: 0.5px solid var(--sep); padding: 18px 0; }
   #settings .sec:first-of-type { border-top: none; padding-top: 0; }
-  #settings .seclabel { font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 10px; }
-  #settings input.tin { width: 100%; height: 38px; padding: 0 12px; font-size: 14px; border-radius: 10px; border: 0.5px solid var(--sep); background: #f5f5f7; outline: none; }
+  #settings .seclabel { font-size: 11px; font-weight: 500; letter-spacing: 1.6px; color: var(--text2); margin-bottom: 12px; }
+  #settings input.tin { width: 100%; height: 40px; padding: 0 13px; font-size: 14px; border-radius: 10px; border: 0.5px solid var(--sep); background: var(--paper); outline: none; }
+  #settings input.tin:focus { border-color: var(--accent); }
   #settings .row2 { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  #settings .pbtn { border: none; border-radius: 10px; padding: 9px 15px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  #settings .pbtn { border: none; border-radius: 10px; padding: 10px 16px; font-size: 12.5px; font-weight: 500; cursor: pointer; }
   #settings .pbtn.primary { background: var(--accent); color: #fff; }
-  #settings .pbtn.soft { background: rgba(0,0,0,0.05); color: var(--text); }
+  #settings .pbtn.soft { background: var(--tile); color: var(--text); }
   #settings .pbtn.ghost { background: transparent; color: var(--text2); border: 0.5px solid var(--sep); }
-  #settings .pbtn:disabled { opacity: 0.55; cursor: default; }
-  #settings .shint { font-size: 11px; color: var(--text3); margin-top: 9px; line-height: 1.6; }
-  #settings .sclose { float: right; border: none; background: transparent; font-size: 17px; cursor: pointer; color: var(--text3); line-height: 1; }
+  #settings .pbtn:disabled { opacity: 0.5; cursor: default; }
+  #settings .shint { font-size: 10.5px; color: var(--text3); margin-top: 10px; line-height: 1.8; }
+  #settings .sclose { float: right; border: none; background: transparent; cursor: pointer; color: var(--text3); line-height: 0; padding: 2px; }
+  #settings .sclose:hover { color: var(--text); }
 </style>
 </head>
 <body class="scene-home">
@@ -135,7 +278,7 @@
       <input id="gpw2" type="password" placeholder="再次输入" autocomplete="new-password" style="display:none" />
       <div class="gerr" id="gerr"></div>
       <button class="gbtn" id="gbtn">解锁</button>
-      <button id="gbio" style="display:none;width:100%;height:40px;border:0.5px solid var(--accent);border-radius:11px;background:rgba(0,122,255,0.08);color:var(--accent);font-size:14px;font-weight:600;cursor:pointer">🔑 用 Touch ID 解锁</button>
+      <button id="gbio" style="display:none;width:100%;height:40px;border:0.5px solid var(--accent);border-radius:11px;background:rgba(0,122,255,0.08);color:var(--accent);font-size:14px;font-weight:600;cursor:pointer"><span style="display:inline-flex;align-items:center;justify-content:center;gap:7px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10.2 13.2 8.3-8.3M16 7.4l2.2 2.2M13.6 9.8l2.2 2.2"/></svg>用 Touch ID 解锁</span></button>
       <button id="gcancel" style="border:none;background:transparent;color:var(--text2);font-size:12.5px;cursor:pointer">取消</button>
       <div class="gnote">「家庭理财」的主密码。本地加密、只存这台机器，忘了找不回。其它世界进去不用密码。</div>
     </div>
@@ -147,43 +290,57 @@
     <button class="tab" data-go="female">女主</button>
     <span class="spacer"></span>
     <span class="hint">本地 · 私密 · 不上传</span>
-    <button class="barbtn" id="setbtn">⚙ 设置</button>
-    <button class="lockbtn" id="lockbtn">🔒 锁定</button>
+    <button class="nobk" id="nobk" hidden title="点开设置查看怎么启用">本机备份未启用</button>
+    <span class="devsw" id="devsw" title="预览不同屏幕尺寸">
+      <button data-view="" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M8.5 20h7M12 16.5V20"/></svg>桌面</button>
+      <button data-view="tablet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="2.2"/><path d="M10.8 18.6h2.4"/></svg>平板</button>
+      <button data-view="phone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.4"/><path d="M10.9 18.8h2.2"/></svg>手机</button>
+    </span>
+    <button class="barbtn" id="setbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.4a1.5 1.5 0 0 0 .3 1.7l.1.1a1.8 1.8 0 1 1-2.6 2.6l-.1-.1a1.5 1.5 0 0 0-1.7-.3 1.5 1.5 0 0 0-.9 1.4v.2a1.8 1.8 0 1 1-3.6 0v-.1a1.5 1.5 0 0 0-1-1.4 1.5 1.5 0 0 0-1.7.3l-.1.1a1.8 1.8 0 1 1-2.6-2.6l.1-.1a1.5 1.5 0 0 0 .3-1.7 1.5 1.5 0 0 0-1.4-.9h-.2a1.8 1.8 0 1 1 0-3.6h.1a1.5 1.5 0 0 0 1.4-1 1.5 1.5 0 0 0-.3-1.7l-.1-.1a1.8 1.8 0 1 1 2.6-2.6l.1.1a1.5 1.5 0 0 0 1.7.3h.1a1.5 1.5 0 0 0 .9-1.4v-.2a1.8 1.8 0 1 1 3.6 0v.1a1.5 1.5 0 0 0 .9 1.4 1.5 1.5 0 0 0 1.7-.3l.1-.1a1.8 1.8 0 1 1 2.6 2.6l-.1.1a1.5 1.5 0 0 0-.3 1.7v.1a1.5 1.5 0 0 0 1.4.9h.2a1.8 1.8 0 1 1 0 3.6h-.1a1.5 1.5 0 0 0-1.4.9Z"/></svg>设置</button>
+    <button class="lockbtn" id="lockbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><rect x="4" y="10.5" width="16" height="10.5" rx="2.4"/><path d="M7.8 10.5V7.8a4.2 4.2 0 0 1 8.4 0v2.7"/></svg>锁定</button>
   </div>
 
   <div id="stage">
     <!-- 首页：两扇门 -->
     <div id="home" class="screen">
-      <div class="welcome"><h1>我家里的一切</h1><p>他和她的世界 · 各进各的门</p></div>
+      <div class="welcome">
+        <div>
+          <div class="eyebrow">本 地 · 私 密 · 离 线 可 用</div>
+          <h1>我家里的一切</h1>
+        </div>
+        <p>数据全部保存在本机 · 不联网、不上传</p>
+      </div>
+
+      <div class="sec-head"><span class="lbl">家 庭 公 用</span><span class="rule"></span><span class="aside">两个人都在用</span></div>
+      <div class="sharedrow">
+        <div class="sharedcards" id="sharedcards"></div>
+      </div>
+
+      <div class="sec-head"><span class="lbl">个 人 空 间</span><span class="rule"></span><span class="aside">各进各的门</span></div>
       <div class="doors">
         <button class="door male" data-go="male">
           <span class="glow"></span>
-          <div class="demoji">🎣</div>
-          <div class="dtag">男主入口</div>
+          <div class="dtag">男 主</div>
           <div class="dtitle">他的世界</div>
-          <div class="dsub">开发 · 钓鱼 · 爱车 · 麻将 · 文玩盘玩 · 茶 · 酒柜 · 收藏 · 腕表 · 看球 …</div>
+          <div class="dsub">开发 · 钓鱼 · 爱车 · 麻将 · 文玩 · 茶 · 酒柜 · 收藏 · 腕表 · 看球</div>
           <div class="denter">进入 →</div>
         </button>
         <button class="door female" data-go="female">
           <span class="glow"></span>
-          <div class="demoji">💄</div>
-          <div class="dtag">女主入口</div>
+          <div class="dtag">女 主</div>
           <div class="dtitle">她的世界</div>
-          <div class="dsub">彩妆 · 护肤保养 · 珠宝鉴赏 · 衣橱穿搭 · 包包 · 香水 · 美甲 · 烘焙 · 花艺 …</div>
+          <div class="dsub">彩妆 · 护肤 · 珠宝 · 穿搭 · 包包 · 香水 · 美甲 · 烘焙 · 花艺</div>
           <div class="denter">进入 →</div>
         </button>
       </div>
-      <div class="sharedrow">
-        <div class="sharedlabel">家里共用</div>
-        <div class="sharedcards" id="sharedcards"></div>
-      </div>
+
       <div class="foot">数据全部保存在本机，离线可用 · 不联网、不上传</div>
     </div>
 
     <!-- 男主世界 -->
     <div id="male" class="screen hide">
       <button class="back" data-go="home">← 回入口</button>
-      <div class="whead"><h2>男主的世界 🎣</h2><p>他喜欢的，都在这儿 · 点开「开发世界」已经能用，其它陆续做</p></div>
+      <div class="whead"><h2><span style="display:inline-flex;align-items:center;gap:12px">男主的世界<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px;flex:none;color:var(--text3)"><path d="M3 12c3-4 7-5.5 11-4.5 2.4.6 4.4 2.2 5.6 4.5-1.2 2.3-3.2 3.9-5.6 4.5C10 17.5 6 16 3 12Z"/><circle cx="8.5" cy="11" r=".9"/></svg></span></h2><p>只放你添上的卡片 · 其余都收在卡片库里</p></div>
       <div class="grid" id="malegrid"></div>
       <div class="foot">想先做哪个？告诉我，就像开发世界那样做扎实。</div>
     </div>
@@ -191,7 +348,7 @@
     <!-- 女主世界 -->
     <div id="female" class="screen hide">
       <button class="back" data-go="home">← 回入口</button>
-      <div class="whead"><h2>女主的世界 💄</h2><p>她喜欢的，都在这儿 · 挑一个先做成真正能用的</p></div>
+      <div class="whead"><h2><span style="display:inline-flex;align-items:center;gap:12px">女主的世界<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px;flex:none;color:var(--text3)"><path d="M9 10.5h6V21H9Z"/><path d="M9.6 10.5V5.6l2.6-2.1 2.2 1.6v5.4"/></svg></span></h2><p>只放你添上的卡片 · 其余都收在卡片库里</p></div>
       <div class="grid" id="femalegrid"></div>
       <div class="foot">想先做哪个？告诉我，就像开发世界那样做扎实。</div>
     </div>
@@ -200,7 +357,7 @@
   </div>
   <div id="settings">
     <div class="scard2">
-      <button class="sclose" id="sclose">✕</button>
+      <button class="sclose" id="sclose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></svg></button>
       <h3>设置 · 数据</h3>
       <div class="ssub">用户、设置、备份都收在大厅这一处。</div>
       <div class="sec">
@@ -217,69 +374,126 @@
         <div class="seclabel">本机自动备份 · 防丢失
           <span id="verlabel" style="margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--fill);color:var(--text-secondary);font-size:11px;font-weight:600"></span>
         </div>
-        <div class="shint" id="bkstatus">每隔一会儿、以及每次离开页面时，自动把全屋数据存到本机磁盘；开机若发现本机是空的会自动恢复。换新版本 App 也照样读回来。</div>
+        <div class="shint" id="bkstatus">主应用数据会自动存到本机磁盘；点击“立即备份”时还会把健康档案与原件一起加密打包。换新版本 App 仍可读取。</div>
         <div class="row2">
-          <button class="pbtn soft" id="bknow">立即备份到本机</button>
+          <button class="pbtn soft" id="bknow">立即备份整屋与健康数据</button>
           <button class="pbtn ghost" id="bkrestore">从本机备份恢复…</button>
+        </div>
+        <div id="bkpick" hidden style="margin-top:10px;padding:10px 12px;border:0.5px solid var(--sep);border-radius:10px;background:var(--bg2)">
+          <div class="shint" style="margin:0 0 8px">选一份历史版本恢复（自动备份最近 40 次全留，再往前按天留 30 天、按周留 12 周）：</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="bksel" style="flex:1;min-width:220px;height:32px;border-radius:8px;border:0.5px solid var(--sep);background:var(--card);color:var(--text);font-size:12.5px;padding:0 8px"></select>
+            <button class="pbtn soft" id="bkgo">恢复这一份</button>
+          </div>
         </div>
         <div class="shint" id="bkdir" style="color:var(--text-tertiary);word-break:break-all"></div>
       </div>
       <div class="sec">
-        <div class="seclabel">整屋备份 · 一个文件，含所有世界 + 设置</div>
+        <div class="seclabel">主应用数据导出 · 一个文件，含各世界 + 设置</div>
         <div class="row2">
           <button class="pbtn soft" id="bkexport">导出全部</button>
           <button class="pbtn ghost" id="bkimport">从备份恢复…</button>
           <input type="file" id="bkfile" style="display:none" />
         </div>
-        <div class="shint">导出的是<b>一个文件</b>，可拷到 U 盘/云盘异地留底。恢复会用所选文件<b>替换</b>本机当前全部数据，完成后自动刷新。</div>
+        <div class="shint">此按钮只导出主应用数据。含健康档案与原件的加密备份请点上方“立即备份整屋与健康数据”。恢复主应用文件会替换当前主应用数据。</div>
         <div class="shint" id="bkmsg" style="color:var(--accent)"></div>
       </div>
+    </div>
+  </div>
+  <div id="library">
+    <div class="lcard">
+      <button class="lclose" id="lclose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" style="width:14px;height:14px"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></svg></button>
+      <h3 id="ltitle">卡片库</h3>
+      <div class="lsub">首页只放你正在用的。想要哪个就从这儿添上，不用的随时移除。</div>
+      <div class="llist" id="llist"></div>
     </div>
   </div>
   <div id="toast"></div>
 
   <script>
     const SRC = { finance: '/finance/', gallery: '/gallery/', vault: '/vault/', dev: '/dev/' };
+    // 细线图标：24×24，1.2px 描边，随 CSS color 走
+    const I = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+    const G = {
+      wallet:  '<path d="M3 7.5h14.5A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5H5.5A2.5 2.5 0 0 1 3 17V7.5Z"/><path d="M3 7.5 15.5 4.2"/><circle cx="16" cy="13.5" r="1.1"/>',
+      photo:   '<rect x="3" y="5.5" width="18" height="13" rx="2.4"/><circle cx="8.6" cy="10.4" r="1.5"/><path d="m3.6 16.8 4.6-4.2 4 3.4 3.4-3 4.4 3.8"/>',
+      lock:    '<rect x="4" y="10.5" width="16" height="10.5" rx="2.4"/><path d="M7.8 10.5V7.8a4.2 4.2 0 0 1 8.4 0v2.7"/><circle cx="12" cy="15.6" r="1.1"/>',
+      code:    '<path d="m8.5 8.5-4 3.5 4 3.5"/><path d="m15.5 8.5 4 3.5-4 3.5"/><path d="M13.4 5.6 10.6 18.4"/>',
+      fish:    '<path d="M3 12c3-4 7-5.5 11-4.5 2.4.6 4.4 2.2 5.6 4.5-1.2 2.3-3.2 3.9-5.6 4.5C10 17.5 6 16 3 12Z"/><circle cx="8.5" cy="11" r=".9"/><path d="M19.6 12c1-1.6 1.4-3 1.4-3"/>',
+      dumbbell:'<path d="M6.5 9v6M9.5 7.5v9M14.5 7.5v9M17.5 9v6"/><path d="M9.5 12h5"/><path d="M3.5 10.5v3M20.5 10.5v3"/>',
+      car:     '<path d="M4 15.5h16"/><path d="M5.5 15.5v2.2a.8.8 0 0 1-.8.8H3.8a.8.8 0 0 1-.8-.8v-2.2"/><path d="M21 15.5v2.2a.8.8 0 0 1-.8.8h-.9a.8.8 0 0 1-.8-.8v-2.2"/><path d="M3 15.5v-3.2l2-4.6A1.6 1.6 0 0 1 6.5 6.7h11a1.6 1.6 0 0 1 1.5 1l2 4.6v3.2Z"/><path d="M5.2 12.3h13.6"/>',
+      mahjong: '<rect x="6" y="3.5" width="12" height="17" rx="2"/><path d="M9.2 8h5.6M9.2 12h5.6M9.2 16h5.6"/>',
+      beads:   '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="4.5" r="1.5"/><circle cx="19.5" cy="12" r="1.5"/><circle cx="12" cy="19.5" r="1.5"/><circle cx="4.5" cy="12" r="1.5"/>',
+      tea:     '<path d="M4.5 9h12v5.5a4 4 0 0 1-4 4H8.5a4 4 0 0 1-4-4Z"/><path d="M16.5 10.5h1.8a2.2 2.2 0 0 1 0 4.4h-1.8"/><path d="M8 6c.6-.8.6-1.6 0-2.4M11.5 6c.6-.8.6-1.6 0-2.4"/>',
+      bottle:  '<path d="M10 3.5h4v3l2 2.6V20a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9.1l2-2.6Z"/><path d="M8 13h8"/>',
+      coin:    '<circle cx="9.5" cy="9.5" r="5.5"/><path d="M14.4 6.3a5.5 5.5 0 1 1-4.9 9.4"/>',
+      watch:   '<circle cx="12" cy="12" r="5"/><path d="M9.5 7 9 3.5h6L14.5 7M9.5 17 9 20.5h6L14.5 17"/><path d="M12 10v2.2l1.4 1"/>',
+      camera:  '<path d="M4 8h3l1.4-2h7.2L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13.2" r="3.4"/>',
+      ball:    '<circle cx="12" cy="12" r="8.5"/><path d="m12 7 3.6 2.6-1.4 4.3H9.8L8.4 9.6Z"/><path d="M12 3.5v3.5M4.4 9.6l4 0M19.6 9.6l-4 0M7.6 19.6l2.2-5.7M16.4 19.6l-2.2-5.7"/>',
+      chess:   '<rect x="3.5" y="3.5" width="17" height="17" rx="1.6"/><path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>',
+      tent:    '<path d="m12 4 8.5 15.5H3.5Z"/><path d="M12 4v15.5"/><path d="m12 12.5 4 7M12 12.5l-4 7"/>',
+      plant:   '<path d="M12 20v-7"/><path d="M12 13c0-3-2-5-5-5 0 3 2 5 5 5Z"/><path d="M12 13c0-3.4 2.2-5.6 5.6-5.6 0 3.4-2.2 5.6-5.6 5.6Z"/><path d="M8 20h8"/>',
+      health:  '<path d="M3 12.5h3.6l1.6-3.4 2.6 6.4 2-4.4 1.4 2.4H21"/>',
+      lipstick:'<path d="M9 10.5h6V21H9Z"/><path d="M9.6 10.5V5.6l2.6-2.1 2.2 1.6v5.4"/>',
+      serum:   '<path d="M9.5 3.5h5v2.4H9.5Z"/><path d="M10.2 5.9v2L8 10.6V19a1.5 1.5 0 0 0 1.5 1.5h5A1.5 1.5 0 0 0 16 19v-8.4l-2.2-2.7v-2"/><path d="M8 14h8"/>',
+      gem:     '<path d="m5 9.5 3-4h8l3 4-7 10Z"/><path d="M5 9.5h14M9.2 9.5 12 19.5l2.8-10M8 5.5l1.2 4M16 5.5l-1.2 4"/>',
+      hanger:  '<path d="M12 8.5a2.2 2.2 0 1 1 2.2-2.2"/><path d="M12 8.5v2.2l8 5.2a1.6 1.6 0 0 1-.9 3H4.9a1.6 1.6 0 0 1-.9-3l8-5.2"/>',
+      bag:     '<path d="M4.5 8.5h15L18.6 20H5.4Z"/><path d="M8.6 8.5V6.4a3.4 3.4 0 0 1 6.8 0v2.1"/>',
+      perfume: '<path d="M10 3.5h4v2.6h-4Z"/><rect x="7" y="9" width="10" height="11.5" rx="2"/><path d="M12 6.1V9"/><path d="M17.4 11.5h2.2M18.5 10.4v2.2"/>',
+      nail:    '<path d="M8.5 11V6.2a2 2 0 0 1 4 0V11"/><path d="M12.5 11V8.4a1.8 1.8 0 0 1 3.6 0V13"/><path d="M8.5 11v6.4a3.6 3.6 0 0 0 3.6 3.6h1.4a3.6 3.6 0 0 0 3.6-3.6"/>',
+      cake:    '<path d="M6 11h12l-1.4 9H7.4Z"/><path d="M6 11c0-2.4 2.7-4.2 6-4.2s6 1.8 6 4.2"/><path d="M12 6.8V3.5"/>',
+      yoga:    '<circle cx="12" cy="5" r="2"/><path d="M12 7.5v5.5"/><path d="m12 13 5 3.5M12 13l-5 3.5"/><path d="M6 20h12"/>',
+      flower:  '<circle cx="12" cy="8" r="2.2"/><path d="M12 5.8a2.4 2.4 0 1 1 2.2 2.2M12 5.8a2.4 2.4 0 1 0-2.2 2.2M12 10.2a2.4 2.4 0 1 0 2.2-2.2M12 10.2a2.4 2.4 0 1 1-2.2-2.2"/><path d="M12 10.5V21"/><path d="M12 15c-2.2 0-3.6-1.2-3.6-1.2"/>',
+      coffee:  '<path d="M4.5 8h12v6.5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4Z"/><path d="M16.5 9.5h1.8a2.2 2.2 0 0 1 0 4.4h-1.8"/><path d="M4 21h14"/>',
+      tv:      '<rect x="3" y="7" width="18" height="12" rx="2"/><path d="m8.5 3.5 3.5 3.5 3.5-3.5"/>',
+      plane:   '<path d="M10.5 20.5 12 16l7.5-2.5a1.6 1.6 0 0 0 0-3L12 8l-1.5-4.5L9 4v4.6L3.5 10a1 1 0 0 0 0 1.9L9 13.4V19Z"/>',
+      journal: '<path d="M6 3.5h11a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 17 20.5H6Z"/><path d="M6 3.5A1.5 1.5 0 0 0 4.5 5v14A1.5 1.5 0 0 0 6 20.5"/><path d="M9.5 8h5.5M9.5 12h5.5"/>',
+      cat:     '<path d="M5.5 10 4.5 5l3.6 2.2a7.6 7.6 0 0 1 7.8 0L19.5 5l-1 5"/><path d="M5.5 10a6.5 6.5 0 1 0 13 0"/><circle cx="9.5" cy="13" r=".8"/><circle cx="14.5" cy="13" r=".8"/><path d="M12 15.4v1.2M12 16.6c-.8.9-2 .9-2.8.3M12 16.6c.8.9 2 .9 2.8.3"/>',
+    };
     // 男主：中年男人的爱好全家桶（开发世界已实装，其余为占位）
     const MALE = [
-      { icon: '👨‍💻', name: '开发世界', desc: '任务·日程·笔记·片段·书签·密钥', app: 'dev', grad: 'linear-gradient(160deg,#1d1d1f,#5E5CE6)' },
-      { icon: '🎣', name: '钓鱼', desc: '钓点·渔获·装备·潮汐天气' },
-      { icon: '🚗', name: '爱车', desc: '保养·油耗·里程·违章·改装' },
-      { icon: '🀄', name: '麻将牌局', desc: '牌友·约局·输赢账·番种' },
-      { icon: '📿', name: '文玩盘玩', desc: '手串·核桃·葫芦·包浆进度' },
-      { icon: '🍵', name: '茶 · 茶具', desc: '茶叶库存·紫砂壶·品鉴笔记' },
-      { icon: '🥃', name: '酒柜 · 雪茄', desc: '白酒·红酒·威士忌·年份' },
-      { icon: '🪙', name: '收藏', desc: '邮票·钱币·纪念币·老物件' },
-      { icon: '⌚', name: '腕表', desc: '收藏·佩戴轮换·保养上链' },
-      { icon: '📷', name: '摄影', desc: '器材·镜头·作品·参数' },
-      { icon: '⚽', name: '看球', desc: '赛程·主队·竞猜小账' },
-      { icon: '♟️', name: '棋友', desc: '象棋·围棋·棋谱·对局' },
-      { icon: '⛺', name: '户外露营', desc: '路线·装备·自驾游' },
-      { icon: '🪴', name: '盆景花草', desc: '浇水提醒·养护档案' },
-      { icon: '🫖', name: '养生健康', desc: '血压·步数·作息·枸杞' },
+      { icon: I(G.journal), name: '每日模块', desc: '15 分钟专注·阅读·月度追踪', app: 'dev', tab: 'daily' },
+      { icon: I(G.code), name: '开发世界', desc: '任务·日程·笔记·片段·书签·密钥', app: 'dev' },
+      { icon: I(G.fish), name: '钓鱼', desc: '钓点·渔获·装备·潮汐天气' },
+      { icon: I(G.car), name: '爱车', desc: '保养·油耗·里程·违章·改装', app: 'dev', tab: 'vehicle' },
+      { icon: I(G.dumbbell), name: '健身', desc: '体重·体脂·目标管理', app: 'dev', tab: 'fitness' },
+      { icon: I(G.health), name: '健康记录', desc: '体检档案·时间线·血压血脂', app: 'dev', tab: 'health' },
+      { icon: I(G.plane), name: '旅游计划', desc: '世界景点·地图·行程', app: 'dev', tab: 'travel' },
+      { icon: I(G.mahjong), name: '麻将牌局', desc: '牌友·约局·输赢账·番种' },
+      { icon: I(G.beads), name: '文玩盘玩', desc: '手串·核桃·葫芦·包浆进度' },
+      { icon: I(G.tea), name: '茶 · 茶具', desc: '茶叶库存·紫砂壶·品鉴笔记' },
+      { icon: I(G.bottle), name: '酒柜 · 雪茄', desc: '白酒·红酒·威士忌·年份' },
+      { icon: I(G.coin), name: '收藏', desc: '邮票·钱币·纪念币·老物件' },
+      { icon: I(G.watch), name: '腕表', desc: '收藏·佩戴轮换·保养上链' },
+      { icon: I(G.camera), name: '摄影', desc: '器材·镜头·作品·参数' },
+      { icon: I(G.ball), name: '看球', desc: '赛程·主队·竞猜小账' },
+      { icon: I(G.chess), name: '棋友', desc: '象棋·围棋·棋谱·对局' },
+      { icon: I(G.tent), name: '户外露营', desc: '路线·装备·自驾游' },
+      { icon: I(G.plant), name: '盆景花草', desc: '浇水提醒·养护档案' },
+      { icon: I(G.health), name: '养生健康', desc: '血压·步数·作息·枸杞' },
     ];
     // 女主：爱好全家桶
     const FEMALE = [
-      { icon: '💄', name: '彩妆', desc: '库存·色号·保质期·空瓶清单' },
-      { icon: '🧴', name: '护肤保养', desc: '早晚流程·面膜·医美记录' },
-      { icon: '💎', name: '珠宝鉴赏', desc: '黄金·翡翠·钻石·证书·估值' },
-      { icon: '👗', name: '衣橱穿搭', desc: '单品·搭配·换季·购物清单' },
-      { icon: '👜', name: '包包', desc: '收藏·轮换·保养' },
-      { icon: '🌸', name: '香水', desc: '前中后调·场合·库存' },
-      { icon: '💅', name: '美甲', desc: '款式·店铺·打卡' },
-      { icon: '🧁', name: '烘焙美食', desc: '食谱·配方·烘焙记录' },
-      { icon: '🧘‍♀️', name: '瑜伽塑形', desc: '课程·打卡·身材管理' },
-      { icon: '💐', name: '花艺插花', desc: '花材·作品·养护' },
-      { icon: '☕', name: '下午茶探店', desc: '咖啡豆·甜品·探店地图' },
-      { icon: '📺', name: '追剧追星', desc: '片单·爱豆·演唱会' },
-      { icon: '✈️', name: '旅行打卡', desc: '目的地·攻略·拍照点' },
-      { icon: '📔', name: '手账文具', desc: '手帐·胶带·贴纸' },
-      { icon: '🐱', name: '萌宠', desc: '猫狗档案·疫苗·用品' },
+      { icon: I(G.lipstick), name: '彩妆', desc: '库存·色号·保质期·空瓶清单' },
+      { icon: I(G.serum), name: '护肤保养', desc: '早晚流程·面膜·医美记录' },
+      { icon: I(G.gem), name: '珠宝鉴赏', desc: '黄金·翡翠·钻石·证书·估值' },
+      { icon: I(G.hanger), name: '衣橱穿搭', desc: '单品·搭配·换季·购物清单' },
+      { icon: I(G.bag), name: '包包', desc: '收藏·轮换·保养' },
+      { icon: I(G.perfume), name: '香水', desc: '前中后调·场合·库存' },
+      { icon: I(G.nail), name: '美甲', desc: '款式·店铺·打卡' },
+      { icon: I(G.cake), name: '烘焙美食', desc: '食谱·配方·烘焙记录' },
+      { icon: I(G.yoga), name: '瑜伽塑形', desc: '课程·打卡·身材管理' },
+      { icon: I(G.flower), name: '花艺插花', desc: '花材·作品·养护' },
+      { icon: I(G.coffee), name: '下午茶探店', desc: '咖啡豆·甜品·探店地图' },
+      { icon: I(G.tv), name: '追剧追星', desc: '片单·爱豆·演唱会' },
+      { icon: I(G.plane), name: '旅行打卡', desc: '目的地·攻略·拍照点' },
+      { icon: I(G.journal), name: '手账文具', desc: '手帐·胶带·贴纸' },
+      { icon: I(G.cat), name: '萌宠', desc: '猫狗档案·疫苗·用品' },
     ];
     const SHARED = [
-      { icon: '💰', name: '家庭理财', desc: '净资产·账户·预算·保险箱', app: 'finance', grad: 'linear-gradient(160deg,#007AFF,#5E5CE6)' },
-      { icon: '🖼️', name: '家庭影像', desc: '照片视频·归类·去重·相册', app: 'gallery', grad: 'linear-gradient(160deg,#34C759,#30B0C7)' },
-      { icon: '🔐', name: '家庭密码', desc: '账号·银行卡·安全笔记', app: 'vault', grad: 'linear-gradient(160deg,#5E5CE6,#007AFF)' },
+      { icon: I(G.wallet), name: '家庭理财', desc: '净资产·账户·预算·保险箱', app: 'finance' },
+      { icon: I(G.photo), name: '家庭影像', desc: '照片视频·归类·去重·相册', app: 'gallery' },
+      { icon: I(G.lock), name: '家庭密码', desc: '账号·银行卡·安全笔记', app: 'vault' },
     ];
     const MALE_PAL = ['#2f7d6b', '#3b6fb0', '#5a6470', '#4a7a3a', '#8a6a3a', '#3a6b7a', '#6b4a7a', '#7a6b3a'];
     const FEM_PAL = ['#e07a9a', '#c77fd8', '#e0a050', '#d86a8a', '#b07ad0', '#e08a6a', '#cf7fb0', '#c06a9a'];
@@ -288,7 +502,7 @@
     function tile(item, i, pal) {
       const soon = !item.app;
       const bg = item.grad || grad(i, pal);
-      return `<button class="tile ${soon ? 'soon' : ''}" ${item.app ? `data-go="${item.app}"` : 'data-soon="' + item.name + '"'}>
+      return `<button class="tile ${soon ? 'soon' : ''}" ${item.app ? `data-go="${item.app}${item.tab ? '#' + item.tab : ''}"` : 'data-soon="' + item.name + '"'}>
         <div class="tico" style="background:${bg}">${item.icon}</div>
         <div class="tname">${item.name}</div>
         <div class="tdesc">${item.desc}</div>
@@ -301,11 +515,68 @@
         <div><h4>${item.name}</h4><div class="d">${item.desc}</div></div>
       </button>`;
     }
-    document.getElementById('malegrid').innerHTML = MALE.map((m, i) => tile(m, i, MALE_PAL)).join('');
-    document.getElementById('femalegrid').innerHTML = FEMALE.map((m, i) => tile(m, i, FEM_PAL)).join('');
+    // ===== 卡片库：首页只显示已添加的，其余收在库里 =====
+    const LIB = { male: MALE, female: FEMALE };
+    const PAL = { male: MALE_PAL, female: FEM_PAL };
+    const CKEY = (w) => 'home.cards.' + w;
+    const DEFAULT_CARDS = { male: ['每日模块', '开发世界', '爱车', '健身', '健康记录', '旅游计划'], female: [] };
+    function myCards(w) {
+      try {
+        const v = JSON.parse(localStorage.getItem(CKEY(w)));
+        if (Array.isArray(v)) {
+          if (w === 'male' && !localStorage.getItem('home.daily.card-added.v1')) {
+            if (!v.includes('每日模块')) v.unshift('每日模块');
+            localStorage.setItem(CKEY(w), JSON.stringify(v));
+            localStorage.setItem('home.daily.card-added.v1', '1');
+          }
+          return v;
+        }
+      } catch (e) {}
+      return DEFAULT_CARDS[w].slice();
+    }
+    function saveCards(w, list) { localStorage.setItem(CKEY(w), JSON.stringify(list)); }
+    function toggleCard(w, name) {
+      const list = myCards(w), i = list.indexOf(name);
+      if (i >= 0) list.splice(i, 1); else list.push(name);
+      saveCards(w, list); renderWorld(w); renderLibrary(w);
+    }
+    function renderWorld(w) {
+      const list = myCards(w), lib = LIB[w];
+      const items = list.map((n) => lib.find((x) => x.name === n)).filter(Boolean);
+      const cards = items.map((m) => tile(m, lib.indexOf(m), PAL[w])).join('');
+      const add = '<button class="tile add" data-lib="' + w + '"><span class="plus">＋</span><span class="lb">添加卡片</span></button>';
+      document.getElementById(w + 'grid').innerHTML = cards + add;
+    }
+    function renderLibrary(w) {
+      const list = myCards(w);
+      document.getElementById('ltitle').textContent = (w === 'male' ? '男主' : '女主') + '的卡片库';
+      document.getElementById('llist').innerHTML = LIB[w].map((m) => {
+        const on = list.includes(m.name);
+        return '<div class="lrow"><span class="lico">' + m.icon + '</span>' +
+          '<span><span class="lname">' + m.name + '</span><div class="ldesc">' + m.desc + (m.app ? '' : ' · 即将开放') + '</div></span>' +
+          '<button class="lbtn' + (on ? ' on' : '') + '" data-card="' + m.name + '" data-world="' + w + '">' + (on ? '移除' : '添加') + '</button></div>';
+      }).join('');
+    }
+    const library = document.getElementById('library');
+    function openLibrary(w) { renderLibrary(w); library.classList.add('show'); }
+    document.getElementById('lclose').addEventListener('click', () => library.classList.remove('show'));
+    library.addEventListener('click', (e) => {
+      if (e.target === library) { library.classList.remove('show'); return; }
+      const b = e.target.closest('[data-card]');
+      if (b) toggleCard(b.dataset.world, b.dataset.card);
+    });
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-lib]');
+      if (a) { e.stopPropagation(); openLibrary(a.dataset.lib); }
+    }, true);
+
+    renderWorld('male');
+    renderWorld('female');
     document.getElementById('sharedcards').innerHTML = SHARED.map(scard).join('');
 
     const frame = document.getElementById('frame');
+    // 主密码只保存在当前页面的内存里。刷新/关闭页面即消失，不写 sessionStorage、localStorage 或磁盘备份。
+    let housePassword = null;
     const screens = { home: document.getElementById('home'), male: document.getElementById('male'), female: document.getElementById('female') };
     const tabs = [...document.querySelectorAll('.tab')];
     const toastEl = document.getElementById('toast'); let toastT;
@@ -319,20 +590,23 @@
     }
 
     function nav(target) {
-      if (target === 'finance' && !sessionStorage.getItem('home.key')) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; refreshGateBio(); setTimeout(() => gpw.focus(), 50); return; }
-      if (screens[target]) {
+      // target 可能带子页深链后缀，如 "dev#vehicle"（卡片直接跳进子应用的某个 tab）。
+      const [app, tab] = target.split('#');
+      if (app === 'finance' && !housePassword) { pendingApp = 'finance'; renderGate(); gate.style.display = 'flex'; refreshGateBio(); setTimeout(() => gpw.focus(), 50); return; }
+      if (screens[app]) {
         Object.values(screens).forEach(s => s.classList.add('hide'));
-        screens[target].classList.remove('hide');
+        screens[app].classList.remove('hide');
         frame.classList.remove('show');
-        setActive(target);
-        document.body.className = 'scene-' + target;
-        history.replaceState(null, '', '#' + target);
-      } else if (SRC[target]) {
-        if (frame.dataset.app !== target) { loadFrame(SRC[target]); frame.dataset.app = target; }
+        setActive(app);
+        document.body.className = 'scene-' + app;
+        history.replaceState(null, '', '#' + app);
+      } else if (SRC[app]) {
+        const url = SRC[app] + (tab ? '#' + tab : '');
+        if (frame.dataset.app !== target) { loadFrame(url); frame.dataset.app = target; }
         Object.values(screens).forEach(s => s.classList.add('hide'));
         frame.classList.add('show');
-        setActive(target === 'dev' ? 'male' : 'home');
-        history.replaceState(null, '', '#' + target);
+        setActive(app === 'dev' ? 'male' : 'home');
+        history.replaceState(null, '', '#' + app);
       }
     }
     document.addEventListener('click', (e) => {
@@ -345,7 +619,8 @@
     const enc = new TextEncoder(), dec = new TextDecoder();
     const b64 = (b) => btoa(String.fromCharCode(...new Uint8Array(b)));
     const unb64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-    const ITER = 200000, SKEY = 'home.key', LKEY = 'home.lock';
+    // 与各世界统一到 OWASP 现行建议量级；老的门禁记录里存着自己的 iter，仍能验证，验过后自动升级（见 verifyLock）
+    const ITER = 600000, LKEY = 'home.lock';
     async function deriveKey(pw, salt, iter) {
       const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']);
       return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
@@ -360,7 +635,10 @@
       const raw = localStorage.getItem(LKEY); if (!raw) return false;
       try { const o = JSON.parse(raw); const key = await deriveKey(pw, unb64(o.salt), o.iter);
         const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, key, unb64(o.ct));
-        return dec.decode(pt) === 'home-ok';
+        if (dec.decode(pt) !== 'home-ok') return false;
+        // 老门禁（迭代次数低于现行标准）：趁手里有密码，重建成更强的一份；失败不影响本次解锁
+        if (Number(o.iter || 0) < ITER) { try { await createLock(pw); } catch (e) { } }
+        return true;
       } catch (e) { return false; }
     }
     const gate = document.getElementById('gate'), gpw = document.getElementById('gpw'), gpw2 = document.getElementById('gpw2');
@@ -375,11 +653,11 @@
       gbtn.textContent = onboard ? '创建' : '解锁';
       gpw.value = ''; gpw2.value = ''; gerr.textContent = '';
     }
-    function openHouse(pw) { sessionStorage.setItem(SKEY, pw); gate.style.display = 'none'; lockbtn.classList.add('show'); const p = pendingApp; pendingApp = null; if (p) nav(p); }
+    function openHouse(pw) { housePassword = pw; gate.style.display = 'none'; lockbtn.classList.add('show'); const p = pendingApp; pendingApp = null; if (p) nav(p); }
     async function submitGate() {
       const pw = gpw.value;
       if (!hasLock()) {
-        if (pw.length < 6) { gerr.textContent = '主密码至少 6 位'; return; }
+        if (pw.length < 8) { gerr.textContent = '主密码至少 8 位'; return; }
         if (pw !== gpw2.value) { gerr.textContent = '两次输入不一致'; return; }
         gbtn.disabled = true; await createLock(pw); gbtn.disabled = false; openHouse(pw);
       } else {
@@ -388,7 +666,7 @@
       }
     }
     function lockHouse() {
-      sessionStorage.removeItem(SKEY);
+      housePassword = null;
       loadFrame('about:blank'); frame.dataset.app = ''; frame.classList.remove('show');
       Object.values(screens).forEach(s => s.classList.add('hide')); screens.home.classList.remove('hide'); setActive('home'); history.replaceState(null, '', '#home');
       lockbtn.classList.remove('show'); gate.style.display = 'none';
@@ -399,7 +677,6 @@
     lockbtn.addEventListener('click', lockHouse);
 
     let pendingApp = null;
-    if (sessionStorage.getItem(SKEY)) lockbtn.classList.add('show');
     gate.style.display = 'none';   // 大厅开放；只有进「家庭理财」才弹密码
     const gcancel = document.getElementById('gcancel');
     gcancel.addEventListener('click', () => { pendingApp = null; gate.style.display = 'none'; if (frame.dataset.app !== 'finance') nav('home'); });
@@ -453,8 +730,17 @@
       const ver = db.version; db.close();
       return { name, version: ver, stores };
     }
+    function deleteDB(name) {
+      return new Promise((res, rej) => {
+        const r = indexedDB.deleteDatabase(name);
+        const timer = setTimeout(() => rej(new Error(`数据库 ${name} 正被其它页面占用。请关闭其它本项目窗口后重试，原数据尚未被覆盖。`)), 5000);
+        r.onsuccess = () => { clearTimeout(timer); res(); };
+        r.onerror = () => { clearTimeout(timer); rej(r.error || new Error(`删除数据库 ${name} 失败`)); };
+        // blocked 不是成功；继续等待其它连接收到 versionchange 后关闭，超时再明确报错。
+      });
+    }
     async function restoreDB(d) {
-      await new Promise((res) => { const r = indexedDB.deleteDatabase(d.name); r.onsuccess = r.onerror = r.onblocked = () => res(); });
+      await deleteDB(d.name);
       const db = await new Promise((res, rej) => {
         const r = indexedDB.open(d.name, d.version || 1);
         r.onupgradeneeded = () => { const db = r.result; for (const s of d.stores) if (!db.objectStoreNames.contains(s.name)) db.createObjectStore(s.name, { keyPath: s.keyPath == null ? undefined : s.keyPath, autoIncrement: !!s.autoIncrement }); };
@@ -484,6 +770,8 @@
       let bundle; try { bundle = JSON.parse(await file.text()); } catch (e) { bkmsg.textContent = '文件无法识别'; return; }
       if (!bundle || !bundle.__home_backup) { bkmsg.textContent = '不是本系统的备份文件'; return; }
       if (!confirm('从备份恢复会用所选文件【替换】本机当前全部数据，确定继续？')) return;
+      const kept = await keepSafetyCopy();
+      if (!kept && !confirm('恢复前的安全副本没存成功。仍然继续吗？当前数据可能无法找回。')) return;
       bkmsg.textContent = '正在恢复…';
       try {
         await applyBundle(bundle);
@@ -498,6 +786,7 @@
     // ── 本机自动备份（防丢失）+ 版本号 ──────────────────────────────
     let HOME_VERSION = '';        // 由 /api/version 覆盖成服务端真实版本
     let HOME_DATA_VERSION = 0;    // 本入口支持的数据结构版本（来自 /api/version）
+    let HOME_SYNC_PROTOCOL = 0;   // 服务端要求的安全写盘协议
     let lastSig = '';
     const verlabel = document.getElementById('verlabel');
     const bkstatus = document.getElementById('bkstatus');
@@ -511,29 +800,99 @@
       const ls = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k === 'home.bio' || k === 'home.diskSyncedAt') continue; ls[k] = localStorage.getItem(k); }
       let dbs = []; try { dbs = (await indexedDB.databases()) || []; } catch (e) { dbs = []; }
       const idb = []; for (const info of dbs) if (info.name) idb.push(await dumpDB(info.name));
-      return { __home_backup: 1, v: 1, appVersion: HOME_VERSION, origin: location.origin, localStorage: ls, indexedDB: idb };
+      // baseSavedAt = 我上次跟磁盘同步到的时间戳。服务端用它判断有没有别的入口在我之后写过，
+      // 有的话拒绝这次写入，免得「后写的赢」把对方的改动抹掉。
+      return { __home_backup: 1, v: 1, appVersion: HOME_VERSION, origin: location.origin, localStorage: ls, indexedDB: idb,
+               syncProtocol: HOME_SYNC_PROTOCOL,
+               baseSavedAt: Number(localStorage.getItem('home.diskSyncedAt') || 0) };
     }
     // 用一个 bundle 覆盖本机数据（保留本机 Touch ID 凭据）
+    // 恢复前校验：别等 localStorage.clear() 之后才发现 bundle 是坏的。
+    // 金库类的 key 必须能解析成 {v:1, wrap, data} 的加密结构；其它 key 只要是字符串就行。
+    function validateBundle(bundle) {
+      if (!bundle || typeof bundle !== 'object' || !bundle.__home_backup) return '不是本系统的备份';
+      const ls = bundle.localStorage;
+      if (ls != null && typeof ls !== 'object') return 'localStorage 段格式不对';
+      for (const k of ['familyvault.vault.v1', 'familyvault.pwbox.v1', 'familyvault.secret.v1']) {
+        const raw = ls && ls[k];
+        if (raw == null) continue;
+        let b; try { b = JSON.parse(raw); } catch (e) { return `${k} 不是合法 JSON（文件可能损坏）`; }
+        if (!b || b.v !== 1 || !b.wrap || !b.data) return `${k} 缺少加密结构（文件可能损坏或被截断）`;
+      }
+      if (bundle.indexedDB != null && !Array.isArray(bundle.indexedDB)) return 'indexedDB 段格式不对';
+      return null;
+    }
+    // 恢复前先把「现在这台机器上的状态」存成一份安全副本（keep-恢复前-*.home）。
+    // 恢复错了、或者恢复的那份其实更旧，还能从这份回来。
+    async function keepSafetyCopy() {
+      try {
+        const cur = await buildBundle();
+        const r = await fetch('/api/backup/keep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cur) }).then((x) => x.json()).catch(() => null);
+        return r && r.ok ? r.name : null;
+      } catch (e) { return null; }
+    }
     async function applyBundle(bundle) {
+      const why = validateBundle(bundle);
+      if (why) throw new Error('备份文件校验失败：' + why);
+      // 先卸载子应用，释放它们持有的 IndexedDB 连接；否则 deleteDatabase 会被永久 blocked。
+      loadFrame('about:blank'); frame.dataset.app = ''; frame.classList.remove('show');
+      await new Promise((res) => setTimeout(res, 100));
       const keepBio = localStorage.getItem('home.bio');
       localStorage.clear();
       for (const k of Object.keys(bundle.localStorage || {})) localStorage.setItem(k, bundle.localStorage[k]);
       if (keepBio != null && localStorage.getItem('home.bio') == null) localStorage.setItem('home.bio', keepBio);
+      const incoming = new Set((bundle.indexedDB || []).map((d) => d.name));
+      // “替换全部数据”必须也清掉备份里不存在的本项目数据库，否则旧记录会在恢复后复活。
+      for (const name of ['familygallery', 'familyvault', 'devworld']) if (!incoming.has(name)) await deleteDB(name);
       for (const d of (bundle.indexedDB || [])) await restoreDB(d);
-      sessionStorage.removeItem(SKEY);
+      housePassword = null;
     }
     // 便宜的内容指纹：只在数据真的变了才写盘，避免反复重写
     const sigOf = (s) => { let h = 0; const step = Math.max(1, s.length >> 12); for (let i = 0; i < s.length; i += step) h = (h * 131 + s.charCodeAt(i)) >>> 0; return s.length + ':' + h; };
 
+    // 磁盘数据由「更新版本」写入时，本(旧)版本进入只读：能查看，但不写盘、不覆盖它。
+    let READ_ONLY_NEWER = false;
+    function enterReadOnly() {
+      if (READ_ONLY_NEWER) return;
+      READ_ONLY_NEWER = true;
+      if (bkstatus) bkstatus.textContent = '只读：本机数据由更新版本的 App 写入。可以查看，但本(旧)版本的改动不会保存、也不会覆盖它。要编辑请把本入口更新到最新版。';
+      if (!document.getElementById('roBanner')) {
+        const b = document.createElement('div');
+        b.id = 'roBanner';
+        b.textContent = '只读模式 · 本机数据由更新版本的 App 写入：可查看，改动不会保存（也不会覆盖它）。请更新本入口后再编辑。';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c07a1e;color:#fff;font-size:12.5px;font-weight:600;text-align:center;padding:7px 12px;box-shadow:0 1px 6px rgba(70,54,34,.18)';
+        document.body.appendChild(b);
+      }
+    }
+
     async function autoSave(reason) {
+      if (READ_ONLY_NEWER) return { ok: false, readonly: true };   // 只读态：绝不写盘（免得用旧结构覆盖新数据）
       try {
         const bundle = await buildBundle();
         const body = JSON.stringify(bundle);
         const sig = sigOf(body);
         if (sig === lastSig && reason !== 'manual') return null;   // 没变化就不重复写
         const r = await fetch('/api/backup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).then((x) => x.json()).catch(() => null);
-        if (r && r.ok) { lastSig = sig; if (r.savedAt) localStorage.setItem('home.diskSyncedAt', String(r.savedAt)); if (bkstatus) bkstatus.textContent = `已自动存到本机 · ${fmtTime(r.savedAt)}（磁盘保留最近 40 份历史）`; if (bkdir) bkdir.textContent = '目录：' + r.dir; }
+        if (r && r.ok) {
+          lastSig = sig;
+          BACKEND_OK = true;
+          const el = document.getElementById('nobk'); if (el) el.hidden = true;
+          if (r.savedAt) localStorage.setItem('home.diskSyncedAt', String(r.savedAt));
+          if (bkstatus) bkstatus.textContent = `已自动存到本机 · ${fmtTime(r.savedAt)}（磁盘保留最近 40 次 + 每天 30 天 + 每周 12 周）`;
+          if (bkdir) bkdir.textContent = '目录：' + r.dir;
+        }
         else if (r && r.error === 'reject-downgrade') { if (bkstatus) bkstatus.textContent = '⚠️ ' + (r.hint || '本入口版本偏旧，数据未写入（磁盘上是更新版本写的）。请更新本入口。'); }
+        else if (r && (r.error === 'stale' || r.error === 'legacy-client' || r.error === 'missing-base')) {
+          // 另一个入口在我之后写过盘。不覆盖它，也不自动拉（拉会丢我这边没存的改动），让人决定。
+          if (bkstatus) bkstatus.innerHTML = '<b style="color:#b23f34">未写盘：磁盘上有更新的数据。</b>'
+            + (r.error === 'legacy-client' || r.error === 'missing-base'
+              ? '当前页面版本过旧，为了不覆盖新数据，本次没有写入。请关闭旧入口并用最新版打开。'
+              : '另一个入口（安装版 / 另一个窗口）在 ' + fmtTime(r.diskSavedAt) + ' 写过，为了不抹掉它的改动，本窗口这次没有覆盖。')
+            + (r.conflictCopy ? '<br>这边的内容已保存在冲突副本：' + r.conflictCopy : '')
+            + '<br>如果你这边没有要保留的改动，刷新页面会拉取最新；如果有，也可以先用「导出全部」再刷新。';
+          if (reason !== 'interval') toast('磁盘上有更新的数据，本次未覆盖（详见设置）');
+        }
+        else { markNoBackend(r ? '写盘被拒绝' : '写盘请求没有响应'); }   // 原来这里什么都不做，失败是完全静默的
         return r;
       } catch (e) { return null; }
     }
@@ -543,36 +902,90 @@
       let latest = null;
       try { const res = await fetch('/api/backup/latest'); if (res.status === 204) return false; latest = await res.json(); } catch (e) { return false; }
       if (!latest || !latest.__home_backup) return false;
-      // 兼容护栏：磁盘上的数据是更新版本 App 写的 → 本入口偏旧，别读进来又写回去弄坏；提示更新。
-      if (Number(latest.dataVersion || 0) > HOME_DATA_VERSION) {
-        if (bkstatus) bkstatus.textContent = '⚠️ 本机数据是更新版本的 App 写的，本入口偏旧。请先更新本入口(git pull + 重建)再用，以免弄坏数据。';
-        return false;
-      }
+      // 磁盘数据由更新版本写入：仍然「打开/查看」它（新→旧可读），但进入只读态、不写盘覆盖它。
+      const diskNewer = Number(latest.dataVersion || 0) > HOME_DATA_VERSION;
       let has = false;
       try { const dbs = (await indexedDB.databases()) || []; const names = new Set(dbs.map((d) => d.name)); for (const d of (latest.indexedDB || [])) if (names.has(d.name)) { has = true; break; } } catch (e) { }
       if (!has) for (const k of Object.keys(latest.localStorage || {})) if (k !== 'home.bio' && localStorage.getItem(k) != null) { has = true; break; }
       const syncedAt = Number(localStorage.getItem('home.diskSyncedAt') || 0);
       const newer = (latest.savedAt || 0) > syncedAt;   // 磁盘比“我上次同步到的”更新 = 另一个入口存过更新的
-      if (has && !newer) return false;                  // 本机已有数据、磁盘也不比我新 → 不动
+      if (has && !newer) { if (diskNewer) enterReadOnly(); return false; }   // 不需要拉；若磁盘是更新版本写的→只读态
+      if (diskNewer) enterReadOnly();                   // 要把更新版本的数据读进来查看 → 先标记只读，读进来后也不会写回去
       // diskSyncedAt 追踪已能防重复恢复的死循环，无需 sessionStorage 守卫，这样同一会话里也能再同步。
       await applyBundle(latest);
       localStorage.setItem('home.diskSyncedAt', String(latest.savedAt || Date.now()));
       location.reload();
       return true;
     }
+    // 从本机备份恢复：不再只能恢复「最近一次」，而是列出磁盘上所有历史版本让人选。
+    // 原来 40 份历史备份在界面上完全用不到，只能手工去目录里翻。
     async function restoreFromDisk() {
-      let latest = null;
-      try { const res = await fetch('/api/backup/latest'); if (res.status === 204) { toast('本机还没有自动备份'); return; } latest = await res.json(); } catch (e) { toast('读取本机备份失败'); return; }
-      if (!latest || !latest.__home_backup) { toast('本机备份无法识别'); return; }
-      if (!confirm(`用本机最近一次自动备份（${fmtTime(latest.savedAt)}）替换当前全部数据？`)) return;
-      await applyBundle(latest); location.reload();
+      const pick = document.getElementById('bkpick');
+      if (!pick.hidden) { pick.hidden = true; return; }
+      let list = null;
+      try { list = await fetch('/api/backup/list').then((x) => x.json()); } catch (e) { toast('读取本机备份列表失败'); return; }
+      const items = (list && list.backups) || [];
+      if (!items.length) { toast('本机还没有自动备份'); return; }
+      const sel = document.getElementById('bksel');
+      const fmtB = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB';
+      sel.innerHTML = items.map((it, i) => {
+        const manual = it.name.startsWith('keep-');
+        const label = (i === 0 ? '最新 · ' : '') + fmtTime(it.mtime) + (manual ? ' · 恢复前的安全副本' : '') + ' · ' + fmtB(it.bytes);
+        return `<option value="${it.name.replace(/"/g, '&quot;')}">${label}</option>`;
+      }).join('');
+      pick.hidden = false;
+    }
+    async function restoreChosen() {
+      const name = document.getElementById('bksel').value;
+      if (!name) return;
+      if (READ_ONLY_NEWER) { alert('只读模式：本机数据由更新版本写入，本入口不能恢复覆盖它。请先更新本入口。'); return; }
+      let bundle = null;
+      try {
+        const res = await fetch('/api/backup/get?name=' + encodeURIComponent(name));
+        if (!res.ok) { toast('读取这份备份失败'); return; }
+        bundle = await res.json();
+      } catch (e) { toast('读取这份备份失败'); return; }
+      const why = validateBundle(bundle);
+      if (why) { alert('这份备份没法用：' + why); return; }
+      if (!confirm(`用「${fmtTime(bundle.savedAt)}」这份备份替换当前全部数据？\n\n恢复前会先把现在的状态存成一份安全副本，恢复错了可以再从它回来。`)) return;
+      const kept = await keepSafetyCopy();
+      if (!kept && !confirm('安全副本没存成功（本机磁盘备份可能没启用）。仍然继续恢复？现在的状态将无法找回。')) return;
+      // 记下磁盘现在的 savedAt：恢复后要用它当 baseSavedAt 把恢复结果写回去（过乐观并发检查）。
+      let diskAt = 0;
+      try { const r = await fetch('/api/backup/latest'); if (r.ok && r.status !== 204) diskAt = Number((await r.json()).savedAt || 0); } catch (e) { }
+      try { await applyBundle(bundle); } catch (e) { alert(String(e.message || e)); return; }
+      // 恢复的是「较旧的一份」时，磁盘上的 current.home 仍是较新的那份。不立刻写回，刷新时的开机同步
+      // 会认为「磁盘比本地新」，把刚恢复的又拉回去——等于白恢复。所以先把恢复结果写成最新，再刷新。
+      localStorage.setItem('home.diskSyncedAt', String(diskAt || Date.now()));
+      const w = await autoSave('manual');
+      if (!(w && w.ok)) {
+        localStorage.setItem('home.diskSyncedAt', String(Date.now()));   // 写回没成也别让开机同步把刚恢复的拉回去
+        toast('已恢复到本机，但没能写回磁盘备份（稍后会再试）');
+      }
+      location.reload();
+    }
+    // 磁盘备份是否真的可用。false 时「自动备份」整条链路都是空转，必须明确告诉用户。
+    let BACKEND_OK = false;
+    function markNoBackend(reason) {
+      BACKEND_OK = false;
+      const el = document.getElementById('nobk');
+      if (el) el.hidden = false;
+      if (bkstatus) bkstatus.innerHTML = '<b style="color:#b23f34">本机磁盘备份未启用。</b>'
+        + '数据目前<b>只存在这个浏览器里</b>——清浏览器数据、换浏览器、或者 Safari 长时间没打开自动清理，都会让它消失。'
+        + '要启用请用 <code>python run.py</code> 启动（或用安装版 App 打开），启动后这里会显示备份目录。'
+        + (reason ? '<br><span style="color:var(--text-tertiary)">检测：' + reason + '</span>' : '');
+      if (bkdir) bkdir.textContent = '';
     }
     async function initHomeVersion() {
       try {
         const r = await fetch('/api/version').then((x) => x.json());
         if (r && r.version) {
+          BACKEND_OK = true;
+          const el = document.getElementById('nobk');
+          if (el) el.hidden = true;
           HOME_VERSION = r.version;                 // 原始号(如 0.3.0)，用于备份元数据
           HOME_DATA_VERSION = Number(r.dataVersion || 0);
+          HOME_SYNC_PROTOCOL = Number(r.syncProtocol || 0);
           if (verlabel) {
             const dev = r.channel === 'dev';
             verlabel.textContent = 'v' + (r.label || r.version) + (dev ? ' · 开发版' : ' · 发布版');
@@ -580,11 +993,29 @@
             verlabel.style.color = dev ? '#ff9500' : 'var(--text-secondary)';
           }
           if (bkdir && r.dir) bkdir.textContent = '目录：' + r.dir;
+        } else {
+          markNoBackend('/api/version 没有返回版本号');
         }
-      } catch (e) { }
+      } catch (e) {
+        markNoBackend('连不上本机服务（' + (e && e.message || e) + '）');
+      }
     }
-    if (bknow) bknow.addEventListener('click', async () => { bknow.disabled = true; const r = await autoSave('manual'); toast(r && r.ok ? '已备份到本机' : '备份失败（要从 run.py 启动才有本机备份）'); bknow.disabled = false; });
+    if (bknow) bknow.addEventListener('click', async () => {
+      bknow.disabled = true;
+      try {
+        const r = await autoSave('manual');
+        if (!(r && r.ok)) throw new Error('主应用数据尚未写盘');
+        const full = await fetch('/api/backup/full/create', { method: 'POST' }).then(x => x.json());
+        if (!full.ok) throw new Error(full.error || '健康档案打包失败');
+        bkstatus.textContent = `整屋与健康档案已加密备份 · ${fmtTime(Date.now())} · ${full.health_reports} 份健康原件、${full.health_observations} 条结构化结果。`;
+        bkdir.textContent = `密文：${full.path} · 恢复密钥：${full.key_path}（请单独离线保存，勿上传 Git）`;
+        toast('整屋与健康数据已加密备份到本机');
+      } catch (e) { toast('备份失败：' + (e && e.message || e)); }
+      finally { bknow.disabled = false; }
+    });
     if (bkrestore) bkrestore.addEventListener('click', restoreFromDisk);
+    const bkgo = document.getElementById('bkgo');
+    if (bkgo) bkgo.addEventListener('click', restoreChosen);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') autoSave('hide'); });
     window.addEventListener('pagehide', () => { try { buildBundle().then((b) => navigator.sendBeacon('/api/backup/save', new Blob([JSON.stringify(b)], { type: 'application/json' }))); } catch (e) { } });
 
@@ -665,7 +1096,7 @@
       } else {
         biobox.innerHTML = '<button class="pbtn soft" id="bioon">启用 Touch ID</button><span class="shint" style="margin-top:0">需先解锁过「家庭理财」再启用</span>';
         document.getElementById('bioon').addEventListener('click', async () => {
-          const pw = sessionStorage.getItem(SKEY);
+          const pw = housePassword;
           if (!pw) { biomsg.textContent = '请先进入并解锁「家庭理财」一次，再来启用'; return; }
           biomsg.textContent = '请按 Touch ID…'; const b = document.getElementById('bioon'); b.disabled = true;
           try { await bioEnable(pw); biomsg.textContent = '已启用 Touch ID'; refreshBioBox(); refreshGateBio(); }
@@ -674,6 +1105,31 @@
       }
     }
     refreshGateBio();
+
+    // ── 设备预览切换（记在本机，下次打开还是上次选的）
+    const VKEY = 'home.deviceView';
+    function applyView(v) {
+      if (v) document.body.setAttribute('data-view', v);
+      else document.body.removeAttribute('data-view');
+      [...document.querySelectorAll('#devsw button')].forEach((b) => b.classList.toggle('on', (b.dataset.view || '') === (v || '')));
+      localStorage.setItem(VKEY, v || '');
+    }
+    document.getElementById('devsw').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      applyView(b.dataset.view || '');
+    });
+    applyView(localStorage.getItem(VKEY) || '');
+    // 顶栏那枚警示点一下直接开设置，省得用户不知道去哪看
+    document.getElementById('nobk').addEventListener('click', () => document.getElementById('setbtn').click());
+
+    // 子应用（iframe 里的理财等）请求回大厅首页或领取一次内存主密码。只认当前同源 iframe。
+    window.addEventListener('message', (e) => {
+      if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
+      if (e.data && e.data.__homeNav === 'home') nav('home');
+      if (e.data && typeof e.data.__homeKeyRequest === 'string' && frame.dataset.app === 'finance') {
+        e.source.postMessage({ __homeKeyResponse: e.data.__homeKeyRequest, password: housePassword }, location.origin);
+      }
+    });
 
     const start = (location.hash || '#home').slice(1);
     nav(screens[start] || SRC[start] ? start : 'home');

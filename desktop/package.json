@@ -1,7 +1,7 @@
 {
   "name": "wojiali-desktop",
   "productName": "我家里的一切",
-  "version": "0.3.0",
+  "version": "0.8.35",
   "description": "我家里的一切 —— 本地加密、一家人专属的桌面 App（理财 / 影像 / 密码 / 开发世界）",
   "author": "junbai",
   "private": true,
@@ -31,6 +31,10 @@
         "to": "payload/run.py"
       },
       {
+        "from": "../encrypted_backup.py",
+        "to": "payload/encrypted_backup.py"
+      },
+      {
         "from": "../VERSION",
         "to": "payload/VERSION"
       },
@@ -47,14 +51,59 @@
         "to": "payload/project-two/dist"
       },
       {
+        "from": "../project-two/scripts/photo_index.py",
+        "to": "payload/project-two/scripts/photo_index.py"
+      },
+      {
+        "from": "../project-two/scripts/scan_selected_backup_dirs.py",
+        "to": "payload/project-two/scripts/scan_selected_backup_dirs.py"
+      },
+      {
+        "from": "../project-two/scripts/photo_metadata.py",
+        "to": "payload/project-two/scripts/photo_metadata.py"
+      },
+      {
+        "from": "../project-two/scripts/photo_organize.py",
+        "to": "payload/project-two/scripts/photo_organize.py"
+      },
+      {
+        "from": "../project-two/scripts/photo_review_organize.py",
+        "to": "payload/project-two/scripts/photo_review_organize.py"
+      },
+      {
+        "from": "../project-two/scripts/photo_year_clues.py",
+        "to": "payload/project-two/scripts/photo_year_clues.py"
+      },
+      {
+        "from": "../project-two/scripts/photo_handoff.py",
+        "to": "payload/project-two/scripts/photo_handoff.py"
+      },
+      {
+        "from": "../project-two/scripts/photo_metadata_worker.cjs",
+        "to": "payload/project-two/scripts/photo_metadata_worker.cjs"
+      },
+      {
+        "from": "../project-two/node_modules/exifr/dist/full.umd.cjs",
+        "to": "payload/project-two/scripts/vendor/exifr.umd.cjs"
+      },
+      {
+        "from": "../project-two/node_modules/exifr/LICENSE",
+        "to": "payload/project-two/scripts/vendor/exifr.LICENSE"
+      },
+      {
         "from": "../project-three/dist",
         "to": "payload/project-three/dist"
       },
       {
         "from": "../project-four/dist",
         "to": "payload/project-four/dist"
+      },
+      {
+        "from": "../health_archive.py",
+        "to": "payload/health_archive.py"
       }
     ],
+    "afterSign": "afterSign.js",
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "../project-one/src-tauri/icons/icon.icns",

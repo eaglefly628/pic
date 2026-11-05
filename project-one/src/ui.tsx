@@ -1,4 +1,5 @@
 import React from "react";
+import { useBreakpoint } from "./lib/breakpoint";
 
 export const card: React.CSSProperties = {
   background: "var(--bg-card)", borderRadius: 14, boxShadow: "var(--card-shadow)",
@@ -72,30 +73,67 @@ export function Segmented<T extends string>({ value, options, onChange, style }:
   );
 }
 
+/** 开关。底下是真的 checkbox，所以键盘 Tab / 空格和读屏都能用；外观是滑块。 */
+export function Switch({ checked, onChange, label, disabled }: {
+  checked: boolean; onChange: (v: boolean) => void; label?: React.ReactNode; disabled?: boolean;
+}) {
+  return (
+    <label className="fv-switch" style={{ display: "inline-flex", alignItems: "center", gap: 9, cursor: disabled ? "default" : "pointer", userSelect: "none", opacity: disabled ? 0.5 : 1 }}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)}
+        style={{ position: "absolute", width: 1, height: 1, opacity: 0, margin: 0, pointerEvents: "none" }} />
+      <span aria-hidden style={{
+        width: 38, height: 22, borderRadius: 11, flex: "none", position: "relative", display: "inline-block",
+        background: checked ? "var(--accent)" : "var(--separator-strong)", transition: "background .18s ease",
+      }}>
+        <span style={{
+          position: "absolute", top: 2, left: checked ? 18 : 2, width: 18, height: 18, borderRadius: 9,
+          background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.24)", transition: "left .18s cubic-bezier(.2,.7,.3,1)",
+        }} />
+      </span>
+      {label && <span style={{ fontSize: 12.5, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{label}</span>}
+    </label>
+  );
+}
+
 export function Modal({ open, title, onClose, children, footer, width = 460 }: {
   open: boolean; title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; width?: number;
 }) {
   // 仅当「按下」和「松开」都发生在遮罩空白处才关闭，避免弹窗内拖拽/选字到外面误关。
   const downOnBackdrop = React.useRef(false);
+  const bp = useBreakpoint();
+  const sheet = bp === "phone";   // 手机改底部抽屉，圆角只留上面两角
   if (!open) return null;
   return (
     <div
       onMouseDown={(e) => { downOnBackdrop.current = e.target === e.currentTarget; }}
       onMouseUp={(e) => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose(); downOnBackdrop.current = false; }}
-      style={{ position: "absolute", inset: 0, zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.32)", backdropFilter: "blur(2px)", animation: "fvFade .15s ease" }}
+      style={{ position: "absolute", inset: 0, zIndex: 80, display: "flex", alignItems: sheet ? "flex-end" : "center", justifyContent: "center", background: "rgba(0,0,0,0.32)", backdropFilter: "blur(2px)", animation: "fvFade .15s ease" }}
     >
-      <div style={{ ...card, width, maxWidth: "90%", maxHeight: "86%", overflow: "auto", animation: "fvRise .18s ease" }} className="fv-scroll">
-        <div style={{ padding: "16px 22px", borderBottom: "0.5px solid var(--separator)", fontSize: 15, fontWeight: 600, color: "var(--text-primary)", position: "sticky", top: 0, background: "var(--bg-card)" }}>{title}</div>
-        <div style={{ padding: "18px 22px" }}>{children}</div>
-        {footer && <div style={{ padding: "12px 22px 18px", display: "flex", gap: 10, justifyContent: "flex-end" }}>{footer}</div>}
+      <div
+        className="fv-scroll"
+        style={{
+          ...card,
+          width: sheet ? "100%" : width,
+          maxWidth: sheet ? "100%" : "90%",
+          maxHeight: sheet ? "88%" : "86%",
+          borderRadius: sheet ? "18px 18px 0 0" : 14,
+          overflow: "auto",
+          animation: sheet ? "fvSheetUp .24s cubic-bezier(.2,.7,.3,1)" : "fvRise .18s ease",
+          paddingBottom: sheet ? "env(safe-area-inset-bottom, 0px)" : undefined,
+        }}>
+        {sheet && <div aria-hidden style={{ width: 38, height: 4, borderRadius: 2, background: "var(--separator-strong)", margin: "8px auto 0" }} />}
+        <div style={{ padding: sheet ? "12px 18px 14px" : "16px 22px", borderBottom: "0.5px solid var(--separator)", fontSize: 15, fontWeight: 600, color: "var(--text-primary)", position: "sticky", top: 0, background: "var(--bg-card)" }}>{title}</div>
+        <div className="fv-sheet-body" style={{ padding: sheet ? "16px 18px" : "18px 22px" }}>{children}</div>
+        {footer && <div style={{ padding: sheet ? "10px 18px 20px" : "12px 22px 18px", display: "flex", gap: 10, justifyContent: sheet ? "stretch" : "flex-end" }}>{footer}</div>}
       </div>
     </div>
   );
 }
 
 export function EmptyState({ icon, text, action }: { icon?: React.ReactNode; text: string; action?: React.ReactNode }) {
+  const phone = useBreakpoint() === "phone";   // 手机上 48px 上下留白显得空得发慌，收一半
   return (
-    <div style={{ ...card, padding: "48px 22px", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, color: "var(--text-tertiary)" }}>
+    <div style={{ ...card, padding: phone ? "26px 18px" : "48px 22px", display: "flex", flexDirection: "column", alignItems: "center", gap: phone ? 12 : 14, color: "var(--text-tertiary)" }}>
       {icon}
       <div style={{ fontSize: 13.5 }}>{text}</div>
       {action}

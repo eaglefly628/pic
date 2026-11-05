@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import type { CollectionDef, DevData, FieldDef, FieldValue, LifeItem } from "../../types";
-import { presetCollections } from "../../data/lifeSample";
+import { presetCollections, addressCollection } from "../../data/lifeSample";
 import { Btn, TextField, TextArea, Select, card } from "../../ui";
-import { IconPlus, IconTrash, IconSearch, IconClose, IconGear } from "../../icons";
+import { IconPlus, IconTrash, IconSearch, IconClose, IconGear, IconImport } from "../../icons";
 import { uid, Tag } from "./shared";
 import { FIELD_TYPES, FieldInput, Stars, fieldDisplay, typeLabel } from "./life/fields";
+import { parseAddressText, type ParsedAddress } from "./life/addressParse";
+
+const ADDRESS_COLLECTION_NAME = "收货地址";
 
 type Mut = (fn: (d: DevData) => void) => void;
 const COLORS = ["#0A84FF", "#5E5CE6", "#34C759", "#FF9500", "#FF375F", "#30B0C7", "#BF5AF2", "#8E8E93"];
@@ -15,13 +18,16 @@ export default function Life({ data, mut }: { data: DevData; mut: Mut }) {
   const [q, setQ] = useState("");
   const [editItem, setEditItem] = useState<LifeItem | null>(null);
   const [editCol, setEditCol] = useState<CollectionDef | null>(null);
+  const [importing, setImporting] = useState(false);
 
-  // 首次进入且为空：载入预置集合
+  // 首次进入且为空：载入预置集合；老用户（已有集合但还没有「收货地址」）：补建一个
   useEffect(() => {
     if (data.collections.length === 0 && data.lifeItems.length === 0) {
       const p = presetCollections();
       mut((d) => { d.collections = p.collections; d.lifeItems = p.items; });
       setSelId(p.collections[0]?.id ?? null);
+    } else if (!data.collections.some((c) => c.name === ADDRESS_COLLECTION_NAME)) {
+      mut((d) => { d.collections.push(addressCollection()); });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -84,6 +90,7 @@ export default function Life({ data, mut }: { data: DevData; mut: Mut }) {
               <div style={{ display: "flex", alignItems: "center", gap: 6, width: 180, height: 34, padding: "0 11px", borderRadius: 9, background: "var(--fill-q)", border: "0.5px solid var(--separator)" }}>
                 <IconSearch /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索" style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 13, color: "var(--text-primary)" }} />
               </div>
+              {col.name === ADDRESS_COLLECTION_NAME && <Btn variant="ghost" onClick={() => setImporting(true)}><IconImport size={14} stroke="currentColor" />粘贴导入</Btn>}
               <Btn variant="ghost" onClick={() => setEditCol(col)}><IconGear size={14} stroke="currentColor" />字段</Btn>
               <Btn onClick={newItem}><IconPlus size={15} />添加</Btn>
             </div>
@@ -115,6 +122,7 @@ export default function Life({ data, mut }: { data: DevData; mut: Mut }) {
 
       {editItem && col && <ItemEditor key={editItem.id} col={col} initial={editItem} onClose={() => setEditItem(null)} onSave={(it) => { saveItem(it); setEditItem(null); }} onDelete={() => { delItem(editItem.id); setEditItem(null); }} />}
       {editCol && <CollectionEditor key={editCol.id} initial={editCol} isNew={!cols.some((c) => c.id === editCol.id)} onClose={() => setEditCol(null)} onSave={(c) => { saveCollection(c); setEditCol(null); }} onDelete={() => { delCollection(editCol); setEditCol(null); }} />}
+      {importing && col && <AddressImportModal col={col} onClose={() => setImporting(false)} mut={mut} />}
     </div>
   );
 }
@@ -148,6 +156,86 @@ function ItemEditor({ col, initial, onClose, onSave, onDelete }: { col: Collecti
       ))}
       <Lbl t="标签"><TextField value={it.tags?.join(", ") ?? ""} onChange={(e) => setTags(e.target.value)} placeholder="逗号分隔" /></Lbl>
       <Lbl t="备注"><TextArea value={it.notes ?? ""} onChange={(e) => setIt({ ...it, notes: e.target.value })} /></Lbl>
+    </Overlay>
+  );
+}
+
+// ── 收货地址 · 粘贴导入 ───────────────────────────────────
+// 拿不到京东账号/接口，只能退而求其次：让用户把地址列表复制粘贴过来，
+// 本地按 姓名/手机号/地址/标签/默认 拆好，导入前还能逐条检查改。
+function AddressImportModal({ col, onClose, mut }: { col: CollectionDef; onClose: () => void; mut: Mut }) {
+  const [raw, setRaw] = useState("");
+  const [drafts, setDrafts] = useState<ParsedAddress[] | null>(null);
+
+  const fId = (label: string) => col.fields.find((fd) => fd.label === label)?.id;
+  const fName = fId("收件人"), fPhone = fId("电话"), fAddr = fId("地址"), fTag = fId("标签"), fDefault = fId("默认地址");
+  const tagOptions = col.fields.find((fd) => fd.label === "标签")?.options ?? [];
+
+  const parse = () => setDrafts(parseAddressText(raw));
+  const updateDraft = (i: number, patch: Partial<ParsedAddress>) => setDrafts((ds) => (ds ? ds.map((d, idx) => (idx === i ? { ...d, ...patch } : d)) : ds));
+  const removeDraft = (i: number) => setDrafts((ds) => (ds ? ds.filter((_, idx) => idx !== i) : ds));
+
+  const commit = () => {
+    if (!drafts?.length) return;
+    mut((d) => {
+      for (const it of drafts) {
+        const values: Record<string, FieldValue> = {};
+        if (fName) values[fName] = it.name || undefined;
+        if (fPhone) values[fPhone] = it.phone || undefined;
+        if (fAddr) values[fAddr] = it.address || undefined;
+        if (fTag && it.tag) values[fTag] = it.tag;
+        if (fDefault) values[fDefault] = it.isDefault || undefined;
+        d.lifeItems.unshift({ id: uid("i"), collectionId: col.id, title: it.name || it.tag || "未命名地址", values, createdAt: Date.now(), updatedAt: Date.now() });
+      }
+    });
+    onClose();
+  };
+
+  return (
+    <Overlay onClose={onClose} title="📍 粘贴导入地址" width={640}
+      footer={drafts ? (
+        <>
+          <Btn variant="ghost" onClick={() => setDrafts(null)}>返回重新粘贴</Btn>
+          <div style={{ flex: 1 }} />
+          <Btn variant="ghost" onClick={onClose}>取消</Btn>
+          <Btn onClick={commit} disabled={!drafts.length}>确认导入 {drafts.length} 条</Btn>
+        </>
+      ) : (
+        <>
+          <div style={{ flex: 1 }} />
+          <Btn variant="ghost" onClick={onClose}>取消</Btn>
+          <Btn onClick={parse} disabled={!raw.trim()}>识别</Btn>
+        </>
+      )}
+    >
+      {!drafts ? (
+        <>
+          <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", lineHeight: 1.7, marginBottom: 10 }}>
+            没有办法直接连京东账号帮你自动导入（拿不到你的京东登录信息，京东也没有开放这种接口）。退一步：打开京东 App「我的 → 地址管理」，把地址列表整段复制过来粘到下面，
+            我按 姓名 / 手机号 / 地址 / 标签 / 默认 帮你拆好；识别完还能逐条检查、改错了的地方，再确认导入。一行一条，或者一条地址分好几行贴，都能认。
+          </div>
+          <TextArea value={raw} onChange={(e) => setRaw(e.target.value)} placeholder={"例如：\n张三 13800138000 浙江省杭州市西湖区文一西路969号 家\n李四 13900139000 江苏省南京市玄武区中山路1号 公司（默认）"} style={{ height: 220, fontFamily: "inherit" }} autoFocus />
+        </>
+      ) : drafts.length === 0 ? (
+        <div style={{ ...card, padding: "30px 18px", textAlign: "center", color: "var(--text-tertiary)", fontSize: 13.5 }}>没识别出带手机号的地址，检查下格式，或者返回改改粘贴的内容。</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {drafts.map((d, i) => (
+            <div key={i} style={{ border: "0.5px solid var(--separator)", borderRadius: 10, padding: "10px 12px", background: "var(--fill-q)" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                <TextField value={d.name} onChange={(e) => updateDraft(i, { name: e.target.value })} placeholder="收件人" style={{ width: 96 }} />
+                <TextField value={d.phone} onChange={(e) => updateDraft(i, { phone: e.target.value })} placeholder="电话" style={{ width: 128 }} />
+                <Select value={d.tag ?? ""} onChange={(e) => updateDraft(i, { tag: e.target.value || undefined })} options={[{ value: "", label: "无标签" }, ...tagOptions.map((o) => ({ value: o, label: o }))]} style={{ width: 96 }} />
+                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-secondary)", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!d.isDefault} onChange={(e) => updateDraft(i, { isDefault: e.target.checked })} /> 默认
+                </label>
+                <button onClick={() => removeDraft(i)} className="fv-tap" title="不导入这条" style={{ border: "none", background: "transparent", color: "var(--text-tertiary)", padding: 4, borderRadius: 6, cursor: "pointer", marginLeft: "auto" }}><IconTrash size={14} stroke="currentColor" /></button>
+              </div>
+              <TextField value={d.address} onChange={(e) => updateDraft(i, { address: e.target.value })} placeholder="详细地址" style={{ width: "100%" }} />
+            </div>
+          ))}
+        </div>
+      )}
     </Overlay>
   );
 }

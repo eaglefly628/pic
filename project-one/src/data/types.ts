@@ -1,12 +1,27 @@
 // 统一数据模型 —— 真实数据（由 Excel 导入）与示例数据都遵循此结构。
 // 应用的所有视图（总资产 / 趋势 / 构成 / 账户 / 快照）都从这里计算得出。
 
-export type Category = "liquid" | "invest" | "estate" | "fixed" | "debt";
+export type Category = "liquid" | "invest" | "estate" | "fixed" | "debt" | "trust";
+
+/** 账户级资金安排。仅用于模拟，不改变余额或真实转账记录。 */
+export interface LiquidityPlan {
+  /** 同一账户里的这一笔资金名称，例如「三年定存」；可留空。 */
+  label?: string;
+  /** 可调出的金额；留空表示尚未评估。 */
+  amount?: number;
+  /** 从提出申请到到账的天数；留空表示未知。 */
+  arrivalDays?: number;
+  /** 本笔资金的存入日和到期日，均为 YYYY-MM-DD。 */
+  depositedOn?: string;
+  maturesOn?: string;
+  /** 到期前多少天进入提醒列表，默认 30 天。 */
+  remindDays?: number;
+}
 
 export interface AccountMeta {
   id: string;
   name: string;
-  /** 分组：流动资金 / 投资理财 / 不动产 / 负债 */
+  /** 分组：流动资金 / 投资理财 / 不动产 / 负债 / 家族信托 */
   cat: Category;
   /** 展示用的细类型，如「储蓄/活期」「证券/股票」 */
   type: string;
@@ -16,15 +31,41 @@ export interface AccountMeta {
   color: string;
   /** 年化利率（可选，来自表格第二行） */
   rate?: number;
+
+  // ── 独立运营资产（家族信托这类）的额外设定 ──────────────────
+  /** 独立运营：不计入家庭总资产（净资产、总资产/负债、资产构成、净值曲线都不算它），
+   *  在「独立运营资产」里单独列示。账户本身照常出现在账户列表和利息预测里。
+   *  默认 undefined = 计入，行为跟以前完全一样，老数据不受影响。 */
+  offBalance?: boolean;
+  /** 锁定起始日 YYYY-MM-DD */
+  lockStart?: string;
+  /** 锁定期（月）。24 = 2 年。0 / undefined = 不锁定 */
+  lockMonths?: number;
+  /** 每笔资金分别填写可调金额、到账时间和到期提醒。 */
+  liquidity?: LiquidityPlan[];
 }
 
 export interface Snapshot {
   /** ISO 日期 yyyy-mm-dd */
   date: string;
+  /** 明确的统计月份 YYYY-MM。月末与次月 1–3 日补录会归到同一个统计月；date 保留原始录入日期。 */
+  period?: string;
   /** 账户 id -> 当期余额（null 表示该期无记录） */
   balances: Record<string, number | null>;
   /** 来源：导入 / 手动 */
   source?: "import" | "manual";
+  /** 这一期里，哪些账户 id 是这次真正被录入/修改的（不含为保持净值完整而结转的其它账户）。
+   *  undefined 表示这条快照没有这个区分（导入数据、或本字段上线前的旧数据）——
+   *  这种情况下 balances 里出现的账户就当作"这期确实有记录"，兼容旧行为。 */
+  touched?: string[];
+}
+
+/** 退休消耗预测：手填"退休日期"+"从退休到现在一共花了多少"，据此倒推月均消耗速度，
+ *  往后画一条平滑的下降曲线，预测余额降到 0 大概是什么时候。 */
+export interface RetirementPlan {
+  date?: string;              // YYYY-MM-DD 退休日期
+  spentSinceRetire?: number;  // 从退休到现在，一共消耗了多少（正数）
+  withInterest?: boolean;     // 是否叠加账户自身利率抵消一部分消耗
 }
 
 export interface Dataset {
@@ -37,4 +78,13 @@ export interface Dataset {
   real?: boolean;
   /** 「每月变化量」备注：YYYY-MM -> 该月主要原因 */
   monthNotes?: Record<string, string>;
+  /** 退休消耗预测的设定 */
+  retirement?: RetirementPlan;
+  /** 功能模块开关。只在明确关掉时才写 false，没写过 = 用默认。
+   *  trust = 家族信托 / 独立运营资产，默认开启（本产品面向有一定资产规模的家庭）。 */
+  features?: { trust?: boolean };
+  /** 一次性数据迁移标记；有标记后启动不再扫描全部历史。 */
+  migrations?: {
+    statisticalMonth?: { version: number; migratedAt: number; assigned: number; collisions: number; invalidDates: number };
+  };
 }

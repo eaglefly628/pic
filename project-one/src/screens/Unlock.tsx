@@ -19,7 +19,7 @@ export default function Unlock() {
   const submit = async () => {
     setErr("");
     if (onboard) {
-      if (pw.length < 6) return setErr("主密码至少 6 位");
+      if (pw.length < 8) return setErr("主密码至少 8 位");
       if (pw !== pw2) return setErr("两次输入不一致");
       setBusy(true);
       await vault.create(pw);
@@ -34,7 +34,7 @@ export default function Unlock() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--wallpaper)", padding: 32 }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18, width: 320, animation: "fvRise .3s ease" }}>
-        <div style={{ width: 64, height: 64, borderRadius: 17, background: "linear-gradient(160deg,var(--accent),#5E5CE6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 10px 30px var(--accent-soft)" }}>
+        <div style={{ width: 64, height: 64, borderRadius: 17, background: "linear-gradient(160deg,var(--accent),#b08a5e)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 10px 30px var(--accent-soft)" }}>
           <IconShield size={30} stroke="#fff" />
         </div>
         <div style={{ textAlign: "center" }}>

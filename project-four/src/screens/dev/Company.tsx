@@ -6,6 +6,7 @@ import { IconPlus, IconGear, IconClose, IconCopy, IconCheck, IconReceipt, IconBu
 import { uid } from "./shared";
 import { INVOICE_CATEGORIES, INVOICE_EMOJI, groupByMonth, type MonthGroup } from "../../lib/invoices";
 import { zipStore, dataUrlToBytes, isPdf } from "../../lib/zip";
+import { PdfPreview } from "../../lib/pdfPreview";
 
 type Mut = (fn: (d: DevData) => void) => void;
 type View = "invoices" | "company";
@@ -161,7 +162,7 @@ function Invoices({ data, mut }: { data: DevData; mut: Mut }) {
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, zIndex: 95, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30, cursor: isPdf(lightbox) ? "default" : "zoom-out", animation: "fvFade .15s ease" }}>
           {isPdf(lightbox)
-            ? <iframe src={lightbox} title="发票 PDF" onClick={(e) => e.stopPropagation()} style={{ width: "min(900px, 92vw)", height: "90vh", border: "none", borderRadius: 10, background: "#fff", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }} />
+            ? <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: "90vh", overflow: "auto" }}><PdfPreview dataUrl={lightbox!} maxWidth={900} maxHeight={1400} /></div>
             : <img src={lightbox} alt="发票" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 10, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }} />}
         </div>
       )}
@@ -191,7 +192,7 @@ function InvoiceEditor({ initial, onClose, onSave, onDelete }: { initial: Invoic
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
         {v.photo
           ? (isPdf(v.photo)
-              ? <iframe src={v.photo} title="发票 PDF" style={{ width: "100%", height: 360, border: "0.5px solid var(--separator)", borderRadius: 10, background: "#fff" }} />
+              ? <div style={{ width: "100%", maxHeight: 360, overflow: "auto", border: "0.5px solid var(--separator)", borderRadius: 10, padding: 8, boxSizing: "border-box" }}><PdfPreview dataUrl={v.photo} maxWidth={400} maxHeight={500} /></div>
               : <img src={v.photo} alt="发票" style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 10, border: "0.5px solid var(--separator)", display: "block" }} />)
           : <div style={{ width: "100%", height: 180, borderRadius: 10, background: "var(--fill-q)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40 }}>{INVOICE_EMOJI[v.category ?? ""] ?? "🧾"}</div>}
       </div>

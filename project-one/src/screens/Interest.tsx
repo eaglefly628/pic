@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useVault } from "../vault/VaultContext";
-import { CAT_TITLE, latestBalances } from "../lib/compute";
+import { CAT_TITLE, latestBalances, trustEnabled } from "../lib/compute";
 import type { Dataset } from "../data/types";
 import { fmt } from "../lib/format";
 import { card } from "../ui";
 import { useCountUp, rise } from "../lib/anim";
+import { useBreakpoint } from "../lib/breakpoint";
 
 /** 可复用的利息预测视图（主账户与私房钱共用） */
 export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRate: (id: string, dec: number) => void }) {
@@ -13,6 +14,7 @@ export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRa
     for (const a of dataset.accounts) o[a.id] = a.rate != null ? String(+(a.rate * 100).toFixed(4)) : "0";
     return o;
   });
+  const phone = useBreakpoint() === "phone";
   const lb = latestBalances(dataset);
   const commit = (id: string, val: string) => onSetRate(id, (parseFloat(val) || 0) / 100);
 
@@ -24,18 +26,19 @@ export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRa
     })
     .sort((x, y) => Math.abs(y.annual) - Math.abs(x.annual));
   const totalAnnual = rows.reduce((s, r) => s + r.annual, 0);
+  // 独立运营的账户（家族信托这类）也有利息，但它们不在家庭总资产里，合计行单独说明一句
+  const offAnnual = trustEnabled(dataset) ? rows.filter((r) => r.a.offBalance).reduce((s, r) => s + r.annual, 0) : 0;
   const yAnim = useCountUp(totalAnnual);
   const mAnim = useCountUp(totalAnnual / 12);
   const dAnim = useCountUp(totalAnnual / 365);
 
   return (
-    <div style={{ padding: "24px 32px 40px" }}>
+    <div style={{ padding: phone ? "16px 14px 28px" : "24px 32px 40px" }}>
       <div className="fv-rise" style={{ ...rise(0), display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 18 }}>
-        <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--accent), #5E5CE6)", borderRadius: 14, padding: "18px 22px", color: "#fff", boxShadow: "0 8px 20px -6px var(--accent-soft)" }}>
-          <div aria-hidden className="fv-sheen" />
-          <div style={{ position: "relative" }}>
+        <div className="fv-sweep" style={{ position: "relative", overflow: "hidden", background: "linear-gradient(155deg, var(--grad-1), var(--grad-2))", borderRadius: 14, padding: phone ? "14px 16px" : "18px 22px", minWidth: 0, color: "#fff", boxShadow: "0 8px 20px -6px var(--accent-soft)" }}>
+                    <div style={{ position: "relative" }}>
             <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", fontWeight: 500 }}>预计年利息合计</div>
-            <div style={{ fontSize: 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{fmt(yAnim)}</div>
+            <div style={{ fontSize: phone ? 20 : 25, fontWeight: 700, marginTop: 8, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmt(yAnim)}</div>
           </div>
         </div>
         <Metric label="预计月利息" value={fmt(mAnim)} />
@@ -85,6 +88,11 @@ export function InterestView({ dataset, onSetRate }: { dataset: Dataset; onSetRa
             <span style={{ width: 140, textAlign: "right", fontWeight: 700, color: totalAnnual < 0 ? "var(--red)" : "var(--green)", fontVariantNumeric: "tabular-nums" }}>{fmt(totalAnnual)}</span>
             <span style={{ width: 120, textAlign: "right", fontWeight: 600, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{fmt(totalAnnual / 12)}</span>
           </div>
+          {offAnnual !== 0 && (
+            <div style={{ padding: "9px 22px", borderTop: "0.5px solid var(--separator)", fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.7 }}>
+              其中 <strong style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }}>{fmt(offAnnual)}</strong> 来自独立运营资产（不计入家庭总资产，但利息照常预测）。
+            </div>
+          )}
         </div>
       )}
     </div>

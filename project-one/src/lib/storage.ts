@@ -19,23 +19,51 @@ export function loadBlob(): VaultBlob | null {
   }
 }
 
+/** localStorage 写满会抛 QuotaExceededError。裸抛出去的话界面表现是「点了没反应」，
+ *  所以统一在这里换成一句能看懂的话，由调用处决定怎么提示。 */
+export class StorageFullError extends Error {
+  constructor(what: string) {
+    super(`本机存储空间不够，${what}没有保存成功。请到「设置 · 程序内备份」删掉几个旧还原点，或在大厅导出一份整屋备份后清理。`);
+    this.name = "StorageFullError";
+  }
+}
+function setItemSafe(key: string, value: string, what: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    const quota = e instanceof DOMException &&
+      (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED");
+    if (quota) throw new StorageFullError(what);
+    throw e;
+  }
+}
+
 export function saveBlob(blob: VaultBlob): void {
-  localStorage.setItem(KEY, JSON.stringify(blob));
+  setItemSafe(KEY, JSON.stringify(blob), "这次改动");
 }
 
 export function exportBlobString(): string | null {
   return localStorage.getItem(KEY);
 }
 
+/** 只清理财主金库。想「删除全部数据」请用 clearAllVaultData()。 */
 export function clearVault(): void {
   localStorage.removeItem(KEY);
+}
+
+/** 真正的「删除本机全部数据」：主金库 + 密码保险箱 + 独立管理 + 程序内还原点。
+ *  以前只删了主金库，密码箱和独立管理的密文会原样留在本地，跟界面上的承诺不符。 */
+export function clearAllVaultData(): void {
+  for (const k of [KEY, BKEY, "familyvault.pwbox.v1", "familyvault.secret.v1"]) {
+    localStorage.removeItem(k);
+  }
 }
 
 export function importBlobString(s: string): boolean {
   try {
     const b = JSON.parse(s) as VaultBlob;
     if (b.v !== 1 || !b.data || !b.wrap) return false;
-    localStorage.setItem(KEY, JSON.stringify(b));
+    setItemSafe(KEY, JSON.stringify(b), "导入的金库");
     return true;
   } catch {
     return false;
@@ -60,8 +88,12 @@ export function listBackups(): Backup[] {
   }
 }
 function saveBackups(arr: Backup[]): void {
-  localStorage.setItem(BKEY, JSON.stringify(arr));
+  setItemSafe(BKEY, JSON.stringify(arr), "还原点");
 }
+
+/** 程序内还原点的份数上限。每份是完整数据副本，不设上限迟早把 localStorage
+ *  （通常 5MB 左右）写满，而写满会连带主数据都存不进去。超出就挤掉最旧的。 */
+export const MAX_BACKUPS = 20;
 
 /** 以当前已保存的加密数据创建一个命名备份 */
 export function addBackup(label: string): boolean {
@@ -71,7 +103,8 @@ export function addBackup(label: string): boolean {
   try { blob = JSON.parse(cur) as VaultBlob; } catch { return false; }
   const arr = listBackups();
   arr.unshift({ id: "bk_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), label: label || "未命名备份", createdAt: Date.now(), blob });
-  saveBackups(arr);
+  while (arr.length > MAX_BACKUPS) arr.pop();     // 挤掉最旧的，别无限堆
+  saveBackups(arr);                               // 仍可能抛 StorageFullError，交给调用处提示
   return true;
 }
 
@@ -79,7 +112,7 @@ export function addBackup(label: string): boolean {
 export function restoreBackup(id: string): boolean {
   const b = listBackups().find((x) => x.id === id);
   if (!b) return false;
-  localStorage.setItem(KEY, JSON.stringify(b.blob));
+  setItemSafe(KEY, JSON.stringify(b.blob), "恢复的数据");
   return true;
 }
 
