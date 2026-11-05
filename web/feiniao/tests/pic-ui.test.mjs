@@ -27,7 +27,9 @@ test('cloud entry creates encrypted state, mounts all four real applications, sa
   w.eval(assets['/pic/cloud.js'].body);await until(()=>!w.document.getElementById('unlock').hidden);
   w.document.getElementById('password').value='test-cloud-master';w.document.getElementById('confirm-password').value='test-cloud-master';w.document.getElementById('unlock').dispatchEvent(new w.Event('submit',{cancelable:true}));await until(()=>!w.document.getElementById('workspace').hidden);assert.equal(revision,2);
   assert.ok(!w.document.getElementById('management').open);assert.equal(w.document.getElementById('sync').closest('details').id,'management');assert.equal(w.document.getElementById('management').closest('header').className,'bar');
-  w.document.getElementById('management').open=true;w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(w.document.getElementById('management').open,false);
+  assert.equal(w.document.getElementById('state').closest('details').id,'management');
+  w.document.getElementById('management').open=true;w.document.getElementById('sync').click();assert.equal(w.document.getElementById('management').open,true);
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(w.document.getElementById('management').open,false);
   w.document.getElementById('management').open=true;w.document.getElementById('welcome').click();assert.equal(w.document.getElementById('management').open,false);
 
   for(const app of ['finance','gallery','vault','dev']){

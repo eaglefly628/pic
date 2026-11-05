@@ -6,7 +6,7 @@ import {PicMemory,b64,un64,keyFor,seal,open,uploadSnapshot,downloadSnapshot} fro
 const $=id=>document.getElementById(id);
 let health=null,engine=null,requestedVersions=null;
 let memory=null,key=null,salt=null,revision=0,manifest=null,generation=0,saved=0,pending=null,timer=null,blocked=false,remoteChanged=false,lastActivity=Date.now(),epoch=0;
-function status(message,error=false){$('state').textContent=message;$('state').dataset.error=String(error);}
+function status(message,error=false){$('state').textContent=message;$('state').dataset.error=String(error);$('sync-alert').hidden=!error;}
 async function api(path,options={}){const r=await fetch('/api/pic/'+path,{credentials:'same-origin',...options});if(!r.ok){let e;try{e=await r.json();}catch{}const error=Error(e?.error||'云端连接失败（'+r.status+'）');error.status=r.status;throw error;}return r;}
 async function state(){const m=await new CloudSync(api).metadata();return {envelope:m.envelope,revision:m.states.shared.revision};}
 const versionsText=()=>{const v=engine.versions();return `共享 v${v.shared} · 健康 v${v.health} · 金融 v${v.finance}（网页只读）`;};
@@ -27,7 +27,7 @@ async function flush(){
 }
 async function setupMemory(bundle){memory=new PicMemory(changed);await memory.restore(bundle||{__home_backup:1,v:1,localStorage:{},indexedDB:[]});memory.local.readOnlyFinance=true;}
 function healthService(){if(!memory||!key)throw Error('请先解锁家庭云空间');if(!health){const owner=memory,turn=epoch;health=new HealthStore(owner,{flush,active:()=>!!key&&memory===owner&&turn===epoch});}return health;}
-window.PicRuntime={protectFinance(w){w.document.addEventListener('click',e=>{const b=e.target.closest('button');if(b&&/添加|编辑|删除|保存|重置|导入|录入|新增|记一|修改|恢复|创建|清空|更改密码/.test(b.textContent)){e.preventDefault();e.stopImmediatePropagation();status('金融数据网页只读，请在 Mac 修改后发布新版');}},true);},healthFetch:(input,options)=>healthService().fetch(input,options),async reloadApp(w){try{await flush();w.location.reload();}catch(e){status(e.message+"；请先下载加密备份，再刷新。",true);}},install(w){if(!memory||!key)throw Error('请先解锁家庭云空间');memory.install(w);for(const event of ['pointerdown','keydown','input','scroll'])w.document.addEventListener(event,()=>lastActivity=Date.now(),{capture:true,passive:true});}};
+window.PicRuntime={protectFinance(w){w.document.addEventListener('click',e=>{const b=e.target.closest('button');if(b&&/添加|编辑|删除|保存|重置|导入|录入|新增|记一|修改|恢复|创建|清空|更改密码/.test(b.textContent)){e.preventDefault();e.stopImmediatePropagation();status('金融数据网页只读，请在 Mac 修改后发布新版');}},true);},healthFetch:(input,options)=>healthService().fetch(input,options),async reloadApp(w){try{await flush();w.location.reload();}catch(e){status(e.message+"；请先下载加密备份，再刷新。",true);}},install(w){if(!memory||!key)throw Error('请先解锁家庭云空间');memory.install(w);w.document.addEventListener('pointerdown',()=>{$('management').open=false;});for(const event of ['pointerdown','keydown','input','scroll'])w.document.addEventListener(event,()=>lastActivity=Date.now(),{capture:true,passive:true});}};
 async function connect(){
  $('error').textContent='';$('checking').hidden=false;$('reconnect').hidden=true;
  try{const s=await state();revision=s.revision;manifest=null;$('login').hidden=true;$('unlock').hidden=false;$('confirm-label').hidden=!!s.envelope;$('confirm-password').required=!s.envelope;$('gate-title').textContent=s.envelope?'解锁家庭云空间':'设置家庭云主密码';$('enter').textContent=s.envelope?'解锁':'创建加密云空间';$('unlock').dataset.exists=String(!!s.envelope);}
@@ -80,7 +80,6 @@ $('lock').onclick=lock;
 $('copy-import-report').onclick=async()=>{const text=$('import-diagnostic').textContent;try{await navigator.clipboard.writeText(text);status('结构诊断已复制（仅字段类型和数量，不含记录内容）');}catch{$('import-diagnostic').hidden=false;status('请从展开的结构诊断中选择并复制；其中不含记录内容');}};
 $('health-from-report').onclick=()=>document.querySelector('[data-app="health"]').click();
 const management=$('management');
-management.querySelector('.management-panel').addEventListener('click',e=>{if(e.target.closest('button'))management.open=false;});
 document.addEventListener('click',e=>{if(!management.contains(e.target))management.open=false;});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&management.open){management.open=false;management.querySelector('summary').focus();}});
 window.addEventListener('beforeunload',e=>{if(key&&generation!==saved){e.preventDefault();e.returnValue='';}});
