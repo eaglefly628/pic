@@ -26,7 +26,7 @@ export function createMacSync({dataDir,healthDir=path.join(dataDir,'health'),saf
   // Preflight every domain before any upload or local replacement.
   for(const d of DOMAINS){const localPart=domainBundle(local,d),localHash=hash(stableJSON(localPart)),known=config.domains[d],remoteVersion=cloud.states[d].revision,dirty=known&&known.localHash!==localHash;
    if(dirty&&remoteVersion>known.version)throw Error(d+' 出现分叉：本机修改未覆盖云端新版本，请保留备份后人工合并');
-   if(!known&&remoteVersion>0){actions[d]='pull';parts[d]=domainBundle(remote,d);}else if(known&&remoteVersion>known.version){actions[d]='pull';parts[d]=domainBundle(remote,d);}else{actions[d]=(!known||dirty)?'push':'unchanged';parts[d]=localPart;}
+   if(!known&&remoteVersion>0){const incoming=local.backup_versions?.[d];if(!Number.isSafeInteger(incoming))throw Error(d+' 本机备份缺少版本号，先完成旧库基线迁移');if(incoming===remoteVersion&&localHash!==cloud.hashes[d])throw Error(d+' 同版本内容冲突，未自动覆盖');actions[d]=incoming>remoteVersion?'push':incoming===remoteVersion?'unchanged':'pull';parts[d]=actions[d]==='pull'?domainBundle(remote,d):localPart;}else if(known&&remoteVersion>known.version){actions[d]='pull';parts[d]=domainBundle(remote,d);}else{actions[d]=(!known||dirty)?'push':'unchanged';parts[d]=localPart;}
    if(d!=='finance'&&actions[d]==='push'&&!remoteVersion&&cloud.legacyVersion)throw Error('请先打开新版飞鸟网页，完成旧整屋快照的版本分区迁移，再同步 Mac');
   }
   await fs.mkdir(path.join(dataDir,'backups/version-conflicts'),{recursive:true});await atomic(path.join(dataDir,'backups/version-conflicts/pre-sync-'+Date.now()+'.home'),local);
