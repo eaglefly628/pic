@@ -19,6 +19,7 @@ import Travel from "./screens/dev/Travel";
 import Disk from "./screens/dev/Disk";
 import Calendar from "./screens/dev/Calendar";
 import DailyPlan from "./screens/dev/DailyPlan";
+import HealthArchive from "./screens/dev/HealthArchive";
 import CommandPalette from "./screens/dev/CommandPalette";
 import { IconTerminal, IconSearch } from "./icons";
 
@@ -52,6 +53,15 @@ export default function App() {
   if (status === "loading") {
     return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)" }}>载入中…</div>;
   }
+  // The imported examination archive lives separately from the encrypted workbench.
+  // Keep it readable from the Health card while leaving every vault-backed view locked.
+  if (status !== "unlocked" && view === "health") return <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    <header style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 24px", borderBottom: "1px solid var(--separator)", background: "var(--bg-content)" }}>
+      <strong>男主 · 健康档案</strong>
+      <button className="fv-btn" style={lockBtn} onClick={() => setView("overview")}>打开加密工作台</button>
+    </header>
+    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "22px 26px 40px" }}><HealthArchive /></main>
+  </div>;
   if (status !== "unlocked") return <Lock />;
 
   return (
