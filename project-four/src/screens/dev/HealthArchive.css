@@ -30,3 +30,4 @@
 .ha-doctor-timeline{margin-top:18px;display:grid;gap:6px}.ha-doctor-timeline details{padding:10px 14px;border:1px solid var(--separator);border-radius:9px}.ha-doctor-timeline summary{cursor:pointer;font-weight:600}.ha-doctor-timeline p{line-height:1.6;margin:9px 0 0}
 
 .ha-source-list{display:grid;gap:12px}.ha-source-list article{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 0;border-top:1px solid var(--separator)}.ha-source-list small{flex:1;min-width:120px;color:var(--text-secondary)}.ha-source-list a{color:var(--accent);padding:8px}.ha-source-list span{color:var(--text-secondary);font-size:13px}
+.ha-source-details summary{cursor:pointer;font-size:16px;font-weight:600}.ha-source-details summary small{font-size:11px;font-weight:400;color:var(--text-tertiary);margin-left:8px}.ha-source-details[open] summary{margin-bottom:12px}.ha-source-details>p{font-size:11px;margin:0 0 15px}
