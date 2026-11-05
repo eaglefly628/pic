@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1792637189750,
+      "tag": "0000_cloud",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792823947362,
+      "tag": "0001_cultured_molly_hayes",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793023712507,
+      "tag": "0002_motionless_blue_blade",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793026266180,
+      "tag": "0003_powerful_payback",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793525257511,
+      "tag": "0004_strong_doctor_octopus",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793861685041,
+      "tag": "0005_absurd_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793863959809,
+      "tag": "0006_daffy_silver_sable",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793888062943,
+      "tag": "0007_mighty_microchip",
+      "breakpoints": true
+    }
+  ]
+}

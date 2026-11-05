@@ -1,0 +1,9 @@
+ops/deploy.local.json
+*.pem
+*.key
+.env
+.DS_Store
+dist/
+outputs/
+node_modules/
+.sites-runtime/

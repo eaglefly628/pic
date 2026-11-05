@@ -41,6 +41,7 @@ export default function App() {
   const { status, toast, data, update } = useVault();
   const [view, setView] = useState<View>(initialView);
   const [palette, setPalette] = useState(false);
+  const [unlockHealth, setUnlockHealth] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -55,12 +56,12 @@ export default function App() {
   }
   // The imported examination archive lives separately from the encrypted workbench.
   // Keep it readable from the Health card while leaving every vault-backed view locked.
-  if (status !== "unlocked" && view === "health") return <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+  if (status !== "unlocked" && view === "health" && !unlockHealth) return <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
     <header style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 24px", borderBottom: "1px solid var(--separator)", background: "var(--bg-content)" }}>
       <strong>男主 · 健康档案</strong>
-      <button className="fv-btn" style={lockBtn} onClick={() => setView("overview")}>打开加密工作台</button>
+      <button className="fv-btn" style={lockBtn} onClick={() => setUnlockHealth(true)}>解锁健康手记</button>
     </header>
-    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "22px 26px 40px" }}><HealthArchive /></main>
+    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "22px 26px 40px" }}><p style={{ lineHeight: 1.8 }}>此页显示体检与化验档案。血压、血脂和饮食手记保存在原工作台加密库中，请点“解锁健康手记”，使用原工作台主密码查看；这里的档案数量不代表全部健康记录。</p><HealthArchive /></main>
   </div>;
   if (status !== "unlocked") return <Lock />;
 

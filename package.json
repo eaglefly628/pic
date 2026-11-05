@@ -1,0 +1,1 @@
+{"name":"pic-workspace","private":true,"type":"module","workspaces":["web/feiniao"],"scripts":{"web:build":"npm run build --workspace=feiniao-cloud","web:test":"npm test --workspace=feiniao-cloud","desktop:build":"npm run mac --prefix desktop"}}

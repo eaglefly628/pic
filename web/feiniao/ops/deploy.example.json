@@ -1,0 +1,5 @@
+{
+  "sshHost": "REPLACE_WITH_VERIFIED_SSH_ALIAS",
+  "remoteRoot": "/srv/feiniao",
+  "publicUrl": "https://REPLACE_WITH_TRUSTED_HTTPS_ADDRESS"
+}

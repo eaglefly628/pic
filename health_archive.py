@@ -176,7 +176,7 @@ class HealthArchive:
                 else:
                     rows[row["id"]] = row
                     added += 1
-            merged = {"schema_version": "draft-0.2", "reports": list(reports.values()), "observations": list(rows.values())}
+            merged = {"backup_version": max(int(current.get("backup_version",0))+int(added>0 or len(reports)!=len(current["reports"])),int(data.get("backup_version",0))), "schema_version": "draft-0.2", "reports": list(reports.values()), "observations": list(rows.values())}
             validate(merged)
             self.root.mkdir(parents=True, exist_ok=True)
             # Preflight every target before writing any attachment.

@@ -1,3 +1,7 @@
+import sys as _version_sys
+from pathlib import Path as _VersionPath
+_version_sys.path.insert(0,str(_VersionPath(__file__).resolve().parent))
+from backup_versions import next_versions, valid as valid_backup_versions
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -115,7 +119,7 @@ APP_LABEL = APP_VERSION + ("-dev" if APP_CHANNEL == "dev" else "")   # 开发版
 DATA_VERSION = 7
 # 写盘协议和数据结构版本分开：前者保证客户端带有并发基线，后者保护数据形状。
 # 老安装版不会发送 syncProtocol；它的写入会被保留成冲突副本，但不能覆盖 current.home。
-SYNC_PROTOCOL = 2
+SYNC_PROTOCOL = 3
 DATA_DIR = data_dir()
 
 # 家庭影像的大型 Samba 目录索引保存在本机，不把工作中的 SQLite 放到网络盘上，避免
@@ -2471,6 +2475,7 @@ def _backup_save_locked(raw: bytes) -> dict:
     def _content(b):
         return json.dumps({"localStorage": b.get("localStorage"), "indexedDB": b.get("indexedDB")}, sort_keys=True, ensure_ascii=False)
     new_content = _content(bundle)
+    old = {}
     old_raw = backup_latest()
     if old_raw is not None:
         try:
@@ -2487,8 +2492,8 @@ def _backup_save_locked(raw: bytes) -> dict:
                         "hint": "磁盘上的数据是更新版本的 App 写的，本入口版本偏旧、已拒绝覆盖。请把本入口也更新到最新。"}
             # 内容没变就不更新时间戳——否则多入口会因时间戳变化互相触发无谓的“恢复”。
             # 数据版本落后时不能在这里短路：要让当前客户端把元数据升级，之后旧安装版才会被版本护栏挡住。
-            if _content(old) == new_content and stored_dv >= DATA_VERSION:
-                return {"ok": True, "savedAt": old.get("savedAt"), "bytes": len(old_raw), "dir": str(DATA_DIR), "unchanged": True}
+            if _content(old) == new_content and stored_dv >= DATA_VERSION and valid_backup_versions(old.get("backup_versions")):
+                return {"ok": True, "savedAt": old.get("savedAt"), "bytes": len(old_raw), "dir": str(DATA_DIR), "unchanged": True, "backup_versions":old.get("backup_versions")}
             # 旧页面不带并发协议，无法证明它读到的是 current.home 的哪个版本。无条件拒绝覆盖，
             # 但把它想写的内容另存为安全副本，避免旧入口里刚做的编辑彻底丢失。
             if int(bundle.get("syncProtocol") or 0) != SYNC_PROTOCOL:
@@ -2499,21 +2504,18 @@ def _backup_save_locked(raw: bytes) -> dict:
             # 乐观并发：客户端带上「我上次同步到的 savedAt」。磁盘上的比它新，说明另一个入口
             # （比如安装版和 VSCode 同时开着）在我之后写过——直接覆盖会把对方的改动抹掉。
             # 拒绝，让前端先把新的拉回来。老客户端不带这个字段则跳过检查（向后兼容）。
-            base = bundle.get("baseSavedAt")
-            disk_at = int(old.get("savedAt") or 0)
-            if not isinstance(base, (int, float)):
-                conflict = _save_rejected_bundle(bundle, "keep-无并发基线-")
-                return {"ok": False, "error": "missing-base", "diskSavedAt": disk_at,
-                        "conflictCopy": conflict,
-                        "hint": "写入请求没有并发基线，已拒绝覆盖；内容已另存为冲突副本。"}
-            if disk_at > int(base):
-                conflict = _save_rejected_bundle(bundle, "keep-并发冲突-")
-                return {"ok": False, "error": "stale", "diskSavedAt": disk_at, "baseSavedAt": int(base),
-                        "conflictCopy": conflict,
-                        "hint": "磁盘上的数据比你这个窗口上次同步到的更新（另一个入口写过），本次未覆盖。刷新页面会拉取最新数据。"}
+            expected=old.get("backup_versions")
+            if valid_backup_versions(expected) and bundle.get("baseBackupVersions")!=expected:
+                conflict=_save_rejected_bundle(bundle,"keep-版本冲突-")
+                return {"ok":False,"error":"version-conflict","backup_versions":expected,"conflictCopy":conflict,"hint":"备份版本基线过期，原数据未覆盖；待写内容已另存。"}
     elif int(bundle.get("syncProtocol") or 0) != SYNC_PROTOCOL:
-        return {"ok": False, "error": "legacy-client", "requiredSyncProtocol": SYNC_PROTOCOL,
-                "hint": "这个页面版本太旧，不能建立新的磁盘备份。请使用最新版。"}
+        return {"ok":False,"error":"legacy-client","requiredSyncProtocol":SYNC_PROTOCOL}
+    try:
+        bundle["backup_versions"]=next_versions(old,bundle)
+    except ValueError as exc:
+        return {"ok":False,"error":str(exc)}
+    bundle.pop("baseBackupVersions",None)
+    bundle.pop("baseBackupVersions",None)
     bundle.pop("baseSavedAt", None)   # 只用于校验，不落盘
     bundle["syncProtocol"] = SYNC_PROTOCOL
     bundle["dataVersion"] = DATA_VERSION
@@ -2531,13 +2533,14 @@ def _backup_save_locked(raw: bytes) -> dict:
             encoding="utf-8")
     except Exception:
         pass
-    return {"ok": True, "savedAt": bundle["savedAt"], "bytes": len(data), "dir": str(DATA_DIR)}
+    return {"ok": True, "savedAt": bundle["savedAt"], "bytes": len(data), "dir": str(DATA_DIR), "backup_versions":bundle.get("backup_versions")}
 
 
 def _save_rejected_bundle(bundle: dict, prefix: str) -> str:
     """把被拒绝覆盖的客户端状态另存为可恢复副本；调用者已经持有 _BACKUP_LOCK。"""
     copy = dict(bundle)
     copy.pop("baseSavedAt", None)
+    copy.pop("baseBackupVersions",None)
     copy["rejectedAt"] = int(time.time() * 1000)
     copy["dataVersion"] = int(copy.get("dataVersion") or 0)
     data = json.dumps(copy, ensure_ascii=False).encode("utf-8")
@@ -2635,6 +2638,7 @@ def backup_keep(raw: bytes) -> dict:
         return {"ok": False, "error": "不是合法的备份数据（JSON 解析失败）"}
     if not isinstance(bundle, dict) or not bundle.get("__home_backup"):
         return {"ok": False, "error": "不是本系统的备份数据"}
+    bundle.pop("baseBackupVersions",None)
     bundle.pop("baseSavedAt", None)
     bundle["savedAt"] = int(time.time() * 1000)
     bundle["dataVersion"] = DATA_VERSION

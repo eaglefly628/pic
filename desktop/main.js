@@ -1,7 +1,7 @@
 // 「我家里的一切」Mac 桌面壳（Electron）。
 // 把随 App 打包的 run.py 当后端拉起来，再用原生窗口打开它的本机地址。
 // 数据仍由 run.py 存到本机磁盘（~/Library/Application Support/我家里的一切），换新版本 App 也读得到。
-const { app, BrowserWindow, shell, dialog } = require("electron");
+const { app, BrowserWindow, shell, dialog, ipcMain, safeStorage } = require("electron");
 const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 const http = require("http");
@@ -91,7 +91,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1280, height: 880, minWidth: 1040, minHeight: 720,
     title: "我家里的一切", backgroundColor: "#f2f2f7",
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, preload:path.join(__dirname,"cloud-preload.cjs") },
   });
   // 站内链接留在窗口里；真正的外链（http/https 到别处）交给系统浏览器。
   win.webContents.setWindowOpenHandler(({ url: target }) => {
@@ -117,6 +117,11 @@ app.whenReady().then(async () => {
       <p>本地端口 ${port} 无法启动，或 run.py 启动失败。请关闭 App 后重试。</p></div>`);
     return;
   }
+  const {createMacSync}=require('./cloud-runtime.cjs');
+  const cloudData=process.env.HOME_DATA_DIR||path.join(app.getPath('appData'),'我家里的一切');
+  const cloudHealth=process.env.HOME_HEALTH_DIR||(require('fs').existsSync(path.join(payloadDir(),'health-data.local/archive-index.json'))?path.join(payloadDir(),'health-data.local'):path.join(cloudData,'health'));
+  const cloud=createMacSync({dataDir:cloudData,healthDir:cloudHealth,safeStorage});
+  for(const [channel,method] of [['pic-cloud-info','info'],['pic-cloud-setup','setup'],['pic-cloud-sync','sync']])ipcMain.handle(channel,async(event,arg)=>{if(new URL(event.senderFrame.url).origin!==new URL(url).origin)throw Error('仅本机大厅可调用同步');return cloud[method](arg);});
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

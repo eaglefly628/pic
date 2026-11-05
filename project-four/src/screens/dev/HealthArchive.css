@@ -28,3 +28,5 @@
 .ha-doctor-grid article{padding:15px;border:1px solid var(--separator);border-radius:12px;background:var(--fill-q)}
 .ha-doctor-grid h3{font-size:14px;margin:0 0 8px}.ha-doctor-grid p{line-height:1.65;margin:0;font-size:13px}
 .ha-doctor-timeline{margin-top:18px;display:grid;gap:6px}.ha-doctor-timeline details{padding:10px 14px;border:1px solid var(--separator);border-radius:9px}.ha-doctor-timeline summary{cursor:pointer;font-weight:600}.ha-doctor-timeline p{line-height:1.6;margin:9px 0 0}
+
+.ha-source-list{display:grid;gap:12px}.ha-source-list article{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 0;border-top:1px solid var(--separator)}.ha-source-list small{flex:1;min-width:120px;color:var(--text-secondary)}.ha-source-list a{color:var(--accent);padding:8px}.ha-source-list span{color:var(--text-secondary);font-size:13px}
