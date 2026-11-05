@@ -910,8 +910,8 @@
       // 磁盘数据由更新版本写入：仍然「打开/查看」它（新→旧可读），但进入只读态、不写盘覆盖它。
       const diskNewer = Number(latest.dataVersion || 0) > HOME_DATA_VERSION;
       let has = false;
-      try { const dbs = (await indexedDB.databases()) || []; const names = new Set(dbs.map((d) => d.name)); for (const d of (latest.indexedDB || [])) if (names.has(d.name)) { has = true; break; } } catch (e) { }
-      if (!has) for (const k of Object.keys(latest.localStorage || {})) if (k !== 'home.bio' && localStorage.getItem(k) != null) { has = true; break; }
+      try { const dbs = (await indexedDB.databases()) || []; const names = new Set(dbs.map((d) => d.name)); for (const d of (latest.indexedDB || [])) if (names.has(d.name)) { const present = await dumpDB(d.name); if ((present.stores || []).some(s => (s.recs || []).length > 0)) { has = true; break; } } } catch (e) { }
+      if (!has) for (const k of ['familyvault.vault.v1', 'familyvault.secret.v1', 'familyvault.pwbox.v1']) if (localStorage.getItem(k) != null) { has = true; break; }
       const syncedAt = Number(localStorage.getItem('home.diskSyncedAt') || 0);const knownVersions=JSON.parse(localStorage.getItem('home.backupVersions.v2')||'null');if(has&&(!latest.backup_versions||!knownVersions))return false;if(has&&Object.keys(knownVersions).some(k=>latest.backup_versions[k]<knownVersions[k]))return false;
       const newer = !!latest.backup_versions && (!knownVersions || Object.keys(latest.backup_versions).some(k=>latest.backup_versions[k]>knownVersions[k]));   // 磁盘比“我上次同步到的”更新 = 另一个入口存过更新的
       if (has && !newer) { if (diskNewer) enterReadOnly(); return false; }   // 不需要拉；若磁盘是更新版本写的→只读态
