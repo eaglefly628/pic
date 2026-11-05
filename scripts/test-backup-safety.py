@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """备份安全回归测试——不起服务器，直接调 run.py 里的函数，数据目录用临时目录（不碰真实数据）。
   ① 分层保留：最近 40 次全留；30 天内每天留当天最后一份；12 周每周留一份；keep- 安全副本单独留 10 份
-  ② 乐观并发：baseSavedAt 比磁盘旧 → 拒绝(stale)，磁盘不动；内容没变 → unchanged；老客户端不能覆盖且留冲突副本
-  ③ baseSavedAt 只用于校验、不落盘
+  ② 乐观并发：备份版本基线 比磁盘旧 → 拒绝(stale)，磁盘不动；内容没变 → unchanged；老客户端不能覆盖且留冲突副本
+  ③ 备份版本基线 只用于校验、不落盘
   ④ backup_get 防目录穿越（../、绝对路径、backups/ 外的软链接都拿不到）
   ⑤ 新写的文件权限 600；_tighten_perms 把旧版留下的 644 收成 600
   ⑥ backup_keep 存安全副本、不动 current.home；非本系统数据拒收
@@ -106,7 +106,7 @@ expect_keep = sorted(n for _, n in sorted(keep_files)[-10:])
 check(kept_keep == expect_keep, f"安全副本只留最近 10 份（{len(kept_keep)}），且是最新的 10 份")
 print(f"  （{total_before} 份 → {len(remaining)} 份）")
 
-# ───────── ② ③ 乐观并发 / baseSavedAt 不落盘 ─────────
+# ───────── ② ③ 乐观并发 / 备份版本基线 不落盘 ─────────
 print("② 乐观并发")
 shutil.rmtree(BK); BK.mkdir()
 for f in (TMP / "current.home", TMP / "meta.json"):
@@ -119,7 +119,7 @@ def save(ls, base=None, protocol=True):
     if protocol:
         b["syncProtocol"] = run.SYNC_PROTOCOL
     if base is not None:
-        b["baseSavedAt"] = base
+        b["baseBackupVersions"] = base if isinstance(base,dict) else {"finance":0,"shared":0,"health":0}
     time.sleep(0.003)      # savedAt 是毫秒，保证单调
     return run.backup_save(json.dumps(b, ensure_ascii=False).encode("utf-8"))
 
@@ -127,21 +127,21 @@ def save(ls, base=None, protocol=True):
 r1 = save({"k": "v1"}, base=0)
 check(r1.get("ok") is True, "首次写入（磁盘为空）放行")
 t1 = r1["savedAt"]
-r2 = save({"k": "v2"}, base=t1)
-check(r2.get("ok") is True and r2["savedAt"] > t1, "带上最新 baseSavedAt 的写入放行")
+r2 = save({"k": "v2"}, base=r1["backup_versions"])
+check(r2.get("ok") is True and r2["savedAt"] > t1, "带上最新 备份版本基线 的写入放行")
 t2 = r2["savedAt"]
 r3 = save({"k": "v3"}, base=t1)
-check(r3.get("ok") is False and r3.get("error") == "stale" and r3.get("diskSavedAt") == t2, "baseSavedAt 过期 → 拒绝(stale)，并告知磁盘时间")
+check(r3.get("ok") is False and r3.get("error") == "version-conflict" and r3.get("backup_versions") == r2["backup_versions"], "备份版本基线 过期 → 拒绝(stale)，并告知磁盘时间")
 cur = json.loads((TMP / "current.home").read_text(encoding="utf-8"))
 check(cur["localStorage"]["k"] == "v2" and cur["savedAt"] == t2, "被拒绝时磁盘内容纹丝不动")
 r4 = save({"k": "legacy-change"}, protocol=False)
 check(r4.get("ok") is False and r4.get("error") == "legacy-client" and r4.get("conflictCopy"), "老客户端不能覆盖，内容另存冲突副本")
 r4b = save({"k": "missing-base"})
-check(r4b.get("ok") is False and r4b.get("error") == "missing-base" and r4b.get("conflictCopy"), "缺少 baseSavedAt 的客户端不能覆盖")
+check(r4b.get("ok") is False and r4b.get("error") == "version-conflict" and r4b.get("conflictCopy"), "缺少 备份版本基线 的客户端不能覆盖")
 r5 = save({"k": "v2"}, base=0, protocol=False)
 check(r5.get("ok") is True and r5.get("unchanged") is True and r5["savedAt"] == t2, "内容没变 → unchanged（旧页面也不会制造重复写入）")
 cur = json.loads((TMP / "current.home").read_text(encoding="utf-8"))
-check("baseSavedAt" not in cur, "③ baseSavedAt 不落盘")
+check("baseBackupVersions" not in cur, "③ 备份版本基线 不落盘")
 check(cur.get("dataVersion") == run.DATA_VERSION and cur.get("appVersion") == run.APP_VERSION and cur.get("syncProtocol") == run.SYNC_PROTOCOL, "落盘带 dataVersion / appVersion / syncProtocol")
 check(len(list(BK.glob("我家里的一切-备份-*.home"))) == 2, "两次有效写入 → 两份自动历史备份")
 check(len(list(BK.glob("keep-*.home"))) == 3, "三次被拒（过期、旧客户端、缺基线）的改动各自保留为冲突副本")
@@ -180,11 +180,11 @@ else:
 # ───────── ⑥ backup_keep ─────────
 print("⑥ 安全副本")
 before = (TMP / "current.home").read_bytes()
-rk = run.backup_keep(json.dumps({"__home_backup": 1, "localStorage": {"k": "local-state"}, "baseSavedAt": 123}).encode())
+rk = run.backup_keep(json.dumps({"__home_backup": 1, "localStorage": {"k": "local-state"}, "baseBackupVersions": 123}).encode())
 check(rk.get("ok") is True and rk["name"].startswith("keep-恢复前-"), f"存成 {rk.get('name')}")
 kf = BK / rk["name"]
 kj = json.loads(kf.read_text(encoding="utf-8"))
-check(kf.is_file() and kj["localStorage"]["k"] == "local-state" and "baseSavedAt" not in kj, "副本内容正确、baseSavedAt 已剥掉")
+check(kf.is_file() and kj["localStorage"]["k"] == "local-state" and "baseBackupVersions" not in kj, "副本内容正确、备份版本基线 已剥掉")
 check((TMP / "current.home").read_bytes() == before, "current.home 没被碰")
 rb = run.backup_keep(b'{"hello": 1}')
 check(rb.get("ok") is False, "非本系统数据拒收")

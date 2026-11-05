@@ -1,3 +1,7 @@
+# PIC：家庭 Mac App 与飞鸟网站
+
+统一入口文档：[飞鸟接手说明](docs/FEINIAO_HANDOFF.md)。网站源码在 `web/feiniao`，共享加密与版本规则在 `shared/pic`，Mac 壳在 `desktop`。
+
 # 我家里的一切
 
 我们家所有应用的**统一入口**。一个入口、一个端口，进去后用顶部菜单选择进入各应用。

@@ -28,3 +28,10 @@ __pycache__/
 
 # Local personal photo review report
 project-two/dist/burst-review.html
+
+/node_modules
+web/feiniao/dist/
+desktop/cloud-runtime.cjs
+.env
+*.pem
+cloud-device*.json

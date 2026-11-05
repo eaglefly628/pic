@@ -99,7 +99,7 @@ export default function HealthArchive() {
   const input = useRef<HTMLInputElement>(null);
   async function load() {
     setLoading(true); setError("");
-    try { const r = await fetch("/api/health/archive", { cache: "no-store" }); if (!r.ok) throw new Error("健康服务暂不可用，请从统一入口启动应用"); const d = await r.json(); if (!d.ok) throw new Error(d.error); setArchive(d); }
+    try { const r = await fetch("/api/health/archive", { cache: "no-store" }); if (!r.ok) throw new Error("健康档案读取失败，请确认家庭云空间已解锁"); const d = await r.json(); if (!d.ok) throw new Error(d.error); setArchive(d); }
     catch (e) { setError(errorText(e)); } finally { setLoading(false); }
   }
   useEffect(() => { void load(); }, []);
@@ -153,7 +153,7 @@ export default function HealthArchive() {
   }
   async function backup() {
     setBusy(true); setError("");
-    try { const r = await fetch("/api/health/export"); if (!r.ok || !r.headers.get("content-type")?.includes("zip")) throw new Error("备份未完成，请核对原件是否可读取"); download(await r.blob(), "health-archive.zip"); setNotice("备份已生成，包含结构化记录和可用的报告原件，可在 Mac 导入。"); } catch(e) { setError(errorText(e)); } finally { setBusy(false); }
+    try { const r = await fetch("/api/health/export"); if (!r.ok || !r.headers.get("content-type")?.includes("zip")) throw new Error("备份未完成，请核对原件是否可读取"); download(await r.blob(), "health-archive.zip"); setNotice("ZIP 已导出，含健康明细及可用原件，此文件未加密，请妥善保存；加密整屋备份可使用页面顶部按钮。"); } catch(e) { setError(errorText(e)); } finally { setBusy(false); }
   }
   function exportCsv() {
     const fields: (keyof Row)[] = ["date", "name", "metric_key", "original_value", "original_unit", "normalized_value", "normalized_unit", "reference_range_raw", "report_flag"];
@@ -162,7 +162,7 @@ export default function HealthArchive() {
   }
   return <div className="ha">
     <section className="ha-hero"><div><div className="ha-eyebrow">YOUR HEALTH, OVER TIME</div><h1>把每一次检查，连成健康的时间线。</h1><p>体检、医院化验与日常测量，在同一份档案里追溯。数值和医生结论均按年份整理。</p><div className="ha-hero-tag">本地档案 · 仅本机保存 · {dated.length ? `${dated[0].date} — ${dated[dated.length - 1]?.date}` : "等待首次导入"}</div></div><div className="ha-hero-mark" aria-hidden="true"><svg viewBox="0 0 160 100"><path d="M5 55H35L49 20L70 85L89 38L102 55H155" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/></svg></div></section>
-    <div className="ha-toolbar"><nav>{([ ["trends", "健康结果"], ["abnormal", `异常追踪 ${abnormalRows.length}`], ["library", "指标百科"] ] as const).map(([v, label]) => <button key={v} className={view === v ? "active" : ""} onClick={() => { setView(v); setReportId(""); }}>{label}</button>)}</nav><div className="ha-actions"><Btn variant="ghost" disabled={busy} onClick={() => input.current?.click()}>追加档案</Btn><Btn variant="ghost" disabled={busy || !rows.length} onClick={exportCsv}>导出明细</Btn><Btn disabled={busy || !archive} onClick={() => void backup()}>{busy ? "处理中…" : "备份健康档案"}</Btn></div></div>
+    <div className="ha-toolbar"><nav>{([ ["trends", "健康结果"], ["abnormal", `异常追踪 ${abnormalRows.length}`], ["library", "指标百科"] ] as const).map(([v, label]) => <button key={v} className={view === v ? "active" : ""} onClick={() => { setView(v); setReportId(""); }}>{label}</button>)}</nav><div className="ha-actions"><Btn variant="ghost" disabled={busy} onClick={() => input.current?.click()}>追加档案</Btn><Btn variant="ghost" disabled={busy || !rows.length} onClick={exportCsv}>导出明细</Btn><Btn disabled={busy || !archive} onClick={() => void backup()}>{busy ? "处理中…" : "导出健康 ZIP（未加密）"}</Btn></div></div>
     <input ref={input} type="file" accept=".json,.zip" hidden onChange={e => { const f = e.target.files?.[0]; if (f) { if (f.size > 100 * 1024 * 1024) setError("文件超过 100 MB，请分批导入"); else setPending(f); } e.currentTarget.value = ""; }}/>
     {pending && <div className="ha-message"><b>追加：{pending.name}</b><p>接受已标准化的健康档案 JSON 或本应用备份 ZIP。重复记录跳过，修订冲突会拒绝覆盖。原始 PDF 需先识别整理，不能直接当作标准化档案导入。</p><Btn disabled={busy} onClick={() => void importFile()}>确认追加</Btn> <Btn variant="ghost" disabled={busy} onClick={() => setPending(null)}>取消</Btn></div>}
     {error && <div className="ha-message ha-error" role="alert">{error} <button onClick={() => void load()}>重新加载</button></div>}
@@ -182,6 +182,7 @@ export default function HealthArchive() {
       {activeMetric === "hpylori.overview" && <p className="ha-method-note">呼气检测值、血清抗体和胃窦活检属于不同方法。数值按单位分别查看，文字结论按日期并列，不能把各方法的数值直接相连。</p>}
       {activeMetric && <button className="ha-info-trigger" onClick={() => setInfoKey(activeMetric)}>查看详细医学说明 ↗</button>}</section>
     </>}
+    {!!reports.length && <section className="ha-section"><h2>报告与原件</h2><p>按检查日期查看来源。原件只在已解锁设备中解密打开；缺失原件可重新追加完整健康 ZIP。</p><div className="ha-source-list">{reports.map(r => <article key={r.source_id}><button className="ha-metric-link" onClick={() => {setReportId(r.source_id);setView("trends");}}>{dateLabel(r.date)} · {r.filename}</button><small>{r.provider || ""} · {r.pages} 页 · {r.count} 条结果</small>{r.source_available ? <a href={r.pdf_url} target="_blank" rel="noopener noreferrer">查看解密原件 ↗</a> : <span>原件未迁入</span>}</article>)}</div></section>}
     {view === "trends" && archive?.clinical_summary && <section className="ha-section"><div className="ha-section-head"><div><h2>历年医生结论</h2><p>{archive.clinical_summary.note}</p></div></div><div className="ha-doctor-grid">{archive.clinical_summary.longitudinal.map(item => <article key={item.title}><h3>{item.title}</h3><p>{item.text}</p></article>)}</div><div className="ha-doctor-timeline">{[...archive.clinical_summary.by_exam].reverse().map(item => <details key={item.date}><summary>{item.date} · 医生结论</summary><p>{item.summary}</p><p className="ha-muted">报告建议：{item.follow_up}</p></details>)}</div></section>}
     {(view === "trends" || reportId) && !!rows.length && <section className="ha-section"><div className="ha-section-head"><div><h2>{selectedReport ? `${dateLabel(selectedReport.date)} · 检查明细` : "历次测量与文字记录"}</h2><p>原始值和当次参考范围用于核对。点选指标可切换时间线。</p></div>{reportId && <button onClick={() => setReportId("")}>返回指标记录</button>}</div><div className="ha-table-wrap"><table><thead><tr><th>检查日期</th><th>指标 / 方法</th><th>原始结果</th><th>标准值 / 单位</th><th>当次参考范围</th><th>报告标记</th></tr></thead><tbody>{listed.map(r => <tr key={r.id} className={isAbnormal(r) ? "ha-alert-row" : ""}><td>{r.date || "待确认"}{r.sampled_at && <small className="ha-muted">采样 {r.sampled_at.slice(11).replace("+08:00", "")}</small>}</td><td><button className="ha-metric-link" onClick={() => { setMetric(r.metric_key); setGroup("全部"); setQuery(""); setReportId(""); }}>{r.name}</button></td><td>{r.original_value} <small>{r.original_unit}</small></td><td>{r.normalized_value !== null ? `${r.comparator || ""}${r.normalized_value}` : "—"} <small>{r.normalized_unit && unitLabel(r.normalized_unit)}</small></td><td>{r.reference_range_raw || "未提供"}</td><td>{isAbnormal(r) ? <span className="ha-alert-tag">超出范围 {r.report_flag || ""}</span> : r.report_flag ? <span className="ha-flag">原报告 {r.report_flag}</span> : "—"}</td></tr>)}</tbody></table>{!listed.length && <p className="ha-empty">此范围没有可用记录。</p>}</div></section>}
     <dialog ref={infoDialog} className="ha-info-dialog" onClose={() => setInfoKey(null)}>
@@ -190,7 +191,7 @@ export default function HealthArchive() {
       {HEALTH_INFO[infoKey] ? <><section><h3>它测的是什么？</h3><p>{HEALTH_INFO[infoKey].what}</p></section><section><h3>常用于了解什么？</h3><p>{HEALTH_INFO[infoKey].meaning}</p></section><section className="ha-info-limits"><h3>解读时需要注意</h3><p>{HEALTH_INFO[infoKey].limits}</p></section><section><h3>参考资料</h3>{HEALTH_INFO[infoKey].sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a>)}<small>资料核对：{HEALTH_INFO[infoKey].checkedOn} · 通用医学科普，未对你的结果作个体诊断。具体参考范围见各次原报告。</small></section></> : <p>该新指标的医学说明尚待整理，保留原始结果，不自动生成解释。</p>}
       <Btn onClick={() => { setMetric(infoKey); setGroup("全部"); setQuery(""); setReportId(""); setView("trends"); setInfoKey(null); }}>查看我的历史曲线</Btn></>}
     </dialog>
-    <footer className="ha-footer">本地工作档案 · 健康原件保存在本机；通过总览的“立即备份整屋与健康数据”生成加密副本。<br/>当前已整理报告和化验；Apple 健康数据尚未导入。历史数据不表示当前状况。</footer>
+    <footer className="ha-footer">健康档案与手记分开保存；请根据各端的同步状态核对备份版本。<br/>支持标准化健康 JSON 和健康 ZIP；Apple 健康 XML 自动解析暂未接入。历史数据不表示当前状况。</footer>
   </div>;
 }
 

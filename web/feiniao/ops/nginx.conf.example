@@ -1,0 +1,20 @@
+# 完成域名或可信 IP 证书配置后再启用。不得覆盖其他现有网站配置。
+server {
+    listen 80;
+    server_name REPLACE_WITH_HOSTNAME;
+    return 301 https://$host$request_uri;
+}
+server {
+    listen 443 ssl;
+    server_name REPLACE_WITH_HOSTNAME;
+    ssl_certificate /etc/nginx/feiniao/fullchain.pem;
+    ssl_certificate_key /etc/nginx/feiniao/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    root /srv/feiniao/current;
+    index index.html;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    location / { try_files $uri $uri/ =404; }
+    location ~ /\. { deny all; }
+    location ~* \.(html|js|css)$ { add_header Cache-Control "no-cache"; }
+}

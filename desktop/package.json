@@ -7,8 +7,8 @@
   "private": true,
   "main": "main.js",
   "scripts": {
-    "start": "node sync-version.js && electron .",
-    "mac": "node sync-version.js && electron-builder --mac",
+    "start": "node ../scripts/build-mac-cloud.mjs && node sync-version.js && electron .",
+    "mac": "node ../scripts/build-mac-cloud.mjs && node sync-version.js && electron-builder --mac",
     "mac:dir": "node sync-version.js && electron-builder --mac dir"
   },
   "devDependencies": {
@@ -23,7 +23,9 @@
     },
     "files": [
       "main.js",
-      "package.json"
+      "package.json",
+      "cloud-preload.cjs",
+      "cloud-runtime.cjs"
     ],
     "extraResources": [
       {
@@ -101,6 +103,10 @@
       {
         "from": "../health_archive.py",
         "to": "payload/health_archive.py"
+      },
+      {
+        "from": "../backup_versions.py",
+        "to": "payload/backup_versions.py"
       }
     ],
     "afterSign": "afterSign.js",
