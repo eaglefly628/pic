@@ -69,7 +69,7 @@ async function ensureServer() {
     cwd: payloadDir(),
     env: {
       ...process.env,
-      HOME_NO_BROWSER: "1", PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8",
+      HOME_NO_BROWSER: "1", PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1",
       HOME_PORT: String(port),
       HOME_NODE_BINARY: process.execPath, HOME_NODE_ELECTRON: "1",
       // 打包安装的 = 发布版；npm start 跑的 = 开发版
