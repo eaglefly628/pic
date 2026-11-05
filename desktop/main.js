@@ -118,7 +118,9 @@ app.whenReady().then(async () => {
     return;
   }
   const {createMacSync}=require('./cloud-runtime.cjs');
-  const cloud=createMacSync({dataDir:process.env.HOME_DATA_DIR||path.join(app.getPath('appData'),'我家里的一切'),safeStorage});
+  const cloudData=process.env.HOME_DATA_DIR||path.join(app.getPath('appData'),'我家里的一切');
+  const cloudHealth=process.env.HOME_HEALTH_DIR||(require('fs').existsSync(path.join(payloadDir(),'health-data.local/archive-index.json'))?path.join(payloadDir(),'health-data.local'):path.join(cloudData,'health'));
+  const cloud=createMacSync({dataDir:cloudData,healthDir:cloudHealth,safeStorage});
   for(const [channel,method] of [['pic-cloud-info','info'],['pic-cloud-setup','setup'],['pic-cloud-sync','sync']])ipcMain.handle(channel,async(event,arg)=>{if(new URL(event.senderFrame.url).origin!==new URL(url).origin)throw Error('仅本机大厅可调用同步');return cloud[method](arg);});
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
