@@ -11,3 +11,33 @@
 .studio-workspace:not(.generic-writing) #page-background{display:none}.generic-writing #page-background{display:block}
 
 #detail-body:has(.writing-sheet)>h1{display:none}#studio-draft-state{font-size:10px;color:#5b6352;margin-right:auto}
+
+#editor-dialog[data-focused-format=true] .writing-modes{display:none}
+#editor-dialog .studio-body{overflow-anchor:none}
+#editor-dialog[data-writing-mode=poetry] .rich-content{min-height:48dvh}
+.page-create-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.page-create-actions button{white-space:nowrap}
+.ci-options{padding:16px;margin:10px 0 20px;background:#f0f3e9;border:1px solid #dce2d4;border-radius:10px}
+.ci-options h3{margin:0 0 8px;font-size:16px}
+.ci-options label{display:block;margin-top:10px}
+.ci-options input,.ci-options select{display:block;width:100%;margin:4px 0 0}
+.ci-options .ci-fill span,.ci-options .studio-help{font-size:13px}
+.ci-options #ci-write{margin-top:12px}
+@media(max-width:700px){
+ .page-create-actions{flex-direction:column;align-items:stretch;flex:none}
+ .page-create-actions button{min-height:44px;font-size:13px!important}
+ #editor-dialog .studio-bars{padding:0 12px}
+ #editor-dialog .writing-views{flex-wrap:wrap;gap:4px 8px}
+ #editor-dialog .writing-views button{min-height:36px}
+ #editor-dialog .writing-views [data-writing-view=split]{display:none}
+ #editor-dialog .studio-writing{padding:12px 16px 24px}
+ #editor-dialog .editor-toolbar{position:static}
+ #editor-dialog .ci-options input,#editor-dialog .ci-options select{font-size:16px}
+}
+
+#editor-formatting>summary{padding:10px 12px;cursor:pointer;color:#405747;font-size:13px}
+#editor-dialog[data-writing-mode=blog] #editor-formatting>summary{display:none}
+@media(max-width:700px){
+ #editor-dialog #studio-save-draft{display:inline-flex}
+ #editor-dialog .editor-footer .close-dialog{display:none}
+}
