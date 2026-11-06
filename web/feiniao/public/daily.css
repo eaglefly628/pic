@@ -1,0 +1,62 @@
+.daily-overview,.daily-card,#daily-management{background:#fbfcf8;border:1px solid #dce5d7;border-radius:14px;padding:18px}
+.daily-overview{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
+.daily-progress{display:grid;gap:8px;flex:1;min-width:170px}
+#daily-progress{width:100%;height:10px;accent-color:#43634b}
+.daily-history{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.daily-history label,.daily-empty,.daily-card p,#daily-feedback{font-size:13px;color:#506152}
+#daily-date,.daily-form input,.daily-form select{font:inherit;border:1px solid #bdcdb8;border-radius:8px;background:#fff;color:#294634;min-height:44px;padding:8px}
+#daily-lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));align-items:start;gap:12px}
+.daily-card h2{font-size:17px;margin:0 0 8px}
+.daily-card ul{list-style:none;margin:0;padding:0}
+.daily-card li{display:flex;gap:8px;align-items:center;border-top:1px solid #e4eae1}
+.daily-task{flex:1;display:flex;align-items:center;gap:11px;min-height:48px;padding:7px 0;cursor:pointer;overflow-wrap:anywhere}
+.daily-task input{width:21px;height:21px;flex:none;accent-color:#43634b}
+.daily-task input:checked+span{color:#405c47}
+.daily-retire{min-height:44px;white-space:nowrap;font-size:12px;padding:8px}
+#daily-management{margin-top:16px}
+#daily-management summary{cursor:pointer;min-height:36px;display:list-item}
+.daily-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.daily-form input{flex:1;min-width:130px}
+.daily-form button,#daily-presets,#daily-today,#daily-retry{min-height:44px}
+.daily-feedback-row{display:flex;align-items:center;gap:10px;min-height:28px;margin-top:12px}
+#daily-presets{margin-bottom:12px}
+@media(max-width:700px){
+ .daily-overview,.daily-card,#daily-management{padding:14px}
+ .daily-overview{align-items:stretch;flex-direction:column}
+ .daily-form input,.daily-form select,#daily-date{font-size:16px}
+ .daily-form select{max-width:100%}
+}
+
+.daily-ring{
+ --daily-fill:0%;
+ width:122px;aspect-ratio:1;flex:none;border-radius:50%;padding:11px;
+ background:conic-gradient(#64a56c var(--daily-fill),#dce9da 0);
+}
+.daily-ring>div{width:100%;height:100%;border-radius:50%;background:#fbfcf8;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.daily-ring strong{font-size:26px;line-height:1.12;color:#294c35}
+.daily-ring span,.daily-ring small,#daily-motivation{font-size:12px;color:#46624c}
+.daily-card li{display:block;padding:5px 0 8px}
+.daily-task-name{display:grid;gap:3px;flex:1;min-width:0}
+.daily-task-name small,.daily-amount span{font-size:12px;color:#506152}
+.daily-points{flex:none;font-size:12px;color:#426a48;font-weight:600}
+.daily-achieved{display:none}
+.daily-completed .daily-achieved{display:block;color:#356742}
+.daily-amount{display:flex;gap:8px;align-items:center;margin:0 0 7px}
+.daily-amount input{width:90px;min-height:44px;border:1px solid #bdcdb8;border-radius:8px;background:#fff;color:#294634;padding:8px;font:inherit}
+.daily-amount button{min-height:44px}
+.daily-item-settings summary{font-size:12px;color:#536655;cursor:pointer;padding:7px 0}
+.daily-item-settings label{min-width:100px}
+.daily-custom{border-top:1px solid #e4eae1;border-bottom:1px solid #e4eae1;padding:12px 0;margin:8px 0 14px}
+.daily-custom h3{font-size:16px;margin:0}
+.daily-custom>.primary{margin-top:12px;min-height:44px}
+.daily-form{align-items:end}
+.daily-form label{flex:1;display:grid;gap:4px;min-width:120px;font-size:13px}
+.daily-form label input,.daily-form label select{width:100%;min-width:0}
+@media(max-width:700px){
+ .app-body:has(#daily-panel:not([hidden])) .quick-navigation{display:flex;flex-wrap:nowrap;overflow-x:auto}
+ .app-body:has(#daily-panel:not([hidden])) .quick-nav-link{flex:none;white-space:nowrap}
+ .daily-overview{display:grid;grid-template-columns:122px 1fr}
+ .daily-progress{min-width:0;align-content:center}
+ .daily-history{grid-column:1/-1}
+ .daily-amount input{font-size:16px}
+}
