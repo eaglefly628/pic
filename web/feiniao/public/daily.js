@@ -1,13 +1,24 @@
 globalThis.FeiniaoDaily = (() => {
  const defaultEnergy=25,defaultGoal=100,maxEnergy=10000,maxAmount=100000;
- const presets=[
-  {name:'运动',items:[
-   {name:'跑步或步行',kind:'count',target:5,unit:'公里'},
-   {name:'健腹轮',kind:'count',target:100,unit:'个'}
-  ]},
-  {name:'阅读',items:[{name:'读书',kind:'time',target:30,unit:'分钟'}]},
-  {name:'生活',items:[{name:'做一道菜',kind:'event',target:1,unit:''}]}
+ const templates=[
+  {id:'walk',group:'运动',name:'跑步或步行',kind:'count',target:5,unit:'公里',starter:true},
+  {id:'ab-wheel',group:'运动',name:'健腹轮',kind:'count',target:100,unit:'个',starter:true},
+  {id:'stretch',group:'运动',name:'拉伸',kind:'time',target:10,unit:'分钟'},
+  {id:'squats',group:'运动',name:'深蹲',kind:'count',target:30,unit:'个'},
+  {id:'reading',group:'阅读',name:'读书',kind:'time',target:30,unit:'分钟',starter:true},
+  {id:'magazine',group:'阅读',name:'看杂志',kind:'time',target:20,unit:'分钟'},
+  {id:'language',group:'学习',name:'练习外语',kind:'time',target:15,unit:'分钟'},
+  {id:'notes',group:'学习',name:'整理读书笔记',kind:'event',target:1,unit:''},
+  {id:'writing',group:'学习',name:'写作练习',kind:'time',target:20,unit:'分钟'},
+  {id:'cooking',group:'生活',name:'做一道菜',kind:'event',target:1,unit:'',starter:true},
+  {id:'water',group:'生活',name:'喝水',kind:'count',target:6,unit:'杯'},
+  {id:'tidy',group:'生活',name:'收拾一个角落',kind:'event',target:1,unit:''},
+  {id:'tomorrow',group:'生活',name:'列明日计划',kind:'event',target:1,unit:''},
+  {id:'meditate',group:'休息',name:'冥想',kind:'time',target:10,unit:'分钟'},
+  {id:'outside',group:'休息',name:'到户外透气',kind:'time',target:15,unit:'分钟'},
+  {id:'phone',group:'休息',name:'睡前放下手机',kind:'event',target:1,unit:''}
  ];
+ const starterTemplates=templates.filter(template=>template.starter);
  const calendar=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'});
  function today(now=new Date()){
   const parts=Object.fromEntries(calendar.formatToParts(now).map(({type,value})=>[type,value]));
@@ -43,6 +54,8 @@ globalThis.FeiniaoDaily = (() => {
  function create({panel,getData,save,esc}){
   const $=selector=>panel.querySelector(selector);
   const results=$('#daily-lists'),date=$('#daily-date'),feedback=$('#daily-feedback'),management=$('#daily-management');
+  const library=$('#daily-templates'),dropZone=$('#daily-drop'),dragLabel=$('#daily-drag-label');
+  let drag=null;
   let selected='',current='',saveTurn=0;
   const data=()=>getData().daily;
   const initialize=()=>getData().daily??={lists:[],goals:[],presetsAdded:false};
@@ -84,7 +97,12 @@ globalThis.FeiniaoDaily = (() => {
    date.value=selected;date.max=current;
    $('#daily-today').hidden=canEdit;
    management.hidden=!canEdit;
-   $('#daily-presets').hidden=!canEdit||data()?.presetsAdded===true;
+   $('#daily-library').hidden=!canEdit;
+   $('#daily-board-heading').textContent=canEdit?'我的今日清单':'当日清单';
+   $('#daily-browse').hidden=!canEdit;
+   $('#daily-drop-wrap').hidden=!canEdit;
+   $('#daily-presets').hidden=!canEdit||data()?.presetsAdded===true||starterTemplates.every(template=>hasTemplate(template,lists));
+   if(canEdit)renderLibrary(lists);
    target.innerHTML=lists.length?lists.map(list=>`<option value="${list.id}">${esc(list.name)}</option>`).join(''):'<option value="">日常（自动创建）</option>';
    if(lists.some(list=>list.id===lastTarget))target.value=lastTarget;
    $('#daily-goal').value=goalFor(selected);
@@ -95,13 +113,13 @@ globalThis.FeiniaoDaily = (() => {
    }).join('')||`<p class="daily-empty">${canEdit?'先添加自己的活动，或一键加入四项日常。':'这一天没有打卡项目。'}</p>`;
    progress();
   }
-  async function persist(){
+  async function persist(message='已加密保存'){
    const turn=++saveTurn;
    feedback.textContent='正在加密保存…';
    $('#daily-retry').hidden=true;
    try{
     await save();
-    if(turn===saveTurn)feedback.textContent='已加密保存';
+    if(turn===saveTurn)feedback.textContent=message;
    }catch{
     if(turn===saveTurn){
      feedback.textContent='保存失败，改动仍在当前页面。';
@@ -120,24 +138,89 @@ globalThis.FeiniaoDaily = (() => {
   }
   date.onchange=()=>changeDay(date.value);
   $('#daily-today').onclick=()=>changeDay(current);
-  $('#daily-retry').onclick=persist;
-  $('#daily-presets').onclick=()=>{
-   if(!editable()||data()?.presetsAdded)return;
-   const daily=initialize();
-   const missing=presets.filter(preset=>!daily.lists.some(list=>list.name===preset.name));
-   if(daily.lists.length+missing.length>100||presets.some(preset=>{
-    const list=daily.lists.find(list=>list.name===preset.name);
-    return list&&list.items.length+preset.items.filter(item=>!list.items.some(saved=>saved.name===item.name&&!saved.ended)).length>500;
-   })){feedback.textContent='日常表或项目已达上限，无法加入模板。';return;}
-   for(const preset of presets){
-    let list=daily.lists.find(list=>list.name===preset.name);
-    if(!list){list=listEntry(preset.name);daily.lists.push(list);}
-    for(const item of preset.items){
-     if(!list.items.some(saved=>saved.name===item.name&&!saved.ended))list.items.push(entry({...item,energy:defaultEnergy}));
-    }
+  $('#daily-browse').onclick=()=>$('#daily-library').scrollIntoView({block:'start'});
+  $('#daily-retry').onclick=()=>persist();
+  function hasTemplate(template,lists){
+   return lists.some(list=>list.name===template.group&&list.items.some(item=>item.name===template.name&&!item.ended));
+  }
+  function renderLibrary(lists){
+   library.innerHTML=templates.map(template=>{
+    const added=hasTemplate(template,lists);
+    const measure=template.kind==='event'?'做完打勾':template.target+' '+template.unit;
+    return `<article class="daily-template" id="daily-template-${template.id}" tabindex="-1">
+     <div class="daily-template-top"><span>${template.group} · ${measure}</span>${added?'':`<span class="daily-grip" data-template-drag="${template.id}" title="拖到今日清单" aria-hidden="true">⠿</span>`}</div>
+     <h3>${template.name}</h3>
+     <button type="button" class="secondary" data-template-add="${template.id}" aria-label="加入${template.name}" ${added?'disabled':''}>${added?'已加入':'+ 加入'}</button>
+    </article>`;
+   }).join('');
+  }
+  function addTemplates(candidates,focusId){
+   if(!editable())return;
+   const daily=initialize(),pending=candidates.filter(template=>!hasTemplate(template,daily.lists));
+   if(!pending.length)return;
+   const groups=[...new Set(pending.map(template=>template.group))];
+   const missing=groups.filter(group=>!daily.lists.some(list=>list.name===group));
+   const overItemLimit=groups.some(group=>{
+    const list=daily.lists.find(list=>list.name===group);
+    return list&&list.items.length+pending.filter(template=>template.group===group).length>500;
+   });
+   if(daily.lists.length+missing.length>100||overItemLimit){
+    feedback.textContent='日常表或项目已达上限，无法加入模板。';return;
    }
-   daily.presetsAdded=true;render();persist();
-  };
+   for(const group of missing)daily.lists.push(listEntry(group));
+   for(const {group,name,kind,target,unit} of pending){
+    const list=daily.lists.find(list=>list.name===group);
+    list.items.push(entry({name,kind,target,unit,energy:defaultEnergy}));
+   }
+   if(candidates===starterTemplates)daily.presetsAdded=true;
+   render();
+   if(focusId)$('#daily-template-'+focusId)?.focus({preventScroll:true});
+   persist(pending.length===1?'已加入今日清单：'+pending[0].name:`已加入 ${pending.length} 项活动`);
+  }
+  function addTemplate(id,focus=false){
+   const template=templates.find(template=>template.id===id);
+   if(template)addTemplates([template],focus?id:null);
+  }
+  $('#daily-presets').onclick=()=>addTemplates(starterTemplates);
+  library.addEventListener('click',event=>{
+   const button=event.target.closest('[data-template-add]');
+   if(button)addTemplate(button.dataset.templateAdd,true);
+  });
+  library.addEventListener('pointerdown',event=>{
+   const grip=event.target.closest('[data-template-drag]');
+   if(!grip||drag||event.button!==0||!editable())return;
+   drag={pointer:event.pointerId,id:grip.dataset.templateDrag,x:event.clientX,y:event.clientY,active:false};
+   grip.setPointerCapture?.(event.pointerId);
+  });
+  function overDrop(event){
+   const box=dropZone.getBoundingClientRect();
+   return event.clientX>=box.left&&event.clientX<=box.right&&event.clientY>=box.top&&event.clientY<=box.bottom;
+  }
+  library.addEventListener('pointermove',event=>{
+   if(!drag||drag.pointer!==event.pointerId)return;
+   if(!drag.active&&Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<6)return;
+   if(!drag.active){
+    drag.active=true;
+    panel.classList.add('daily-drag-active');
+    dragLabel.textContent=templates.find(template=>template.id===drag.id).name;
+    dragLabel.hidden=false;
+   }
+   dragLabel.style.left=event.clientX+'px';
+   dragLabel.style.top=event.clientY+'px';
+   dropZone.classList.toggle('daily-drop-ready',overDrop(event));
+  });
+  function resetDrag(){
+   drag=null;dragLabel.hidden=true;
+   panel.classList.remove('daily-drag-active');dropZone.classList.remove('daily-drop-ready');
+  }
+  function finishDrag(event){
+   if(!drag||drag.pointer!==event.pointerId)return;
+   const id=drag.id,accepted=event.type==='pointerup'&&drag.active&&overDrop(event);
+   resetDrag();
+   if(accepted)addTemplate(id);
+  }
+  for(const event of ['pointerup','pointercancel','lostpointercapture'])library.addEventListener(event,finishDrag);
+  document.addEventListener('keydown',event=>{if(drag&&event.key==='Escape')resetDrag();});
   $('#daily-list-form').onsubmit=event=>{
    event.preventDefault();
    const input=$('#daily-list-name'),name=input.value.trim();
@@ -231,13 +314,13 @@ globalThis.FeiniaoDaily = (() => {
     input.scrollIntoView({block:'center'});
     input.focus({preventScroll:true});
    },
-   hide(){panel.hidden=true;},
+   hide(){panel.hidden=true;resetDrag();},
    clear(){
-    panel.hidden=true;selected=current='';saveTurn++;
+    panel.hidden=true;resetDrag();selected=current='';saveTurn++;
     management.open=false;
     for(const form of panel.querySelectorAll('form'))form.reset();
     showKindFields();
-    $('#daily-target').replaceChildren();results.replaceChildren();feedback.textContent='';$('#daily-retry').hidden=true;
+    $('#daily-target').replaceChildren();results.replaceChildren();library.replaceChildren();feedback.textContent='';$('#daily-retry').hidden=true;
    },
    rollover(){if(!panel.hidden&&today()!==current)this.show();}
   };

@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="studio.css?v=20261105-contrast">
 <link rel="stylesheet" href="industry.css?v=20261105-contrast"><link rel="stylesheet" href="shanghai.css?v=20261105-contrast">
 <link rel="stylesheet" href="quant.css?v=20261105-local">
-<link rel="stylesheet" href="daily.css?v=20261106">
+<link rel="stylesheet" href="daily.css?v=20261106-cards">
 </head>
 <body>
 <div id="gate" class="gate">
@@ -41,8 +41,19 @@
   <div class="daily-progress"><strong id="daily-count">已完成 0 / 0 项</strong><span id="daily-motivation" aria-live="polite"></span></div>
   <div class="daily-history"><label for="daily-date">查看日期</label><input type="date" id="daily-date"><button id="daily-today" type="button" class="secondary" hidden>回到今天</button></div>
  </div>
- <button type="button" id="daily-presets" class="primary">加入我的 4 项日常</button>
- <div id="daily-lists"></div>
+ <section class="daily-board" aria-labelledby="daily-board-heading">
+  <div class="daily-board-heading"><h2 id="daily-board-heading">我的今日清单</h2><button type="button" class="secondary" id="daily-browse">挑选常用卡</button></div>
+  <div id="daily-drop-wrap"><div id="daily-drop">将活动卡拖到这里，加入今日清单</div></div>
+  <div id="daily-lists"></div>
+ </section>
+ <section id="daily-library" aria-labelledby="daily-library-heading">
+  <div class="daily-library-heading">
+   <div><h2 id="daily-library-heading">常用活动卡</h2><p>拖动卡片右上角的把手，也可以直接点「加入」。</p></div>
+   <button type="button" id="daily-presets" class="secondary">加入我的 4 项日常</button>
+  </div>
+  <div id="daily-templates"></div>
+ </section>
+ <div id="daily-drag-label" aria-hidden="true" hidden></div>
  <details id="daily-management"><summary>管理日常表</summary>
   <form id="daily-item-form" class="daily-custom">
    <h3>添加打卡项目</h3>
@@ -68,5 +79,5 @@
 <button id="mobile-add" class="mobile-add" hidden aria-label="添加 · 智能入口"><span data-icon="plus"></span><span id="mobile-add-label">添加</span></button>
 <dialog id="capture-dialog"><form id="capture-form"><header class="dialog-header"><div><span class="eyebrow">ONE PLACE FOR EVERYTHING</span><h2>添加 · 智能入口</h2></div><button type="button" class="icon-button close-dialog" aria-label="关闭" data-icon="x" autofocus></button></header><div class="editor-body"><div class="start-writing"><button type="button" data-start-writing="blog"><b>写博客</b><span>封面 · 导语 · 长文</span></button><button type="button" data-start-writing="poetry"><b>写现代诗</b><span>分行 · 诗笺 · 留白</span></button><button type="button" data-start-writing="ci"><b>依谱填词</b><span>词牌 · 平仄 · 韵脚</span></button></div><label for="capture-text">想到什么，就说什么。</label><textarea id="capture-text" rows="6" maxlength="10000" required placeholder="可以用豆包输入法直接口述：一个小程序账号、一段随手笔记、一首诗，或今天的开发想法…" aria-label="智能入口内容"></textarea><div class="capture-verdict" aria-live="polite"><span id="capture-route">先写下来，再慢慢归类。</span><p id="capture-reason">原文会完整保留。</p></div><div class="capture-preview"><div class="capture-route-fields"><div><label for="capture-kind">内容类型</label><select id="capture-kind"><option value="info">信息 / 随手记</option><option value="account">账号</option><option value="manuscript">手稿</option><option value="blog">博客 / 笔记</option></select></div><div id="capture-domain-wrap"><label for="capture-domain">主题归属</label><select id="capture-domain"><option value="general">未分类 / 随手记</option><option value="journal">手札 · 日常笔记</option><option value="poetry">听风 · 诗歌</option><option value="game">造境 · 游戏开发</option><option value="math">穷理 · 数学</option></select></div></div><label for="capture-title">标题 / 平台名称</label><input id="capture-title" maxlength="160" required><label for="capture-tags">标签</label><input id="capture-tags" maxlength="160" placeholder="用逗号分隔"><div id="capture-account-fields" hidden><label for="capture-login">登录方式</label><input id="capture-login" maxlength="100"><label for="capture-user">账号（选填）</label><input id="capture-user" maxlength="100"><label for="capture-password">账号密码（选填）</label><input id="capture-password" type="password" autocomplete="new-password" maxlength="100"><label for="capture-balance">余额 / 权益</label><input id="capture-balance" maxlength="100"></div></div><button type="button" class="text-button" id="capture-reanalyze">重新自动整理</button><p class="small-note">分类可调整；继续排版可以修改字体、配色，插入图片、音频和视频。</p><p id="capture-error" class="error" role="alert"></p></div><footer class="editor-footer"><button type="button" class="secondary" id="capture-compose">继续排版 / 添加媒体</button><button type="submit" id="capture-submit" class="primary">保存到云端</button></footer></form></dialog><dialog id="backup-dialog"><div class="backup-content"><header class="dialog-header"><h2>给记录留一份备份</h2><button class="icon-button close-dialog" aria-label="关闭" data-icon="x"></button></header><p>你的博客、手稿、信息和账号已加密存入网站端数据库，使用同一访问密码可在不同设备查看。手机和浏览器不持久保存记录；断网时无法读取或保存。</p><div class="backup-card"><span data-icon="shield"></span><div><b>导出加密备份</b><p>包含全部记录、图片、音频和视频，需要原主密码解锁。</p></div></div><button id="export-backup" class="primary full-width">下载加密备份 <span data-icon="download"></span></button><button class="secondary full-width import-trigger">导入已有备份</button><button id="export-legacy" class="secondary full-width">导出此浏览器的旧版记录</button><p class="small-note">请把访问密码与备份分别妥善保存。旧版记录仍在原浏览器中，需先从旧版导出加密备份，再在这里导入；旧记录不会自动上传。</p></div></dialog>
 <input type="file" id="import-file" accept="application/json,.json" hidden><div id="toast" class="toast" role="status"></div>
-<script src="legacy-export.js?v=20261022"></script><script src="capture.js?v=20261024"></script><script src="industry.js?v=20261026-ai"></script><script src="editor.js?v=20261024"></script><script src="shanghai.js?v=20261101"></script><script src="regression.js?v=20261105-official-only"></script><script src="quant.js?v=20261105-official-only"></script><script src="daily.js?v=20261106"></script><script src="app.js?v=20261106-daily"></script>
+<script src="legacy-export.js?v=20261022"></script><script src="capture.js?v=20261024"></script><script src="industry.js?v=20261026-ai"></script><script src="editor.js?v=20261024"></script><script src="shanghai.js?v=20261101"></script><script src="regression.js?v=20261105-official-only"></script><script src="quant.js?v=20261105-official-only"></script><script src="daily.js?v=20261106-cards"></script><script src="app.js?v=20261106-daily"></script>
 </body></html>

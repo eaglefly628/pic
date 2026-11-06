@@ -65,3 +65,39 @@ test('daily projects track event, time and count progress and retain historical 
   assert.equal(added.target,3);
  }finally{ui.close();}
 });
+
+test('activity cards can be added by button or dragged into today, without duplicates',async()=>{
+ const ui=await mount();
+ try{
+  ui.click('#quick-navigation [data-view="daily"]');
+  assert.equal(ui.w.document.querySelectorAll('.daily-template').length,16);
+  assert.match(ui.$('#daily-template-magazine').textContent,/20 分钟.*看杂志/s);
+  ui.click('[data-template-add="reading"]');
+  assert.equal(ui.$('[data-template-add="reading"]').disabled,true);
+  assert.match(ui.$('#daily-lists').textContent,/读书.*30 分钟/s);
+
+  const grip=ui.$('[data-template-drag="cooking"]'),drop=ui.$('#daily-drop');
+  drop.getBoundingClientRect=()=>({left:10,right:300,top:500,bottom:550});
+  function pointer(type,x,y){
+   const event=new ui.w.MouseEvent(type,{bubbles:true,clientX:x,clientY:y,button:0});
+   Object.defineProperty(event,'pointerId',{value:1});
+   grip.dispatchEvent(event);
+  }
+  pointer('pointerdown',45,300);
+  pointer('pointermove',60,400);
+  pointer('pointerup',60,400);
+  assert.equal(ui.$('[data-template-add="cooking"]').disabled,false);
+  pointer('pointerdown',45,300);
+  pointer('pointermove',100,525);
+  assert.equal(drop.classList.contains('daily-drop-ready'),true);
+  pointer('pointerup',100,525);
+  assert.equal(ui.$('[data-template-add="cooking"]').disabled,true);
+  assert.match(ui.$('#daily-lists').textContent,/做一道菜/);
+  ui.click('#daily-presets');
+  assert.equal(ui.$('#daily-count').textContent,'已完成 0 / 4 项');
+  await until(()=>ui.$('#daily-feedback').textContent==='已加入 2 项活动');
+  const items=(await ui.stored()).daily.lists.flatMap(list=>list.items);
+  assert.equal(items.filter(item=>item.name==='读书').length,1);
+  assert.equal(items.filter(item=>item.name==='做一道菜').length,1);
+ }finally{ui.close();}
+});
