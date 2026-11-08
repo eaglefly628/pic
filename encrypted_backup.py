@@ -116,10 +116,8 @@ def create_snapshot(data_dir: Path, health_root: Path) -> dict:
                     source_store['keys'] = []
     home = json.dumps(home_data, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     health = HealthArchive(health_root).export()
-    activity_path = health_root / 'apple-health-activity.json'
-    activity = activity_path.read_bytes() if activity_path.exists() else None
     key_path, key = _key(data_dir, create=True)
-    encrypted = MAGIC + (nonce := secrets.token_bytes(12)) + AESGCM(key).encrypt(nonce, _payload(home, health, activity), MAGIC)
+    encrypted = MAGIC + (nonce := secrets.token_bytes(12)) + AESGCM(key).encrypt(nonce, _payload(home, health), MAGIC)
     backup_dir = data_dir / 'backups' / 'encrypted-full'
     backup_dir.mkdir(parents=True, exist_ok=True)
     import datetime
