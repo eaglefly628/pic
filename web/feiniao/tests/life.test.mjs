@@ -10,9 +10,9 @@ test('countdown follows Beijing midnight, leap days and ends at zero',()=>{
  assert.equal(life.progress('1990-01-01','2026-11-19').remaining,0);assert.equal(life.progress('1990-01-01','2026-11-19').percent,100);
  assert.throws(()=>life.validate({start:'2026-02-30'}));assert.throws(()=>life.validate({start:'invalid'}));assert.doesNotThrow(()=>life.validate(undefined));
 });
-test('homepage countdown is opt-in and persists through encrypted vault and navigation',async()=>{
+test('homepage countdown defaults to the chosen fixed start and persists encrypted settings',async()=>{
  const ui=await mount();try{
-  assert.equal(ui.$('#life-countdown').hidden,false);assert.equal((await ui.stored()).lifeCountdown,undefined);
+  assert.equal(ui.$('#life-countdown').hidden,false);assert.equal((await ui.stored()).lifeCountdown,undefined);assert.equal(ui.$('#life-start').value,'2026-11-19');
   ui.click('#life-start-today');await until(()=>ui.$('#life-status').textContent==='已加密保存');
   assert.equal((await ui.stored()).lifeCountdown.start,ui.w.FeiniaoLife.today());assert.equal(ui.$('#life-remaining').textContent,'10,000');
   ui.click('[data-view="daily"]');assert.equal(ui.$('#life-countdown').hidden,true);ui.click('[data-view="overview"]');assert.equal(ui.$('#life-countdown').hidden,false);
